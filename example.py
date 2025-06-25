@@ -1,4 +1,5 @@
 import os
+import sys
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -13,20 +14,30 @@ import tkinter as tk
 from tkinter import messagebox
 from tkinter import ttk
 
-# 설정
-BASE_URL = "https://www.tt.go.kr"
-MOEF_URL = "https://www.moef.go.kr"
-SECTIONS = ["20", "11", "50", "12", "40", "95", "99"]  # 세목 리스트
-MAX_PAGES = 20
-DATA_FOLDER = "data"
-EXISTING_FILE_TEMPLATE = "existing_data_{site_name}.xlsx"
-UPDATED_FOLDER_TEMPLATE = "updated_cases/{site_name}"
+# 설정 파일 import
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+from config.settings import (
+    BASE_URL, MOEF_URL, URLS, SECTIONS, CRAWLING_CONFIG, 
+    BAI_CLAIM_TYPES, FILE_CONFIG, SELENIUM_OPTIONS, 
+    DATA_COLUMNS, KEY_COLUMNS, GUI_CONFIG
+)
+
+# 호환성을 위한 설정값 매핑
+MAX_PAGES = CRAWLING_CONFIG["max_pages"]
+DATA_FOLDER = FILE_CONFIG["data_folder"]
+EXISTING_FILE_TEMPLATE = FILE_CONFIG["existing_file_template"]
+UPDATED_FOLDER_TEMPLATE = FILE_CONFIG["updated_folder_template"]
 
 # 재시도 로직
-def safe_request(url, params, retries=3, delay=5):
+def safe_request(url, params, retries=None, delay=None):
+    if retries is None:
+        retries = CRAWLING_CONFIG["retry_count"]
+    if delay is None:
+        delay = CRAWLING_CONFIG["retry_delay"]
+    
     for attempt in range(retries):
         try:
-            response = requests.get(url, params=params, timeout=10)
+            response = requests.get(url, params=params, timeout=CRAWLING_CONFIG["timeout"])
             response.raise_for_status()  # 상태 코드가 4xx, 5xx일 경우 예외 발생
             return response
         except (requests.exceptions.RequestException, TimeoutError) as e:
@@ -135,12 +146,14 @@ def crawl_data(site_name, section, max_pages, retries=3, delay=5, progress=None,
     return pd.DataFrame(new_data)
 
 # 최적화된 데이터 크롤링 (동적 사이트)
-def crawl_dynamic_site(progress=None, status_message=None, max_items=5000):
-    dynamic_url = "https://taxlaw.nts.go.kr/qt/USEQTJ001M.do"
+def crawl_dynamic_site(progress=None, status_message=None, max_items=None):
+    if max_items is None:
+        max_items = CRAWLING_CONFIG["max_items"]
+    
+    dynamic_url = URLS["nts_authority"]
     options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
+    for option in SELENIUM_OPTIONS:
+        options.add_argument(option)
     driver = webdriver.Chrome(options=options)
     
     try:
@@ -351,12 +364,14 @@ def crawl_dynamic_site(progress=None, status_message=None, max_items=5000):
         driver.quit()
 
 # 국세청 판례 크롤링 함수 (crawl_dynamic_site 기반)
-def crawl_nts_precedents(progress=None, status_message=None, max_items=5000):
-    dynamic_url = "https://taxlaw.nts.go.kr/pd/USEPDI001M.do"  # 판례 URL로 변경
+def crawl_nts_precedents(progress=None, status_message=None, max_items=None):
+    if max_items is None:
+        max_items = CRAWLING_CONFIG["max_items"]
+    
+    dynamic_url = URLS["nts_precedent"]
     options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
+    for option in SELENIUM_OPTIONS:
+        options.add_argument(option)
     driver = webdriver.Chrome(options=options)
     
     try:
@@ -501,12 +516,14 @@ def crawl_nts_precedents(progress=None, status_message=None, max_items=5000):
         driver.quit()
 
 # 행정안전부 유권해석 크롤링 함수 추가 (Selenium 사용)
-def crawl_mois_site(progress=None, status_message=None, max_pages=10):
-    mois_url = "https://www.olta.re.kr/explainInfo/authoInterpretationList.do?menuNo=9020000&upperMenuId=9000000"
+def crawl_mois_site(progress=None, status_message=None, max_pages=None):
+    if max_pages is None:
+        max_pages = CRAWLING_CONFIG["max_pages"] // 2  # 행정안전부는 절반으로 설정
+    
+    mois_url = URLS["mois"]
     options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
+    for option in SELENIUM_OPTIONS:
+        options.add_argument(option)
     driver = webdriver.Chrome(options=options)
     
     try:
@@ -664,19 +681,18 @@ def crawl_mois_site(progress=None, status_message=None, max_pages=10):
         driver.quit()
 
 # 감사원 심사결정례 크롤링 함수 추가 (청구분야별)
-def crawl_bai_site(progress=None, status_message=None, max_pages=20):
-    bai_url = "https://www.bai.go.kr/bai/exClaims/exClaims/list/"
+def crawl_bai_site(progress=None, status_message=None, max_pages=None):
+    if max_pages is None:
+        max_pages = CRAWLING_CONFIG["max_pages"]
+    
+    bai_url = URLS["bai"]
     options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
+    for option in SELENIUM_OPTIONS:
+        options.add_argument(option)
     driver = webdriver.Chrome(options=options)
     
     # 청구분야 목록 (조세 관련만)
-    claim_types = [
-        {"value": "10", "name": "국세"},
-        {"value": "20", "name": "지방세"}
-    ]
+    claim_types = BAI_CLAIM_TYPES
     
     try:
         all_data = []
@@ -895,8 +911,11 @@ def crawl_bai_site(progress=None, status_message=None, max_pages=20):
         driver.quit()
 
 # 기획재정부 사이트 크롤링 함수 추가
-def crawl_moef_site(progress=None, status_message=None, max_pages=10):
-    moef_url_template = "https://www.moef.go.kr/lw/intrprt/TaxLawIntrPrtCaseList.do?bbsId=MOSFBBS_000000000237&menuNo=8120300&pageIndex={page}"
+def crawl_moef_site(progress=None, status_message=None, max_pages=None):
+    if max_pages is None:
+        max_pages = CRAWLING_CONFIG["max_pages"] // 2  # 기획재정부는 절반으로 설정
+    
+    moef_url_template = URLS["moef"] + "?bbsId=MOSFBBS_000000000237&menuNo=8120300&pageIndex={page}"
     all_items = []
     total_items = 0
     items_per_page = 10  # 페이지당 예상 항목 수
@@ -1055,354 +1074,170 @@ def update_existing_data(site_name, new_data):
 def show_message(message):
     messagebox.showinfo("크롤링 완료", message)
 
-# 메인 로직 (UI 포함) - 주기적인 크롤링 추가
-def main_ui():
-    def on_crawl_click():
-        choice = site_choice.get().split(".")[0].strip()  # 선택된 값에서 번호만 추출
-        progress['value'] = 0  # 진행 상태 초기화
-        progress.update()  # 상태바 초기화
-        
-        summary_messages = []
+# 공통 크롤링 로직 (중복 제거)
+def execute_crawling(choice, progress, status_message, is_periodic=False):
+    """공통 크롤링 실행 로직"""
+    summary_messages = []
+    prefix = "주기적 크롤링 " if is_periodic else ""
 
-        # 심판원 크롤링
-        if choice == "1" or choice == "7":
-            site_name = "심판원"
-            msg = ""
-            existing_data = load_existing_data(site_name)
-            all_new_data = []
-            total_sections = len(SECTIONS)
-            for idx, section in enumerate(SECTIONS):
-                section_data = crawl_data(site_name, section, MAX_PAGES, progress=progress, status_message=status_message, current_section_index=idx, total_sections=total_sections)
-                all_new_data.append(section_data)
-            if all_new_data:
-                new_data = pd.concat(all_new_data, ignore_index=True)
-                if not new_data.empty:
-                    new_entries = compare_data(existing_data, new_data, key_column="청구번호")
-                    if not new_entries.empty:
-                        save_updated_data(site_name, new_entries)
-                        update_existing_data(site_name, new_data)
-                        msg = f"심판원: 새로운 심판례 {len(new_entries)} 개 발견."
-                    else:
-                        msg = "심판원: 새로운 심판례 없음."
-                else:
-                    msg = "심판원: 크롤링 결과 데이터 없음."
-            else:
-                msg = "심판원: 크롤링 중 오류 또는 데이터 없음."
-            if choice == "7":
-                summary_messages.append(msg)
-            else:
-                show_message(msg)
-
-        # 국세청 유권해석 크롤링
-        if choice == "2" or choice == "7":
-            site_name = "국세청"
-            msg = ""
-            dynamic_data = crawl_dynamic_site(progress=progress, status_message=status_message, max_items=5000)
-            existing_data = load_existing_data(site_name)
-            if not dynamic_data.empty:
-                new_entries = compare_data(existing_data, dynamic_data, key_column="문서번호")
+    # 심판원 크롤링
+    if choice == "1" or choice == "7":
+        site_name = "심판원"
+        msg = ""
+        existing_data = load_existing_data(site_name)
+        all_new_data = []
+        total_sections = len(SECTIONS)
+        for idx, section in enumerate(SECTIONS):
+            section_data = crawl_data(site_name, section, MAX_PAGES, progress=progress, status_message=status_message, current_section_index=idx, total_sections=total_sections)
+            all_new_data.append(section_data)
+        if all_new_data:
+            new_data = pd.concat(all_new_data, ignore_index=True)
+            if not new_data.empty:
+                new_entries = compare_data(existing_data, new_data, key_column="청구번호")
                 if not new_entries.empty:
                     save_updated_data(site_name, new_entries)
-                    update_existing_data(site_name, dynamic_data)
-                    msg = f"국세청 유권해석: 새로운 유권해석 {len(new_entries)} 개 발견."
+                    update_existing_data(site_name, new_data)
+                    msg = f"{prefix}(심판원): 새로운 심판례 {len(new_entries)} 개 발견."
                 else:
-                    msg = "국세청 유권해석: 새로운 유권해석 없음."
+                    msg = f"{prefix}(심판원): 새로운 심판례 없음."
             else:
-                msg = "국세청 유권해석: 크롤링 결과 데이터 없음."
-            if choice == "7":
-                summary_messages.append(msg)
-            else:
-                show_message(msg)
-                
-        # 기획재정부 크롤링
-        if choice == "3" or choice == "7":
-            site_name = "기획재정부"
-            msg = ""
-            moef_data = crawl_moef_site(progress=progress, status_message=status_message, max_pages=10)
-            existing_data = load_existing_data(site_name)
-            if not moef_data.empty:
-                new_entries = compare_data(existing_data, moef_data, key_column="문서번호")
-                if not new_entries.empty:
-                    save_updated_data(site_name, new_entries)
-                    update_existing_data(site_name, moef_data)
-                    msg = f"기획재정부: 새로운 해석 {len(new_entries)} 개 발견."
-                else:
-                    msg = "기획재정부: 새로운 해석 없음."
-            else:
-                msg = "기획재정부: 크롤링 결과 데이터 없음."
-            if choice == "7":
-                summary_messages.append(msg)
-            else:
-                show_message(msg)
-
-        # 국세청 판례 크롤링
-        if choice == "4" or choice == "7":
-            site_name = "국세청_판례"
-            msg = ""
-            nts_precedent_data = crawl_nts_precedents(progress=progress, status_message=status_message, max_items=5000)
-            existing_data = load_existing_data(site_name)
-            if not nts_precedent_data.empty:
-                new_entries = compare_data(existing_data, nts_precedent_data, key_column="문서번호")
-                if not new_entries.empty:
-                    save_updated_data(site_name, new_entries)
-                    update_existing_data(site_name, nts_precedent_data)
-                    msg = f"국세청 판례: 새로운 판례 {len(new_entries)} 개 발견."
-                else:
-                    msg = "국세청 판례: 새로운 판례 없음."
-            else:
-                msg = "국세청 판례: 크롤링 결과 데이터 없음."
-            if choice == "7":
-                summary_messages.append(msg)
-            else:
-                show_message(msg)
-
-        # 행정안전부 유권해석 크롤링
-        if choice == "5" or choice == "7":
-            site_name = "행정안전부"
-            msg = ""
-            existing_data = load_existing_data(site_name)
-            mois_data = crawl_mois_site(progress=progress, status_message=status_message, max_pages=10)
-            if not mois_data.empty:
-                new_entries = compare_data(existing_data, mois_data, key_column="문서번호")
-                if not new_entries.empty:
-                    save_updated_data(site_name, new_entries)
-                    update_existing_data(site_name, mois_data)
-                    msg = f"행정안전부: 새로운 유권해석 {len(new_entries)} 개 발견."
-                else:
-                    msg = "행정안전부: 새로운 유권해석 없음."
-            else:
-                msg = "행정안전부: 크롤링 결과 데이터 없음."
-            if choice == "7":
-                summary_messages.append(msg)
-            else:
-                show_message(msg)
-
-        # 감사원 심사결정례 크롤링
-        if choice == "6" or choice == "7":
-            site_name = "감사원"
-            msg = ""
-            existing_data = load_existing_data(site_name)
-            bai_data = crawl_bai_site(progress=progress, status_message=status_message, max_pages=20)
-            if not bai_data.empty:
-                new_entries = compare_data(existing_data, bai_data, key_column="문서번호")
-                if not new_entries.empty:
-                    save_updated_data(site_name, new_entries)
-                    update_existing_data(site_name, bai_data)
-                    msg = f"감사원: 새로운 심사결정례 {len(new_entries)} 개 발견."
-                else:
-                    msg = "감사원: 새로운 심사결정례 없음."
-            else:
-                msg = "감사원: 크롤링 결과 데이터 없음."
-            if choice == "7":
-                summary_messages.append(msg)
-            else:
-                show_message(msg)
-        
-        if choice == "7":
-            if summary_messages:
-                show_message("\n".join(summary_messages))
-            else: # 이 경우는 choice가 7인데 아무것도 실행 안됐을 때 (이론상 발생 안함)
-                show_message("모두 크롤링: 처리된 항목이 없습니다.")
-        elif choice not in ["1", "2", "3", "4", "5", "6"]: # 7이 아닌 잘못된 선택
-            show_message("잘못된 선택입니다. 유효한 옵션을 선택해 주세요.")
-
-    # 주기적인 크롤링을 위한 함수 추가
-    def periodic_crawl():
-        choice = site_choice.get().split(".")[0].strip()  # 선택된 사이트 번호 가져오기
-        
-        summary_messages_periodic = []
-
-        # 심판원 크롤링
-        if choice == "1" or choice == "7":
-            site_name = "심판원"
-            msg = ""
-            existing_data = load_existing_data(site_name)
-            all_new_data = []
-            total_sections = len(SECTIONS)
-            for idx, section in enumerate(SECTIONS):
-                section_data = crawl_data(site_name, section, MAX_PAGES, progress=progress, status_message=status_message, current_section_index=idx, total_sections=total_sections)
-                all_new_data.append(section_data)
-            if all_new_data:
-                new_data = pd.concat(all_new_data, ignore_index=True)
-                if not new_data.empty:
-                    new_entries = compare_data(existing_data, new_data, key_column="청구번호")
-                    if not new_entries.empty:
-                        save_updated_data(site_name, new_entries)
-                        update_existing_data(site_name, new_data)
-                        msg = f"주기적 크롤링 (심판원): 새로운 심판례 {len(new_entries)} 개 발견."
-                    else:
-                        msg = "주기적 크롤링 (심판원): 새로운 심판례 없음."
-                else:
-                    msg = "주기적 크롤링 (심판원): 크롤링 결과 데이터 없음."
-            else:
-                msg = "주기적 크롤링 (심판원): 크롤링 중 오류 또는 데이터 없음."
-            if choice == "7":
-                summary_messages_periodic.append(msg)
-            else:
-                show_message(msg)
-
-        # 국세청 유권해석 크롤링
-        if choice == "2" or choice == "7":
-            site_name = "국세청"
-            msg = ""
-            dynamic_data = crawl_dynamic_site(progress=progress, status_message=status_message, max_items=5000)
-            existing_data = load_existing_data(site_name)
-            if not dynamic_data.empty:
-                new_entries = compare_data(existing_data, dynamic_data, key_column="문서번호")
-                if not new_entries.empty:
-                    save_updated_data(site_name, new_entries)
-                    update_existing_data(site_name, dynamic_data)
-                    msg = f"주기적 크롤링 (국세청 유권해석): 새로운 유권해석 {len(new_entries)} 개 발견."
-                else:
-                    msg = "주기적 크롤링 (국세청 유권해석): 새로운 유권해석 없음."
-            else:
-                msg = "주기적 크롤링 (국세청 유권해석): 크롤링 결과 데이터 없음."
-            if choice == "7":
-                summary_messages_periodic.append(msg)
-            else:
-                show_message(msg)
-                
-        # 기획재정부 크롤링
-        if choice == "3" or choice == "7":
-            site_name = "기획재정부"
-            msg = ""
-            moef_data = crawl_moef_site(progress=progress, status_message=status_message, max_pages=10)
-            existing_data = load_existing_data(site_name)
-            if not moef_data.empty:
-                new_entries = compare_data(existing_data, moef_data, key_column="문서번호")
-                if not new_entries.empty:
-                    save_updated_data(site_name, new_entries)
-                    update_existing_data(site_name, moef_data)
-                    msg = f"주기적 크롤링 (기획재정부): 새로운 해석 {len(new_entries)} 개 발견."
-                else:
-                    msg = "주기적 크롤링 (기획재정부): 새로운 해석 없음."
-            else:
-                msg = "주기적 크롤링 (기획재정부): 크롤링 결과 데이터 없음."
-            if choice == "7":
-                summary_messages_periodic.append(msg)
-            else:
-                show_message(msg)
-
-        # 국세청 판례 크롤링
-        if choice == "4" or choice == "7":
-            site_name = "국세청_판례"
-            msg = ""
-            nts_precedent_data = crawl_nts_precedents(progress=progress, status_message=status_message, max_items=5000)
-            existing_data = load_existing_data(site_name)
-            if not nts_precedent_data.empty:
-                new_entries = compare_data(existing_data, nts_precedent_data, key_column="문서번호")
-                if not new_entries.empty:
-                    save_updated_data(site_name, new_entries)
-                    update_existing_data(site_name, nts_precedent_data)
-                    msg = f"주기적 크롤링 (국세청 판례): 새로운 판례 {len(new_entries)} 개 발견."
-                else:
-                    msg = "주기적 크롤링 (국세청 판례): 새로운 판례 없음."
-            else:
-                msg = "주기적 크롤링 (국세청 판례): 크롤링 결과 데이터 없음."
-            if choice == "7":
-                summary_messages_periodic.append(msg)
-            else:
-                show_message(msg)
-
-        # 행정안전부 유권해석 크롤링
-        if choice == "5" or choice == "7":
-            site_name = "행정안전부"
-            msg = ""
-            existing_data = load_existing_data(site_name)
-            mois_data = crawl_mois_site(progress=progress, status_message=status_message, max_pages=10)
-            if not mois_data.empty:
-                new_entries = compare_data(existing_data, mois_data, key_column="문서번호")
-                if not new_entries.empty:
-                    save_updated_data(site_name, new_entries)
-                    update_existing_data(site_name, mois_data)
-                    msg = f"주기적 크롤링 (행정안전부): 새로운 유권해석 {len(new_entries)} 개 발견."
-                else:
-                    msg = "주기적 크롤링 (행정안전부): 새로운 유권해석 없음."
-            else:
-                msg = "주기적 크롤링 (행정안전부): 크롤링 결과 데이터 없음."
-            if choice == "7":
-                summary_messages_periodic.append(msg)
-            else:
-                show_message(msg)
-
-        # 감사원 심사결정례 크롤링
-        if choice == "6" or choice == "7":
-            site_name = "감사원"
-            msg = ""
-            existing_data = load_existing_data(site_name)
-            bai_data = crawl_bai_site(progress=progress, status_message=status_message, max_pages=20)
-            if not bai_data.empty:
-                new_entries = compare_data(existing_data, bai_data, key_column="문서번호")
-                if not new_entries.empty:
-                    save_updated_data(site_name, new_entries)
-                    update_existing_data(site_name, bai_data)
-                    msg = f"주기적 크롤링 (감사원): 새로운 심사결정례 {len(new_entries)} 개 발견."
-                else:
-                    msg = "주기적 크롤링 (감사원): 새로운 심사결정례 없음."
-            else:
-                msg = "주기적 크롤링 (감사원): 크롤링 결과 데이터 없음."
-            if choice == "7":
-                summary_messages_periodic.append(msg)
-            else:
-                show_message(msg)
-
-        if choice == "7":
-            if summary_messages_periodic:
-                show_message("주기적 크롤링 결과:\n" + "\n".join(summary_messages_periodic))
-            else: # 이 경우는 choice가 7인데 아무것도 실행 안됐을 때
-                show_message("주기적 크롤링: 처리된 항목이 없습니다.")
-        
-        # 주어진 시간(분) 후 다시 실행
-        interval_str = time_entry.get()
-        if interval_str.isdigit():
-            interval = int(interval_str) * 60000  # 입력된 시간(분)을 밀리초로 변환
+                msg = f"{prefix}(심판원): 크롤링 결과 데이터 없음."
         else:
-            show_message("주기 입력 오류: 숫자를 입력해주세요. 기본값 60분으로 재시도합니다.")
-            interval = 60 * 60000 # 기본값 60분
-        window.after(interval, periodic_crawl)  # 다시 실행
+            msg = f"{prefix}(심판원): 크롤링 중 오류 또는 데이터 없음."
+        if choice == "7":
+            summary_messages.append(msg)
+        else:
+            show_message(msg)
 
+    # 국세청 유권해석 크롤링
+    if choice == "2" or choice == "7":
+        site_name = "국세청"
+        msg = ""
+        dynamic_data = crawl_dynamic_site(progress=progress, status_message=status_message)
+        existing_data = load_existing_data(site_name)
+        if not dynamic_data.empty:
+            new_entries = compare_data(existing_data, dynamic_data, key_column="문서번호")
+            if not new_entries.empty:
+                save_updated_data(site_name, new_entries)
+                update_existing_data(site_name, dynamic_data)
+                msg = f"{prefix}(국세청 유권해석): 새로운 유권해석 {len(new_entries)} 개 발견."
+            else:
+                msg = f"{prefix}(국세청 유권해석): 새로운 유권해석 없음."
+        else:
+            msg = f"{prefix}(국세청 유권해석): 크롤링 결과 데이터 없음."
+        if choice == "7":
+            summary_messages.append(msg)
+        else:
+            show_message(msg)
+            
+    # 기획재정부 크롤링
+    if choice == "3" or choice == "7":
+        site_name = "기획재정부"
+        msg = ""
+        moef_data = crawl_moef_site(progress=progress, status_message=status_message)
+        existing_data = load_existing_data(site_name)
+        if not moef_data.empty:
+            new_entries = compare_data(existing_data, moef_data, key_column="문서번호")
+            if not new_entries.empty:
+                save_updated_data(site_name, new_entries)
+                update_existing_data(site_name, moef_data)
+                msg = f"{prefix}(기획재정부): 새로운 해석 {len(new_entries)} 개 발견."
+            else:
+                msg = f"{prefix}(기획재정부): 새로운 해석 없음."
+        else:
+            msg = f"{prefix}(기획재정부): 크롤링 결과 데이터 없음."
+        if choice == "7":
+            summary_messages.append(msg)
+        else:
+            show_message(msg)
 
-    # UI 구성
-    window = tk.Tk()
-    window.title("자동 해석 탐색기")
+    # 국세청 판례 크롤링
+    if choice == "4" or choice == "7":
+        site_name = "국세청_판례"
+        msg = ""
+        nts_precedent_data = crawl_nts_precedents(progress=progress, status_message=status_message)
+        existing_data = load_existing_data(site_name)
+        if not nts_precedent_data.empty:
+            new_entries = compare_data(existing_data, nts_precedent_data, key_column="문서번호")
+            if not new_entries.empty:
+                save_updated_data(site_name, new_entries)
+                update_existing_data(site_name, nts_precedent_data)
+                msg = f"{prefix}(국세청 판례): 새로운 판례 {len(new_entries)} 개 발견."
+            else:
+                msg = f"{prefix}(국세청 판례): 새로운 판례 없음."
+        else:
+            msg = f"{prefix}(국세청 판례): 크롤링 결과 데이터 없음."
+        if choice == "7":
+            summary_messages.append(msg)
+        else:
+            show_message(msg)
 
-    label = tk.Label(window, text="사이트를 선택하세요:")
-    label.pack(pady=10)
+    # 행정안전부 유권해석 크롤링
+    if choice == "5" or choice == "7":
+        site_name = "행정안전부"
+        msg = ""
+        existing_data = load_existing_data(site_name)
+        mois_data = crawl_mois_site(progress=progress, status_message=status_message)
+        if not mois_data.empty:
+            new_entries = compare_data(existing_data, mois_data, key_column="문서번호")
+            if not new_entries.empty:
+                save_updated_data(site_name, new_entries)
+                update_existing_data(site_name, mois_data)
+                msg = f"{prefix}(행정안전부): 새로운 유권해석 {len(new_entries)} 개 발견."
+            else:
+                msg = f"{prefix}(행정안전부): 새로운 유권해석 없음."
+        else:
+            msg = f"{prefix}(행정안전부): 크롤링 결과 데이터 없음."
+        if choice == "7":
+            summary_messages.append(msg)
+        else:
+            show_message(msg)
 
-    site_choice = ttk.Combobox(window, values=[
-        "1. 조세심판원",
-        "2. 국세법령정보시스템 (유권해석)",
-        "3. 기획재정부",
-        "4. 국세법령정보시스템 (판례)",
-        "5. 행정안전부",
-        "6. 감사원",
-        "7. 모두 크롤링"
-    ])
-    site_choice.pack(pady=10)
+    # 감사원 심사결정례 크롤링
+    if choice == "6" or choice == "7":
+        site_name = "감사원"
+        msg = ""
+        existing_data = load_existing_data(site_name)
+        bai_data = crawl_bai_site(progress=progress, status_message=status_message)
+        if not bai_data.empty:
+            new_entries = compare_data(existing_data, bai_data, key_column="문서번호")
+            if not new_entries.empty:
+                save_updated_data(site_name, new_entries)
+                update_existing_data(site_name, bai_data)
+                msg = f"{prefix}(감사원): 새로운 심사결정례 {len(new_entries)} 개 발견."
+            else:
+                msg = f"{prefix}(감사원): 새로운 심사결정례 없음."
+        else:
+            msg = f"{prefix}(감사원): 크롤링 결과 데이터 없음."
+        if choice == "7":
+            summary_messages.append(msg)
+        else:
+            show_message(msg)
+    
+    # 전체 크롤링 결과 표시
+    if choice == "7":
+        if summary_messages:
+            result_prefix = "주기적 크롤링 결과:\n" if is_periodic else ""
+            show_message(result_prefix + "\n".join(summary_messages))
+        else:
+            show_message(f"{prefix}: 처리된 항목이 없습니다.")
+    elif choice not in ["1", "2", "3", "4", "5", "6"]:
+        show_message("잘못된 선택입니다. 유효한 옵션을 선택해 주세요.")
 
-    crawl_button = tk.Button(window, text="시작", command=on_crawl_click)
-    crawl_button.pack(pady=20)
-
-    # 상태 메시지 추가
-    status_message = tk.Label(window, text="진행 상태")
-    status_message.pack(pady=5)
-
-    # 진행 상태바 추가
-    progress = ttk.Progressbar(window, length=300, mode="determinate", maximum=100)
-    progress.pack(pady=10)
-
-    # 주기적인 크롤링을 위한 시간 입력 필드 (분)
-    time_label = tk.Label(window, text="주기 (분):")
-    time_label.pack(pady=5)
-    time_entry = tk.Entry(window)
-    time_entry.pack(pady=5)
-    time_entry.insert(0, "60")  # 기본값: 60분
-
-    # 주기적인 크롤링 시작 버튼
-    periodic_button = tk.Button(window, text="자동 탐색 시작", command=periodic_crawl)
-    periodic_button.pack(pady=20)
-
-    window.mainloop()
+# 레거시 지원을 위한 메인 함수 (새로운 main.py 사용 권장)
+def main_ui():
+    """
+    레거시 지원용 함수
+    새로운 구조에서는 main.py를 사용하세요.
+    """
+    print("경고: 레거시 main_ui() 함수가 호출되었습니다.")
+    print("새로운 모듈화된 구조를 사용하려면 'python main.py'를 실행하세요.")
+    
+    # 기존 GUI 로직 실행
+    execute_crawling("7", None, None, is_periodic=False)
 
 if __name__ == "__main__":
+    # 레거시 지원
+    print("레거시 모드로 실행 중...")
+    print("모듈화된 버전을 사용하려면 'python main.py'를 실행하세요.")
     main_ui()
