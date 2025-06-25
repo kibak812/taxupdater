@@ -1,5 +1,5 @@
 """
-Tax Law Crawler - 리팩토링된 메인 진입점
+Tax Law Crawler - 리팩토링된 메인 진입점 (클래스 기반)
 
 사용법:
     python main.py
@@ -13,34 +13,69 @@ sys.path.append(os.path.dirname(__file__))
 
 from src.gui.main_window import MainWindow
 from src.services.crawler_service import CrawlingService
-from src.services.data_service import DataService
+from src.repositories.excel_repository import ExcelRepository
 
-# 기존 크롤러 함수들을 import (example.py에서)
-# TODO: 이후 단계에서 이 함수들도 클래스로 분리 예정
+# 클래스 기반 크롤러들 import
+from src.crawlers.tax_tribunal_crawler import TaxTribunalCrawler
+from src.crawlers.nts_authority_crawler import NTSAuthorityCrawler
+
+# 레거시 크롤러 함수들 (아직 클래스로 변환되지 않은 것들)
 from example import (
-    crawl_data, crawl_dynamic_site, crawl_nts_precedents,
-    crawl_moef_site, crawl_mois_site, crawl_bai_site
+    crawl_nts_precedents, crawl_moef_site, crawl_mois_site, crawl_bai_site
 )
+
+# 임시 래퍼 클래스들 (향후 완전한 클래스로 대체 예정)
+class LegacyCrawlerWrapper:
+    """레거시 크롤러 함수를 클래스 인터페이스로 래핑"""
+    def __init__(self, site_name, site_key, crawler_func, key_column):
+        self.site_name = site_name
+        self.site_key = site_key
+        self.crawler_func = crawler_func
+        self.key_column = key_column
+    
+    def get_site_name(self):
+        return self.site_name
+    
+    def get_site_key(self):
+        return self.site_key
+    
+    def get_key_column(self):
+        return self.key_column
+    
+    def crawl(self, progress_callback=None, status_callback=None, **kwargs):
+        return self.crawler_func(progress=progress_callback, status_message=status_callback, **kwargs)
+    
+    def validate_data(self, data):
+        return not data.empty if data is not None else False
 
 
 def main():
     """메인 함수"""
     try:
-        # 서비스 초기화
-        data_service = DataService()
+        # Repository 초기화 (향후 SQLite로 교체 가능)
+        repository = ExcelRepository()
         
-        # 크롤러 함수들을 딕셔너리로 구성
-        crawler_functions = {
-            'crawl_data': crawl_data,
-            'crawl_dynamic_site': crawl_dynamic_site,
-            'crawl_nts_precedents': crawl_nts_precedents,
-            'crawl_moef_site': crawl_moef_site,
-            'crawl_mois_site': crawl_mois_site,
-            'crawl_bai_site': crawl_bai_site
+        # 크롤러 인스턴스 생성
+        crawlers = {
+            "tax_tribunal": TaxTribunalCrawler(),
+            "nts_authority": NTSAuthorityCrawler(),
+            # 레거시 크롤러들을 래퍼로 감싸서 사용
+            "nts_precedent": LegacyCrawlerWrapper(
+                "국세청_판례", "nts_precedent", crawl_nts_precedents, "문서번호"
+            ),
+            "moef": LegacyCrawlerWrapper(
+                "기획재정부", "moef", crawl_moef_site, "문서번호"
+            ),
+            "mois": LegacyCrawlerWrapper(
+                "행정안전부", "mois", crawl_mois_site, "문서번호"
+            ),
+            "bai": LegacyCrawlerWrapper(
+                "감사원", "bai", crawl_bai_site, "문서번호"
+            )
         }
         
         # 크롤링 서비스 초기화
-        crawling_service = CrawlingService(crawler_functions, data_service)
+        crawling_service = CrawlingService(crawlers, repository)
         
         # GUI 초기화 및 실행
         app = MainWindow(crawling_service)

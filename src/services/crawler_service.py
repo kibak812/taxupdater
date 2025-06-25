@@ -1,219 +1,142 @@
 import sys
 import os
 from tkinter import messagebox
+from typing import Dict, Any
 
 # 상위 디렉토리 모듈 import를 위한 경로 설정
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+from src.interfaces.crawler_interface import CrawlerInterface, DataRepositoryInterface
 
 
 class CrawlingService:
-    """크롤링 오케스트레이션 서비스"""
+    """
+    크롤링 오케스트레이션 서비스
     
-    def __init__(self, crawler_functions, data_service):
+    클래스 기반 크롤러와 Repository 패턴을 사용하여
+    향후 DB 및 웹 전환을 대비한 확장 가능한 구조
+    """
+    
+    def __init__(self, crawlers: Dict[str, CrawlerInterface], repository: DataRepositoryInterface):
         """
         크롤링 서비스 초기화
         
         Args:
-            crawler_functions: 크롤러 함수들의 딕셔너리
-            data_service: 데이터 처리 서비스
+            crawlers: 사이트별 크롤러 인스턴스 딕셔너리
+            repository: 데이터 저장소 인스턴스
         """
-        self.crawler_functions = crawler_functions
-        self.data_service = data_service
+        self.crawlers = crawlers
+        self.repository = repository
     
-    def execute_crawling(self, choice, progress, status_message, is_periodic=False):
-        """공통 크롤링 실행 로직"""
+    def execute_crawling(self, choice: str, progress, status_message, is_periodic: bool = False):
+        """
+        통합 크롤링 실행 로직 (클래스 기반)
+        
+        Args:
+            choice: 사용자 선택 ("1"-"7")
+            progress: 진행률 콜백
+            status_message: 상태 메시지 콜백
+            is_periodic: 주기적 실행 여부
+        """
         summary_messages = []
         prefix = "주기적 크롤링 " if is_periodic else ""
-
-        # 심판원 크롤링
-        if choice == "1" or choice == "7":
-            msg = self._execute_tax_tribunal_crawling(progress, status_message, prefix)
-            if choice == "7":
-                summary_messages.append(msg)
+        
+        # 선택에 따른 크롤러 매핑
+        crawler_mapping = {
+            "1": ["tax_tribunal"],
+            "2": ["nts_authority"],
+            "3": ["moef"],
+            "4": ["nts_precedent"],
+            "5": ["mois"],
+            "6": ["bai"],
+            "7": ["tax_tribunal", "nts_authority", "moef", "nts_precedent", "mois", "bai"]
+        }
+        
+        selected_crawlers = crawler_mapping.get(choice, [])
+        
+        if not selected_crawlers:
+            self._show_message("잘못된 선택입니다. 유효한 옵션을 선택해 주세요.")
+            return
+        
+        # 선택된 크롤러들 실행
+        for crawler_key in selected_crawlers:
+            if crawler_key in self.crawlers:
+                msg = self._execute_single_crawler(crawler_key, progress, status_message, prefix)
+                if choice == "7":
+                    summary_messages.append(msg)
+                else:
+                    self._show_message(msg)
             else:
-                self._show_message(msg)
-
-        # 국세청 유권해석 크롤링
-        if choice == "2" or choice == "7":
-            msg = self._execute_nts_authority_crawling(progress, status_message, prefix)
-            if choice == "7":
-                summary_messages.append(msg)
-            else:
-                self._show_message(msg)
-                
-        # 기획재정부 크롤링
-        if choice == "3" or choice == "7":
-            msg = self._execute_moef_crawling(progress, status_message, prefix)
-            if choice == "7":
-                summary_messages.append(msg)
-            else:
-                self._show_message(msg)
-
-        # 국세청 판례 크롤링
-        if choice == "4" or choice == "7":
-            msg = self._execute_nts_precedent_crawling(progress, status_message, prefix)
-            if choice == "7":
-                summary_messages.append(msg)
-            else:
-                self._show_message(msg)
-
-        # 행정안전부 유권해석 크롤링
-        if choice == "5" or choice == "7":
-            msg = self._execute_mois_crawling(progress, status_message, prefix)
-            if choice == "7":
-                summary_messages.append(msg)
-            else:
-                self._show_message(msg)
-
-        # 감사원 심사결정례 크롤링
-        if choice == "6" or choice == "7":
-            msg = self._execute_bai_crawling(progress, status_message, prefix)
-            if choice == "7":
-                summary_messages.append(msg)
-            else:
-                self._show_message(msg)
+                error_msg = f"{prefix}크롤러 '{crawler_key}'를 찾을 수 없습니다."
+                if choice == "7":
+                    summary_messages.append(error_msg)
+                else:
+                    self._show_message(error_msg)
         
         # 전체 크롤링 결과 표시
-        if choice == "7":
-            if summary_messages:
-                result_prefix = "주기적 크롤링 결과:\n" if is_periodic else ""
-                self._show_message(result_prefix + "\n".join(summary_messages))
-            else:
-                self._show_message(f"{prefix}: 처리된 항목이 없습니다.")
-        elif choice not in ["1", "2", "3", "4", "5", "6"]:
-            self._show_message("잘못된 선택입니다. 유효한 옵션을 선택해 주세요.")
+        if choice == "7" and summary_messages:
+            result_prefix = "주기적 크롤링 결과:\n" if is_periodic else ""
+            self._show_message(result_prefix + "\n".join(summary_messages))
+        elif choice == "7":
+            self._show_message(f"{prefix}: 처리된 항목이 없습니다.")
     
-    def _execute_tax_tribunal_crawling(self, progress, status_message, prefix):
-        """조세심판원 크롤링 실행"""
-        site_name = "심판원"
-        try:
-            existing_data = self.data_service.load_existing_data(site_name)
-            all_new_data = []
+    def _execute_single_crawler(self, crawler_key: str, progress, status_message, prefix: str) -> str:
+        """
+        단일 크롤러 실행
+        
+        Args:
+            crawler_key: 크롤러 키
+            progress: 진행률 콜백
+            status_message: 상태 메시지 콜백
+            prefix: 메시지 접두사
             
-            # SECTIONS는 example.py에서 가져와야 함 - 임시로 하드코딩
-            sections = ["20", "11", "50", "12", "40", "95", "99"]
-            total_sections = len(sections)
+        Returns:
+            실행 결과 메시지
+        """
+        try:
+            crawler = self.crawlers[crawler_key]
+            site_name = crawler.get_site_name()
             
-            for idx, section in enumerate(sections):
-                section_data = self.crawler_functions['crawl_data'](
-                    site_name, section, 20, progress=progress, 
-                    status_message=status_message, current_section_index=idx, 
-                    total_sections=total_sections
-                )
-                all_new_data.append(section_data)
+            # 크롤링 실행
+            new_data = crawler.crawl(progress_callback=progress, status_callback=status_message)
             
-            if all_new_data:
-                import pandas as pd
-                new_data = pd.concat(all_new_data, ignore_index=True)
-                if not new_data.empty:
-                    new_entries = self.data_service.compare_data(existing_data, new_data, key_column="청구번호")
-                    if not new_entries.empty:
-                        self.data_service.save_updated_data(site_name, new_entries)
-                        self.data_service.update_existing_data(site_name, new_data)
-                        return f"{prefix}(심판원): 새로운 심판례 {len(new_entries)} 개 발견."
-                    else:
-                        return f"{prefix}(심판원): 새로운 심판례 없음."
-                else:
-                    return f"{prefix}(심판원): 크롤링 결과 데이터 없음."
+            # 데이터 유효성 검증
+            if not crawler.validate_data(new_data):
+                return f"{prefix}({site_name}): 크롤링된 데이터가 유효하지 않습니다."
+            
+            if new_data.empty:
+                return f"{prefix}({site_name}): 크롤링 결과 데이터 없음."
+            
+            # 신규 데이터 확인
+            key_column = crawler.get_key_column()
+            new_entries = self.repository.compare_and_get_new_entries(
+                crawler_key, new_data, key_column
+            )
+            
+            if not new_entries.empty:
+                # 백업 생성
+                self.repository.backup_data(crawler_key, new_entries)
+                
+                # 데이터 저장
+                self.repository.save_data(crawler_key, new_data, is_incremental=True)
+                
+                return f"{prefix}({site_name}): 새로운 데이터 {len(new_entries)}개 발견."
             else:
-                return f"{prefix}(심판원): 크롤링 중 오류 또는 데이터 없음."
+                return f"{prefix}({site_name}): 새로운 데이터 없음."
+                
         except Exception as e:
-            return f"{prefix}(심판원): 오류 발생 - {str(e)}"
+            return f"{prefix}({crawler_key}): 오류 발생 - {str(e)}"
     
-    def _execute_nts_authority_crawling(self, progress, status_message, prefix):
-        """국세청 유권해석 크롤링 실행"""
-        site_name = "국세청"
-        try:
-            dynamic_data = self.crawler_functions['crawl_dynamic_site'](progress=progress, status_message=status_message)
-            existing_data = self.data_service.load_existing_data(site_name)
-            if not dynamic_data.empty:
-                new_entries = self.data_service.compare_data(existing_data, dynamic_data, key_column="문서번호")
-                if not new_entries.empty:
-                    self.data_service.save_updated_data(site_name, new_entries)
-                    self.data_service.update_existing_data(site_name, dynamic_data)
-                    return f"{prefix}(국세청 유권해석): 새로운 유권해석 {len(new_entries)} 개 발견."
-                else:
-                    return f"{prefix}(국세청 유권해석): 새로운 유권해석 없음."
-            else:
-                return f"{prefix}(국세청 유권해석): 크롤링 결과 데이터 없음."
-        except Exception as e:
-            return f"{prefix}(국세청 유권해석): 오류 발생 - {str(e)}"
-    
-    def _execute_moef_crawling(self, progress, status_message, prefix):
-        """기획재정부 크롤링 실행"""
-        site_name = "기획재정부"
-        try:
-            moef_data = self.crawler_functions['crawl_moef_site'](progress=progress, status_message=status_message)
-            existing_data = self.data_service.load_existing_data(site_name)
-            if not moef_data.empty:
-                new_entries = self.data_service.compare_data(existing_data, moef_data, key_column="문서번호")
-                if not new_entries.empty:
-                    self.data_service.save_updated_data(site_name, new_entries)
-                    self.data_service.update_existing_data(site_name, moef_data)
-                    return f"{prefix}(기획재정부): 새로운 해석 {len(new_entries)} 개 발견."
-                else:
-                    return f"{prefix}(기획재정부): 새로운 해석 없음."
-            else:
-                return f"{prefix}(기획재정부): 크롤링 결과 데이터 없음."
-        except Exception as e:
-            return f"{prefix}(기획재정부): 오류 발생 - {str(e)}"
-    
-    def _execute_nts_precedent_crawling(self, progress, status_message, prefix):
-        """국세청 판례 크롤링 실행"""
-        site_name = "국세청_판례"
-        try:
-            nts_precedent_data = self.crawler_functions['crawl_nts_precedents'](progress=progress, status_message=status_message)
-            existing_data = self.data_service.load_existing_data(site_name)
-            if not nts_precedent_data.empty:
-                new_entries = self.data_service.compare_data(existing_data, nts_precedent_data, key_column="문서번호")
-                if not new_entries.empty:
-                    self.data_service.save_updated_data(site_name, new_entries)
-                    self.data_service.update_existing_data(site_name, nts_precedent_data)
-                    return f"{prefix}(국세청 판례): 새로운 판례 {len(new_entries)} 개 발견."
-                else:
-                    return f"{prefix}(국세청 판례): 새로운 판례 없음."
-            else:
-                return f"{prefix}(국세청 판례): 크롤링 결과 데이터 없음."
-        except Exception as e:
-            return f"{prefix}(국세청 판례): 오류 발생 - {str(e)}"
-    
-    def _execute_mois_crawling(self, progress, status_message, prefix):
-        """행정안전부 크롤링 실행"""
-        site_name = "행정안전부"
-        try:
-            existing_data = self.data_service.load_existing_data(site_name)
-            mois_data = self.crawler_functions['crawl_mois_site'](progress=progress, status_message=status_message)
-            if not mois_data.empty:
-                new_entries = self.data_service.compare_data(existing_data, mois_data, key_column="문서번호")
-                if not new_entries.empty:
-                    self.data_service.save_updated_data(site_name, new_entries)
-                    self.data_service.update_existing_data(site_name, mois_data)
-                    return f"{prefix}(행정안전부): 새로운 유권해석 {len(new_entries)} 개 발견."
-                else:
-                    return f"{prefix}(행정안전부): 새로운 유권해석 없음."
-            else:
-                return f"{prefix}(행정안전부): 크롤링 결과 데이터 없음."
-        except Exception as e:
-            return f"{prefix}(행정안전부): 오류 발생 - {str(e)}"
-    
-    def _execute_bai_crawling(self, progress, status_message, prefix):
-        """감사원 크롤링 실행"""
-        site_name = "감사원"
-        try:
-            existing_data = self.data_service.load_existing_data(site_name)
-            bai_data = self.crawler_functions['crawl_bai_site'](progress=progress, status_message=status_message)
-            if not bai_data.empty:
-                new_entries = self.data_service.compare_data(existing_data, bai_data, key_column="문서번호")
-                if not new_entries.empty:
-                    self.data_service.save_updated_data(site_name, new_entries)
-                    self.data_service.update_existing_data(site_name, bai_data)
-                    return f"{prefix}(감사원): 새로운 심사결정례 {len(new_entries)} 개 발견."
-                else:
-                    return f"{prefix}(감사원): 새로운 심사결정례 없음."
-            else:
-                return f"{prefix}(감사원): 크롤링 결과 데이터 없음."
-        except Exception as e:
-            return f"{prefix}(감사원): 오류 발생 - {str(e)}"
+    def get_crawler_statistics(self) -> Dict[str, Any]:
+        """모든 크롤러의 통계 정보 반환"""
+        stats = {}
+        for crawler_key, crawler in self.crawlers.items():
+            try:
+                site_name = crawler.get_site_name()
+                repo_stats = self.repository.get_statistics(crawler_key)
+                stats[site_name] = repo_stats
+            except Exception as e:
+                stats[crawler_key] = {"error": str(e)}
+        return stats
     
     def _show_message(self, message):
         """메시지 표시"""
