@@ -1,8 +1,14 @@
 import sys
 import os
-from tkinter import messagebox
 from typing import Dict, Any, List
 import pandas as pd
+
+# tkinter import를 선택적으로 처리 (웹 환경에서는 불필요)
+try:
+    from tkinter import messagebox
+    TKINTER_AVAILABLE = True
+except ImportError:
+    TKINTER_AVAILABLE = False
 
 # 상위 디렉토리 모듈 import를 위한 경로 설정
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -373,4 +379,7 @@ class CrawlingService:
     
     def _show_message(self, message):
         """메시지 표시"""
-        messagebox.showinfo("크롤링 완료", message)
+        if TKINTER_AVAILABLE:
+            messagebox.showinfo("크롤링 완료", message)
+        else:
+            print(f"[알림] 크롤링 완료: {message}")

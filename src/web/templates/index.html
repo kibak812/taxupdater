@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>세금 법령 크롤링 모니터링 시스템</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='20' font-size='20'>📊</text></svg>">
+</head>
+<body>
+    <!-- 헤더 -->
+    <header class="header">
+        <div class="container">
+            <h1>📊 세금 법령 크롤링 모니터링 시스템</h1>
+            <p>누락없는 데이터 수집과 새로운 데이터의 정확한 식별 - 실시간 웹 모니터링</p>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- 전체 통계 영역 -->
+        <div class="stats-overview">
+            <h3>전체 현황</h3>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <span class="stat-number">-</span>
+                    <span class="stat-description">총 수집 데이터</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number">-</span>
+                    <span class="stat-description">활성 사이트</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number">6</span>
+                    <span class="stat-description">모니터링 사이트</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 전체 액션 영역 -->
+        <div class="global-actions">
+            <h3>🚀 크롤링 제어</h3>
+            <div class="global-buttons">
+                <button id="allCrawlBtn" class="btn btn-success">
+                    <span class="btn-text">🎯 전체 사이트 크롤링</span>
+                    <span class="loading" style="display: none;"></span>
+                </button>
+                <button id="refreshBtn" class="btn btn-secondary">
+                    🔄 대시보드 새로고침
+                </button>
+                <a href="/api/stats" class="btn btn-secondary" target="_blank">
+                    📈 상세 통계 보기
+                </a>
+            </div>
+        </div>
+
+        <!-- 크롤링 상태 표시 -->
+        <div id="crawlStatusContainer" style="display: none;" class="global-actions">
+            <h3>⚡ 크롤링 진행 상황</h3>
+            <div id="crawlStatus" style="font-size: 1.1rem; color: #3B82F6; font-weight: 500;">
+                대기 중...
+            </div>
+            <div class="progress-container">
+                <div class="progress-bar" id="crawlProgress"></div>
+            </div>
+        </div>
+
+        <!-- 사이트별 대시보드 -->
+        <div id="dashboard" class="dashboard-grid">
+            <!-- 동적으로 생성됨 -->
+            <div class="site-card" style="--site-color: #64748b;">
+                <div class="site-header">
+                    <div class="site-name">데이터 로딩 중...</div>
+                    <div class="site-status status-empty">준비 중</div>
+                </div>
+                <div class="site-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">상태</span>
+                        <span class="stat-value">초기화 중</span>
+                    </div>
+                </div>
+                <div class="actions">
+                    <button class="btn btn-secondary crawl-btn" disabled>
+                        <span class="loading"></span>
+                        로딩 중...
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 사용 가이드 -->
+        <div class="global-actions" style="margin-top: 2rem;">
+            <h3>📖 사용 가이드</h3>
+            <div style="text-align: left; max-width: 600px; margin: 0 auto;">
+                <p style="margin-bottom: 1rem; color: #64748b; line-height: 1.6;">
+                    <strong>개별 크롤링:</strong> 각 사이트 카드의 "크롤링" 버튼을 클릭하여 해당 사이트만 크롤링합니다.
+                </p>
+                <p style="margin-bottom: 1rem; color: #64748b; line-height: 1.6;">
+                    <strong>전체 크롤링:</strong> "전체 사이트 크롤링" 버튼으로 6개 사이트를 순차적으로 크롤링합니다.
+                </p>
+                <p style="margin-bottom: 1rem; color: #64748b; line-height: 1.6;">
+                    <strong>실시간 모니터링:</strong> 크롤링 진행 상황과 새로운 데이터 발견 알림을 실시간으로 확인할 수 있습니다.
+                </p>
+                <p style="color: #64748b; line-height: 1.6;">
+                    <strong>상세 데이터:</strong> 각 사이트 카드의 📄 버튼을 클릭하여 수집된 데이터를 상세히 확인할 수 있습니다.
+                </p>
+            </div>
+        </div>
+
+        <!-- 연결 상태 표시 -->
+        <div id="connectionStatus" style="text-align: center; margin-top: 2rem; color: #64748b; font-size: 0.875rem;">
+            🔌 실시간 연결 상태: <span id="connectionIndicator">연결 중...</span>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="/static/js/main.js"></script>
+    
+    <script>
+        // 연결 상태 업데이트
+        function updateConnectionStatus(connected) {
+            const indicator = document.getElementById('connectionIndicator');
+            if (connected) {
+                indicator.textContent = '연결됨 ✅';
+                indicator.style.color = '#10B981';
+            } else {
+                indicator.textContent = '연결 끊어짐 ❌';
+                indicator.style.color = '#EF4444';
+            }
+        }
+
+        // 크롤링 상태 표시/숨김
+        function toggleCrawlStatus(show) {
+            const container = document.getElementById('crawlStatusContainer');
+            if (container) {
+                container.style.display = show ? 'block' : 'none';
+            }
+        }
+
+        // WebSocket 연결 상태 모니터링
+        document.addEventListener('DOMContentLoaded', function() {
+            // 초기 연결 상태
+            setTimeout(() => {
+                if (window.app && window.app.isConnected) {
+                    updateConnectionStatus(true);
+                } else {
+                    updateConnectionStatus(false);
+                }
+            }, 2000);
+
+            // 주기적으로 연결 상태 확인
+            setInterval(() => {
+                if (window.app) {
+                    updateConnectionStatus(window.app.isConnected);
+                }
+            }, 5000);
+        });
+    </script>
+</body>
+</html>

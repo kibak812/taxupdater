@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ site_name }} - 세금 법령 크롤링 시스템</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='20' font-size='20'>📄</text></svg>">
+</head>
+<body>
+    <!-- 헤더 -->
+    <header class="header">
+        <div class="container">
+            <h1>📄 {{ site_name }} 데이터</h1>
+            <p>세금 법령 크롤링 시스템 - 사이트별 상세 데이터 조회</p>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- 네비게이션 -->
+        <div class="global-actions" style="margin-bottom: 1rem;">
+            <div class="global-buttons">
+                <a href="/" class="btn btn-secondary">
+                    🏠 대시보드로 돌아가기
+                </a>
+                <button class="btn btn-primary" onclick="startCrawling('{{ site_key }}')">
+                    🔄 {{ site_name }} 크롤링
+                </button>
+                <button class="btn btn-secondary" onclick="location.reload()">
+                    🔄 페이지 새로고침
+                </button>
+            </div>
+        </div>
+
+        <!-- 크롤링 상태 표시 -->
+        <div id="crawlStatusContainer" style="display: none;" class="global-actions">
+            <h3>⚡ {{ site_name }} 크롤링 진행 상황</h3>
+            <div id="crawlStatus" style="font-size: 1.1rem; color: #3B82F6; font-weight: 500;">
+                대기 중...
+            </div>
+            <div class="progress-container">
+                <div class="progress-bar" id="crawlProgress"></div>
+            </div>
+        </div>
+
+        <!-- 사이트 데이터 테이블 -->
+        <div id="siteData">
+            <!-- 동적으로 생성됨 -->
+            <div class="data-table">
+                <div class="table-header">
+                    <h3>{{ site_name }} 데이터 로딩 중...</h3>
+                    <div class="table-controls">
+                        <input type="text" class="search-input" placeholder="검색..." disabled>
+                        <button class="btn btn-secondary btn-sm" disabled>
+                            📤 Excel 내보내기
+                        </button>
+                    </div>
+                </div>
+                
+                <div style="padding: 2rem; text-align: center; color: #64748b;">
+                    <div class="loading" style="display: inline-block; margin-right: 0.5rem;"></div>
+                    데이터를 불러오는 중입니다...
+                </div>
+            </div>
+        </div>
+
+        <!-- 빠른 액션 -->
+        <div class="global-actions" style="margin-top: 2rem;">
+            <h3>🔧 빠른 액션</h3>
+            <div class="global-buttons">
+                <button class="btn btn-success" onclick="startCrawling('{{ site_key }}')">
+                    🆕 새 데이터 수집
+                </button>
+                <button class="btn btn-secondary" onclick="filterNewData()">
+                    ✨ 최근 데이터만 보기
+                </button>
+                <button class="btn btn-secondary" onclick="clearSearch()">
+                    🧹 검색 초기화
+                </button>
+            </div>
+        </div>
+
+        <!-- 사이트 정보 -->
+        <div class="global-actions" style="margin-top: 2rem;">
+            <h3>📋 {{ site_name }} 정보</h3>
+            <div style="text-align: left; max-width: 600px; margin: 0 auto;">
+                <div class="stat-item" style="margin-bottom: 0.5rem;">
+                    <span class="stat-label">사이트 키</span>
+                    <span class="stat-value">{{ site_key }}</span>
+                </div>
+                <div class="stat-item" style="margin-bottom: 0.5rem;">
+                    <span class="stat-label">데이터 타입</span>
+                    <span class="stat-value" id="dataTypeInfo">로딩 중...</span>
+                </div>
+                <div class="stat-item" style="margin-bottom: 0.5rem;">
+                    <span class="stat-label">마지막 업데이트</span>
+                    <span class="stat-value" id="lastUpdateInfo">로딩 중...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">총 레코드 수</span>
+                    <span class="stat-value" id="totalRecordsInfo">로딩 중...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 연결 상태 표시 -->
+        <div id="connectionStatus" style="text-align: center; margin-top: 2rem; color: #64748b; font-size: 0.875rem;">
+            🔌 실시간 연결 상태: <span id="connectionIndicator">연결 중...</span>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="/static/js/main.js"></script>
+    
+    <script>
+        // 사이트별 페이지 특화 기능
+        
+        function filterNewData() {
+            // 최근 24시간 이내 데이터 필터링 (향후 구현)
+            app.showNotification('최근 데이터 필터링 기능은 향후 구현 예정입니다.', 'info');
+        }
+
+        function clearSearch() {
+            const searchInput = document.querySelector('.search-input');
+            if (searchInput) {
+                searchInput.value = '';
+                // URL에서 search 파라미터 제거
+                const url = new URL(window.location);
+                url.searchParams.delete('search');
+                url.searchParams.set('page', '1');
+                window.location.href = url.toString();
+            }
+        }
+
+        // 연결 상태 업데이트
+        function updateConnectionStatus(connected) {
+            const indicator = document.getElementById('connectionIndicator');
+            if (connected) {
+                indicator.textContent = '연결됨 ✅';
+                indicator.style.color = '#10B981';
+            } else {
+                indicator.textContent = '연결 끊어짐 ❌';
+                indicator.style.color = '#EF4444';
+            }
+        }
+
+        // 크롤링 상태 표시/숨김
+        function toggleCrawlStatus(show) {
+            const container = document.getElementById('crawlStatusContainer');
+            if (container) {
+                container.style.display = show ? 'block' : 'none';
+            }
+        }
+
+        // 사이트 정보 업데이트
+        function updateSiteInfo(data) {
+            const dataTypeMap = {
+                'tax_tribunal': '조세심판원 결정서',
+                'nts_authority': '국세청 유권해석',
+                'moef': '기획재정부 해석사례',
+                'nts_precedent': '국세청 판례',
+                'mois': '행정안전부 해석사례',
+                'bai': '감사원 심사사례'
+            };
+
+            document.getElementById('dataTypeInfo').textContent = 
+                dataTypeMap['{{ site_key }}'] || '{{ site_name }} 데이터';
+            
+            if (data && data.pagination) {
+                document.getElementById('totalRecordsInfo').textContent = 
+                    data.pagination.total_count.toLocaleString() + '개';
+            }
+        }
+
+        // 페이지 로드 시 사이트 정보 업데이트
+        document.addEventListener('DOMContentLoaded', function() {
+            // WebSocket 연결 상태 모니터링
+            setTimeout(() => {
+                if (window.app && window.app.isConnected) {
+                    updateConnectionStatus(true);
+                } else {
+                    updateConnectionStatus(false);
+                }
+            }, 2000);
+
+            // 주기적으로 연결 상태 확인
+            setInterval(() => {
+                if (window.app) {
+                    updateConnectionStatus(window.app.isConnected);
+                }
+            }, 5000);
+
+            // 사이트 데이터 로드 후 정보 업데이트
+            const originalRenderSiteData = window.app?.renderSiteData;
+            if (originalRenderSiteData) {
+                window.app.renderSiteData = function(data) {
+                    originalRenderSiteData.call(this, data);
+                    updateSiteInfo(data);
+                };
+            }
+        });
+
+        // 키보드 단축키
+        document.addEventListener('keydown', function(event) {
+            // Ctrl/Cmd + R: 새로고침
+            if ((event.ctrlKey || event.metaKey) && event.key === 'r') {
+                event.preventDefault();
+                location.reload();
+            }
+            
+            // Ctrl/Cmd + F: 검색 포커스
+            if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+                event.preventDefault();
+                const searchInput = document.querySelector('.search-input');
+                if (searchInput) {
+                    searchInput.focus();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
