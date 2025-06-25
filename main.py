@@ -13,7 +13,7 @@ sys.path.append(os.path.dirname(__file__))
 
 from src.gui.main_window import MainWindow
 from src.services.crawler_service import CrawlingService
-from src.repositories.excel_repository import ExcelRepository
+from src.repositories.sqlite_repository import SQLiteRepository
 
 # 클래스 기반 크롤러들 import
 from src.crawlers.tax_tribunal_crawler import TaxTribunalCrawler
@@ -52,8 +52,8 @@ class LegacyCrawlerWrapper:
 def main():
     """메인 함수"""
     try:
-        # Repository 초기화 (향후 SQLite로 교체 가능)
-        repository = ExcelRepository()
+        # Repository 초기화 (SQLite 기반 고성능 데이터 저장소)
+        repository = SQLiteRepository()
         
         # 크롤러 인스턴스 생성
         crawlers = {
