@@ -95,6 +95,10 @@ templates = Jinja2Templates(directory=str(templates_path))
 # 크롤링 서비스 초기화
 repository = SQLiteRepository()
 
+# 기존 데이터베이스 스키마 업데이트 (웹 서버 시작 시)
+print("🔄 기존 데이터베이스 스키마 업데이트 중...")
+repository.force_schema_update()
+
 # 기본 크롤러 (항상 사용 가능)
 crawlers = {
     "tax_tribunal": TaxTribunalCrawler(),
@@ -258,8 +262,22 @@ async def start_crawling(site_key: str):
         if site_key not in SITE_INFO:
             raise HTTPException(status_code=404, detail="Site not found")
         
+        # site_key를 choice로 변환하는 매핑
+        site_to_choice_mapping = {
+            "tax_tribunal": "1",
+            "nts_authority": "2", 
+            "moef": "3",
+            "nts_precedent": "4",
+            "mois": "5",
+            "bai": "6"
+        }
+        
+        choice = site_to_choice_mapping.get(site_key)
+        if not choice:
+            raise HTTPException(status_code=400, detail=f"Invalid site_key: {site_key}")
+        
         # 비동기적으로 크롤링 실행
-        asyncio.create_task(run_crawling_task(site_key))
+        asyncio.create_task(run_crawling_task(choice))
         
         return {
             "status": "started",

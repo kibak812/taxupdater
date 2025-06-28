@@ -33,7 +33,12 @@ class SQLiteRepository(DataRepositoryInterface):
             os.makedirs(self.backup_folder)
         
         # 데이터베이스 초기화
-        self._initialize_database()
+        try:
+            self._initialize_database()
+            print(f"✅ SQLite 저장소 초기화 완료: {self.db_path}")
+        except Exception as e:
+            print(f"❌ SQLite 저장소 초기화 실패: {e}")
+            raise
     
     def _initialize_database(self):
         """데이터베이스 및 테이블 초기화"""
@@ -66,34 +71,46 @@ class SQLiteRepository(DataRepositoryInterface):
             raise
     
     def _create_site_table(self, cursor: sqlite3.Cursor, site_key: str, columns: List[str]):
-        """사이트별 테이블 생성"""
+        """사이트별 테이블 생성 및 스키마 업데이트"""
         table_name = f"{site_key}_data"
         key_column = KEY_COLUMNS.get(site_key, "문서번호")
         
-        # 컬럼 정의 생성
-        column_definitions = []
-        for col in columns:
-            if col == key_column:
-                column_definitions.append(f"[{col}] TEXT PRIMARY KEY")
-            else:
-                column_definitions.append(f"[{col}] TEXT")
+        # 기존 테이블 확인
+        cursor.execute(f"""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='{table_name}'
+        """)
+        table_exists = cursor.fetchone() is not None
         
-        # 추가 메타데이터 컬럼
-        column_definitions.extend([
-            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-            "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-        ])
+        if not table_exists:
+            # 새 테이블 생성
+            column_definitions = []
+            for col in columns:
+                if col == key_column:
+                    column_definitions.append(f"[{col}] TEXT PRIMARY KEY")
+                else:
+                    column_definitions.append(f"[{col}] TEXT")
+            
+            # 추가 메타데이터 컬럼
+            column_definitions.extend([
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            ])
+            
+            create_sql = f"""
+                CREATE TABLE [{table_name}] (
+                    {', '.join(column_definitions)}
+                )
+            """
+            cursor.execute(create_sql)
+            print(f"새 테이블 생성: {table_name}")
+        else:
+            # 기존 테이블 스키마 업데이트
+            self._update_table_schema(cursor, table_name, columns)
+            print(f"기존 테이블 스키마 업데이트: {table_name}")
         
-        create_sql = f"""
-            CREATE TABLE IF NOT EXISTS [{table_name}] (
-                {', '.join(column_definitions)}
-            )
-        """
-        
-        cursor.execute(create_sql)
-        
-        # 인덱스 생성 (성능 최적화)
-        cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{table_name}_created_at ON [{table_name}] (created_at DESC)")
+        # 인덱스 생성 (컬럼 존재 확인 후)
+        self._create_indexes_safely(cursor, table_name)
         
         # 메타데이터 테이블에 정보 저장
         cursor.execute("""
@@ -103,13 +120,83 @@ class SQLiteRepository(DataRepositoryInterface):
         
         print(f"테이블 생성/확인 완료: {table_name} ({len(columns)}개 컬럼)")
     
+    def _update_table_schema(self, cursor: sqlite3.Cursor, table_name: str, columns: List[str]):
+        """기존 테이블 스키마 업데이트 (필요한 컬럼 추가)"""
+        try:
+            # 기존 컬럼 목록 확인
+            cursor.execute(f"PRAGMA table_info([{table_name}])")
+            existing_columns = {row[1] for row in cursor.fetchall()}
+            
+            # 필요한 메타데이터 컬럼 추가
+            required_meta_columns = ['created_at', 'updated_at']
+            
+            for meta_col in required_meta_columns:
+                if meta_col not in existing_columns:
+                    try:
+                        # SQLite 제약사항 회피: NULL 기본값으로 컬럼 추가 후 UPDATE
+                        alter_sql = f"ALTER TABLE [{table_name}] ADD COLUMN {meta_col} TIMESTAMP"
+                        cursor.execute(alter_sql)
+                        
+                        # 기존 레코드에 현재 시간 설정
+                        update_sql = f"UPDATE [{table_name}] SET {meta_col} = CURRENT_TIMESTAMP WHERE {meta_col} IS NULL"
+                        cursor.execute(update_sql)
+                        
+                        print(f"  컬럼 추가 성공: {meta_col}")
+                    except sqlite3.Error as e:
+                        print(f"  컬럼 추가 실패 ({meta_col}): {e}")
+            
+            # 데이터 컬럼들도 확인하여 누락된 것이 있으면 추가
+            for col in columns:
+                if col not in existing_columns:
+                    try:
+                        alter_sql = f"ALTER TABLE [{table_name}] ADD COLUMN [{col}] TEXT"
+                        cursor.execute(alter_sql)
+                        print(f"  데이터 컬럼 추가: {col}")
+                    except sqlite3.Error as e:
+                        print(f"  데이터 컬럼 추가 실패 ({col}): {e}")
+                        
+        except Exception as e:
+            print(f"스키마 업데이트 오류 ({table_name}): {e}")
+    
+    def _create_indexes_safely(self, cursor: sqlite3.Cursor, table_name: str):
+        """컬럼 존재 확인 후 안전한 인덱스 생성"""
+        try:
+            # 컬럼 존재 확인
+            cursor.execute(f"PRAGMA table_info([{table_name}])")
+            existing_columns = {row[1] for row in cursor.fetchall()}
+            
+            # created_at 컬럼이 있는 경우에만 인덱스 생성
+            if 'created_at' in existing_columns:
+                cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{table_name}_created_at ON [{table_name}] (created_at DESC)")
+                print(f"  인덱스 생성: idx_{table_name}_created_at")
+            else:
+                print(f"  created_at 컬럼 없음, 인덱스 생성 건너뜀")
+                
+        except Exception as e:
+            print(f"인덱스 생성 오류 ({table_name}): {e}")
+    
     def load_existing_data(self, site_key: str) -> pd.DataFrame:
         """기존 데이터 로드"""
         try:
             table_name = f"{site_key}_data"
-            query = f"SELECT * FROM [{table_name}] ORDER BY created_at DESC"
             
             with sqlite3.connect(self.db_path) as conn:
+                # 컬럼 존재 확인
+                cursor = conn.cursor()
+                cursor.execute(f"PRAGMA table_info([{table_name}])")
+                existing_columns = {row[1] for row in cursor.fetchall()}
+                
+                # created_at 컬럼이 있으면 정렬, 없으면 기본 정렬
+                if 'created_at' in existing_columns:
+                    query = f"SELECT * FROM [{table_name}] ORDER BY created_at DESC"
+                else:
+                    # 키 컬럼으로 정렬 (대안)
+                    key_column = KEY_COLUMNS.get(site_key, "문서번호")
+                    if key_column in existing_columns:
+                        query = f"SELECT * FROM [{table_name}] ORDER BY [{key_column}] DESC"
+                    else:
+                        query = f"SELECT * FROM [{table_name}]"
+                
                 df = pd.read_sql_query(query, conn)
                 
                 # 메타데이터 컬럼 제거
@@ -260,17 +347,28 @@ class SQLiteRepository(DataRepositoryInterface):
                     "database_size_mb": round(os.path.getsize(self.db_path) / 1024 / 1024, 2)
                 }
                 
-                # 최신/오래된 데이터 조회
+                # 최신/오래된 데이터 조회 (created_at 컬럼이 있는 경우에만)
                 if total_count > 0:
-                    cursor.execute(f"""
-                        SELECT MIN(created_at), MAX(created_at) 
-                        FROM [{table_name}]
-                    """)
-                    earliest, latest = cursor.fetchone()
-                    stats["data_range"] = {
-                        "earliest": earliest,
-                        "latest": latest
-                    }
+                    # 컬럼 존재 확인
+                    cursor.execute(f"PRAGMA table_info([{table_name}])")
+                    existing_columns = {row[1] for row in cursor.fetchall()}
+                    
+                    if 'created_at' in existing_columns:
+                        cursor.execute(f"""
+                            SELECT MIN(created_at), MAX(created_at) 
+                            FROM [{table_name}]
+                        """)
+                        earliest, latest = cursor.fetchone()
+                        stats["data_range"] = {
+                            "earliest": earliest,
+                            "latest": latest
+                        }
+                    else:
+                        stats["data_range"] = {
+                            "earliest": None,
+                            "latest": None,
+                            "note": "created_at 컬럼 없음"
+                        }
                 
                 return stats
                 
@@ -325,3 +423,36 @@ class SQLiteRepository(DataRepositoryInterface):
                 
         except Exception as e:
             return {"error": str(e)}
+    
+    def force_schema_update(self):
+        """강제 스키마 업데이트 (수동 실행용)"""
+        try:
+            print("🔄 강제 스키마 업데이트 시작...")
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # 각 사이트별 테이블 업데이트
+                for site_key, columns in DATA_COLUMNS.items():
+                    table_name = f"{site_key}_data"
+                    print(f"  📋 {table_name} 스키마 업데이트 중...")
+                    
+                    # 테이블 존재 확인
+                    cursor.execute(f"""
+                        SELECT name FROM sqlite_master 
+                        WHERE type='table' AND name='{table_name}'
+                    """)
+                    
+                    if cursor.fetchone():
+                        self._update_table_schema(cursor, table_name, columns)
+                        self._create_indexes_safely(cursor, table_name)
+                    else:
+                        print(f"    ⚠️  테이블 {table_name} 없음, 건너뜀")
+                
+                conn.commit()
+            
+            print("✅ 강제 스키마 업데이트 완료")
+            return True
+            
+        except Exception as e:
+            print(f"❌ 강제 스키마 업데이트 실패: {e}")
+            return False

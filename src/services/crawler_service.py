@@ -3,12 +3,7 @@ import os
 from typing import Dict, Any, List
 import pandas as pd
 
-# tkinter import를 선택적으로 처리 (웹 환경에서는 불필요)
-try:
-    from tkinter import messagebox
-    TKINTER_AVAILABLE = True
-except ImportError:
-    TKINTER_AVAILABLE = False
+# 웹 전용 환경 - tkinter 지원 제거
 
 # 상위 디렉토리 모듈 import를 위한 경로 설정
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -51,7 +46,7 @@ class CrawlingService:
         summary_results = []
         prefix = "주기적 크롤링 " if is_periodic else ""
         
-        # 선택에 따른 크롤러 매핑 (동적으로 생성)
+        # 선택에 따른 크롤러 매핑
         crawler_mapping = {
             "1": ["tax_tribunal"],
             "2": ["nts_authority"],
@@ -62,11 +57,20 @@ class CrawlingService:
             "7": list(self.crawlers.keys())  # 실제 사용 가능한 모든 크롤러
         }
         
-        # 사용 불가능한 크롤러 제거
-        for choice, crawler_list in crawler_mapping.items():
-            crawler_mapping[choice] = [c for c in crawler_list if c in self.crawlers]
-        
-        selected_crawlers = crawler_mapping.get(choice, [])
+        # 개별 사이트 선택인 경우 해당 크롤러가 사용 가능한지 확인
+        if choice in ["1", "2", "3", "4", "5", "6"]:
+            target_crawler = crawler_mapping[choice][0]
+            if target_crawler not in self.crawlers:
+                error_msg = f"선택된 크롤러 '{target_crawler}'가 사용 불가능합니다."
+                print(f"❌ {error_msg}")
+                self._show_message(error_msg)
+                return
+            selected_crawlers = [target_crawler]
+        elif choice == "7":
+            # 전체 크롤링인 경우만 사용 가능한 크롤러 필터링
+            selected_crawlers = [c for c in self.crawlers.keys()]
+        else:
+            selected_crawlers = []
         
         if not selected_crawlers:
             self._show_message("잘못된 선택입니다. 유효한 옵션을 선택해 주세요.")
@@ -248,8 +252,8 @@ class CrawlingService:
                 backup_path = self.repository.backup_data(crawler_key, new_entries)
                 print(f"  💾 백업 완료: {backup_path}")
                 
-                # 데이터 저장 (증분 저장)
-                save_success = self.repository.save_data(crawler_key, new_data, is_incremental=True)
+                # 데이터 저장 (신규 데이터만 저장)
+                save_success = self.repository.save_data(crawler_key, new_entries, is_incremental=False)
                 
                 if save_success:
                     print(f"  ✅ 저장 완료: {len(new_entries)}개 신규 항목")
@@ -270,13 +274,13 @@ class CrawlingService:
             else:
                 print(f"  ✅ 새로운 데이터 없음 (모든 데이터가 기존에 존재)")
             
-            # 진행률 업데이트
-            if progress:
+            # 진행률 업데이트 (웹 환경 전용)
+            if progress and hasattr(progress, 'value'):
                 overall_progress = int(((current_index + 1) / total_count) * 100)
-                progress['value'] = overall_progress
+                progress.value = overall_progress
                 progress.update()
             
-            if status_message:
+            if status_message and hasattr(status_message, 'config'):
                 status_message.config(text=f"{site_name} 완료: 신규 {len(new_entries)}개")
                 status_message.update()
             
@@ -382,8 +386,5 @@ class CrawlingService:
             return error_result
     
     def _show_message(self, message):
-        """메시지 표시"""
-        if TKINTER_AVAILABLE:
-            messagebox.showinfo("크롤링 완료", message)
-        else:
-            print(f"[알림] 크롤링 완료: {message}")
+        """메시지 표시 (웹 환경 전용)"""
+        print(f"[알림] 크롤링 완료: {message}")
