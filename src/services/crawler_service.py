@@ -252,8 +252,8 @@ class CrawlingService:
                 backup_path = self.repository.backup_data(crawler_key, new_entries)
                 print(f"  💾 백업 완료: {backup_path}")
                 
-                # 데이터 저장 (신규 데이터만 저장)
-                save_success = self.repository.save_data(crawler_key, new_entries, is_incremental=False)
+                # 데이터 저장 (기존 데이터에 신규 데이터 추가)
+                save_success = self.repository.save_data(crawler_key, new_entries, is_incremental=True)
                 
                 if save_success:
                     print(f"  ✅ 저장 완료: {len(new_entries)}개 신규 항목")
