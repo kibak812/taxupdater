@@ -317,10 +317,10 @@ def crawl_bai_site(progress=None, status_message=None, **kwargs):
         options.add_argument(option)
     driver = webdriver.Chrome(options=options)
     
-    # 청구분야 목록 (조세 관련만)
+    # 청구분야 목록 (조세 관련만) - 실제 사이트 값으로 수정
     claim_types = [
-        {"name": "국세", "value": "0102"},
-        {"name": "지방세", "value": "0103"}
+        {"name": "국세", "value": "10"},
+        {"name": "지방세", "value": "20"}
     ]
     
     try:
@@ -344,41 +344,29 @@ def crawl_bai_site(progress=None, status_message=None, **kwargs):
                 print("감사원 사이트 로딩 실패, 기본 대기 후 진행")
                 time.sleep(5)
             
-            # 청구분야별 URL 파라미터로 직접 접근
+            # 드롭다운 선택 및 검색 방식
             try:
-                search_url = f"{bai_url}?reqDvsnCd={claim_type['value']}"
-                driver.get(search_url)
-                print(f"청구분야 '{claim_type['name']}' URL로 직접 이동: {search_url}")
-                time.sleep(5)
+                # 드롭다운 선택
+                select_element = driver.find_element(By.CSS_SELECTOR, "select#reqDvsnCd")
+                from selenium.webdriver.support.ui import Select
+                select = Select(select_element)
+                select.select_by_value(claim_type["value"])
+                print(f"청구분야 '{claim_type['name']}' 드롭다운 선택 완료")
+                time.sleep(2)
                 
-                # 드롭다운 선택 방식도 시도
-                try:
-                    select_element = driver.find_element(By.CSS_SELECTOR, "select#reqDvsnCd")
-                    from selenium.webdriver.support.ui import Select
-                    select = Select(select_element)
-                    select.select_by_value(claim_type["value"])
-                    print(f"청구분야 '{claim_type['name']}' 드롭다운 선택 완료")
-                    time.sleep(1)
-                    
-                    # 검색 버튼 클릭
-                    try:
-                        search_button = driver.find_element(By.CSS_SELECTOR, "div.searchForm button[type='button']")
-                        driver.execute_script("arguments[0].click();", search_button)
-                        print("searchForm 내부 검색 버튼 클릭 완료")
-                        time.sleep(3)
-                    except Exception as e:
-                        print(f"searchForm 검색 버튼 클릭 실패: {e}")
-                    
-                except Exception as dropdown_error:
-                    print(f"드롭다운 선택 실패: {dropdown_error}, URL 파라미터 방식으로 진행")
+                # 검색 버튼 클릭
+                search_button = driver.find_element(By.CSS_SELECTOR, "div.searchForm button[type='button']")
+                driver.execute_script("arguments[0].click();", search_button)
+                print(f"청구분야 '{claim_type['name']}' 검색 버튼 클릭 완료")
+                time.sleep(3)
                 
             except Exception as e:
-                print(f"청구분야 '{claim_type['name']}' 접근 실패: {e}")
+                print(f"청구분야 '{claim_type['name']}' 드롭다운/검색 실패: {e}")
                 continue
             
             # 해당 분야에서 페이지별 데이터 수집
             page = 1
-            pages_per_type = 10  # 각 분야별로 10페이지씩
+            pages_per_type = 5  # 각 분야별로 5페이지씩
             
             while page <= pages_per_type:
                 try:

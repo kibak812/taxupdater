@@ -181,11 +181,63 @@ popup_match = re.search(r'authoritativePopUp\((\d+)\)', onclick_attr)
 link = f"https://www.olta.re.kr/explainInfo/authoInterpretationDetail.do?num={doc_id}"
 ```
 
+### 감사원 크롤링 특이사항 (2025.06.29 수정)
+감사원 청구분야 드롭다운 및 검색 로직:
+```python
+# 올바른 청구분야 값
+claim_types = [
+    {"name": "국세", "value": "10"},
+    {"name": "지방세", "value": "20"}
+]
+
+# 드롭다운 선택 후 검색 버튼 클릭 필요
+select_element = driver.find_element(By.CSS_SELECTOR, "select#reqDvsnCd")
+select = Select(select_element)
+select.select_by_value(claim_type["value"])
+
+search_button = driver.find_element(By.CSS_SELECTOR, "div.searchForm button[type='button']")
+driver.execute_script("arguments[0].click();", search_button)
+```
+
+#### 감사원 크롤링 범위
+- **국세**: 5페이지
+- **지방세**: 5페이지
+- **총 10페이지**: 약 100개 항목 수집
+
+### SQLite UNIQUE Constraint 해결 (2025.06.29)
+PRIMARY KEY 충돌 시 자동 INSERT OR IGNORE 처리:
+```python
+# save_data 메서드에서 UNIQUE constraint 에러 발생 시
+try:
+    new_entries.to_sql(table_name, conn, if_exists='append', index=False, method='multi')
+except sqlite3.IntegrityError:
+    # INSERT OR IGNORE 방식으로 개별 처리
+    self._insert_with_ignore(conn, table_name, new_entries, key_column)
+```
+
 ### 데이터 무결성 및 누적 저장 시스템
 - **자동 백업**: 모든 신규 데이터는 Excel 파일로 자동 백업
 - **누적 저장**: 기존 데이터를 유지하면서 신규 항목만 증분 저장
 - **SQL 기반 중복 제거**: JOIN을 사용한 고성능 신규 데이터 탐지
+- **UNIQUE 제약 처리**: INSERT OR IGNORE를 통한 안전한 데이터 삽입
 - **데이터 손실 방지**: 모든 크롤러에서 일관된 누적 저장 방식 적용
+
+## 크롤링 시스템 현황 (2025.06.29)
+
+### ✅ 완료된 크롤러
+1. **조세심판원**: Selenium 기반 클래스 크롤러
+2. **국세법령정보시스템 (유권해석)**: Selenium 기반 클래스 크롤러
+3. **국세법령정보시스템 (판례)**: Selenium 기반 클래스 크롤러
+4. **기획재정부**: 웹 레거시 크롤러 (tkinter 의존성 제거)
+5. **행정안전부**: 웹 레거시 크롤러 (upperMenuId 파라미터 필수)
+6. **감사원**: 웹 레거시 크롤러 (드롭다운 선택 + 검색 로직)
+
+### 🌐 웹 인터페이스 완료
+- **실시간 크롤링**: WebSocket 진행률 업데이트
+- **사이트별 대시보드**: 개별 데이터 조회 및 검색
+- **백그라운드 크롤링**: ThreadPoolExecutor 기반
+- **자동 백업**: 신규 데이터 Excel 백업
+- **중복 제거**: SQL JOIN 기반 고성능 처리
 
 ## 개발 가이드라인
 - 파일 수정 전 항상 Read 도구로 파일 내용 확인
@@ -193,3 +245,4 @@ link = f"https://www.olta.re.kr/explainInfo/authoInterpretationDetail.do?num={do
 - 커밋 메시지는 간결하게 작성
 - 웹 전용 환경 (tkinter 의존성 완전 제거)
 - 모든 데이터 접근 시 컬럼 존재 여부 확인
+- UNIQUE constraint 에러 시 INSERT OR IGNORE 처리

@@ -211,7 +211,7 @@ class SQLiteRepository(DataRepositoryInterface):
             return self._create_empty_dataframe(site_key)
     
     def save_data(self, site_key: str, data: pd.DataFrame, is_incremental: bool = True) -> bool:
-        """데이터 저장"""
+        """데이터 저장 (UNIQUE constraint 에러 방지)"""
         try:
             if data.empty:
                 print(f"[SQLite] {site_key}: 저장할 데이터가 없음")
@@ -226,8 +226,13 @@ class SQLiteRepository(DataRepositoryInterface):
                     new_entries = self.compare_and_get_new_entries(site_key, data, key_column)
                     
                     if not new_entries.empty:
-                        # 새 데이터만 삽입
-                        new_entries.to_sql(table_name, conn, if_exists='append', index=False, method='multi')
+                        # INSERT OR IGNORE 방식으로 중복 키 에러 방지
+                        try:
+                            new_entries.to_sql(table_name, conn, if_exists='append', index=False, method='multi')
+                        except sqlite3.IntegrityError as ie:
+                            print(f"[SQLite] {site_key}: UNIQUE constraint 에러 발생, INSERT OR IGNORE 방식 사용")
+                            # 개별 행씩 INSERT OR IGNORE 처리
+                            self._insert_with_ignore(conn, table_name, new_entries, key_column)
                         
                         # 메타데이터 업데이트
                         self._update_metadata(conn, site_key, len(new_entries))
@@ -376,6 +381,38 @@ class SQLiteRepository(DataRepositoryInterface):
             print(f"통계 정보 조회 실패 ({site_key}): {e}")
             return {"total_count": 0, "last_updated": None, "error": str(e)}
     
+    def _insert_with_ignore(self, conn: sqlite3.Connection, table_name: str, data: pd.DataFrame, key_column: str):
+        """INSERT OR IGNORE 방식으로 중복 키 에러 방지하며 데이터 삽입"""
+        try:
+            cursor = conn.cursor()
+            columns = list(data.columns)
+            
+            # 플레이스홀더 생성
+            placeholders = ', '.join(['?'] * len(columns))
+            column_names = ', '.join([f'[{col}]' for col in columns])
+            
+            insert_sql = f"""
+                INSERT OR IGNORE INTO [{table_name}] ({column_names})
+                VALUES ({placeholders})
+            """
+            
+            # 데이터 삽입
+            success_count = 0
+            for _, row in data.iterrows():
+                try:
+                    cursor.execute(insert_sql, tuple(row[col] for col in columns))
+                    if cursor.rowcount > 0:
+                        success_count += 1
+                except Exception as e:
+                    print(f"  행 삽입 실패: {e}")
+            
+            conn.commit()
+            print(f"[SQLite] INSERT OR IGNORE: {success_count}/{len(data)}개 행 성공적으로 삽입")
+            
+        except Exception as e:
+            print(f"INSERT OR IGNORE 실패: {e}")
+            raise
+
     def _update_metadata(self, conn: sqlite3.Connection, site_key: str, added_count: int, replace: bool = False):
         """메타데이터 업데이트"""
         if replace:
