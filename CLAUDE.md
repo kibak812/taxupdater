@@ -61,12 +61,23 @@ data/backups/
 3. **Observer Pattern**: WebSocket을 통한 실시간 진행률 업데이트
 4. **Interface Segregation**: CrawlerInterface, DataRepositoryInterface, UIInterface
 
-### 데이터 흐름
+### 데이터 흐름 및 누적 저장 시스템
 ```
 웹 UI → FastAPI → CrawlingService → Crawler → Repository → SQLite/Excel
-                     ↓                                      ↑
-              WebSocket 실시간 피드백              자동 백업 생성
+                     ↓                    ↓           ↑
+              WebSocket 실시간 피드백   중복 제거    자동 백업
+                                    (SQL JOIN)   
+                                        ↓
+                                   누적 저장
+                              (기존 데이터 유지)
 ```
+
+#### 누적 저장 프로세스
+1. **크롤링**: 사이트에서 최신 데이터 수집
+2. **중복 탐지**: SQL JOIN으로 기존 DB와 비교
+3. **신규 필터링**: 기존에 없는 데이터만 추출  
+4. **증분 저장**: 기존 데이터 유지하면서 신규 데이터 추가
+5. **자동 백업**: 신규 데이터를 Excel로 백업
 
 ## 주요 컴포넌트
 
@@ -128,14 +139,15 @@ site_to_choice_mapping = {
     "moef": "3", "bai": "6", ...
 }
 
-# 신규 데이터만 저장 (중복 방지)
-save_data(site_key, new_entries, is_incremental=False)
+# 누적 저장 방식 (기존 데이터 유지하면서 신규 데이터 추가)
+save_data(site_key, new_entries, is_incremental=True)
 ```
 
-### 데이터 무결성
+### 데이터 무결성 및 누적 저장 시스템
 - **자동 백업**: 모든 신규 데이터는 Excel 파일로 자동 백업
-- **증분 저장**: 기존 데이터와 비교하여 신규 항목만 저장
+- **누적 저장**: 기존 데이터를 유지하면서 신규 항목만 증분 저장
 - **SQL 기반 중복 제거**: JOIN을 사용한 고성능 신규 데이터 탐지
+- **데이터 손실 방지**: 모든 크롤러에서 일관된 누적 저장 방식 적용
 
 ## 개발 가이드라인
 - 파일 수정 전 항상 Read 도구로 파일 내용 확인
