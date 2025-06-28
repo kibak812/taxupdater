@@ -289,14 +289,26 @@ class TaxCrawlerApp {
         try {
             console.log(`크롤링 시작: ${siteKey}`);
             
-            // 버튼 상태 변경
-            const button = event.target.closest('.crawl-btn');
-            const btnText = button.querySelector('.btn-text');
-            const loading = button.querySelector('.loading');
+            // 버튼 상태 변경 (안전한 방법)
+            const buttons = document.querySelectorAll(`.crawl-btn`);
+            let targetButton = null;
             
-            btnText.textContent = '진행 중...';
-            loading.style.display = 'inline-block';
-            button.disabled = true;
+            // 현재 클릭된 버튼 찾기
+            buttons.forEach(btn => {
+                const onclick = btn.getAttribute('onclick');
+                if (onclick && onclick.includes(siteKey)) {
+                    targetButton = btn;
+                }
+            });
+            
+            if (targetButton) {
+                const btnText = targetButton.querySelector('.btn-text');
+                const loading = targetButton.querySelector('.loading');
+                
+                if (btnText) btnText.textContent = '진행 중...';
+                if (loading) loading.style.display = 'inline-block';
+                targetButton.disabled = true;
+            }
             
             const response = await fetch(`/api/crawl/${siteKey}`, {
                 method: 'POST',
@@ -314,14 +326,19 @@ class TaxCrawlerApp {
             console.error('크롤링 시작 오류:', error);
             this.showNotification('크롤링 시작 실패', 'error');
             
-            // 버튼 상태 복원
-            const button = event.target.closest('.crawl-btn');
-            const btnText = button.querySelector('.btn-text');
-            const loading = button.querySelector('.loading');
-            
-            btnText.textContent = '크롤링';
-            loading.style.display = 'none';
-            button.disabled = false;
+            // 버튼 상태 복원 (안전한 방법)
+            const buttons = document.querySelectorAll(`.crawl-btn`);
+            buttons.forEach(btn => {
+                const onclick = btn.getAttribute('onclick');
+                if (onclick && onclick.includes(siteKey)) {
+                    const btnText = btn.querySelector('.btn-text');
+                    const loading = btn.querySelector('.loading');
+                    
+                    if (btnText) btnText.textContent = '크롤링';
+                    if (loading) loading.style.display = 'none';
+                    btn.disabled = false;
+                }
+            });
         }
     }
 

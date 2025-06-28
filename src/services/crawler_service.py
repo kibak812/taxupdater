@@ -51,7 +51,7 @@ class CrawlingService:
         summary_results = []
         prefix = "주기적 크롤링 " if is_periodic else ""
         
-        # 선택에 따른 크롤러 매핑
+        # 선택에 따른 크롤러 매핑 (동적으로 생성)
         crawler_mapping = {
             "1": ["tax_tribunal"],
             "2": ["nts_authority"],
@@ -59,8 +59,12 @@ class CrawlingService:
             "4": ["nts_precedent"],
             "5": ["mois"],
             "6": ["bai"],
-            "7": ["tax_tribunal", "nts_authority", "moef", "nts_precedent", "mois", "bai"]
+            "7": list(self.crawlers.keys())  # 실제 사용 가능한 모든 크롤러
         }
+        
+        # 사용 불가능한 크롤러 제거
+        for choice, crawler_list in crawler_mapping.items():
+            crawler_mapping[choice] = [c for c in crawler_list if c in self.crawlers]
         
         selected_crawlers = crawler_mapping.get(choice, [])
         
