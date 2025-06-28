@@ -20,8 +20,10 @@ CRAWLING_CONFIG = {
     "max_items": 5000,
     "retry_count": 3,
     "retry_delay": 5,
-    "timeout": 10,
-    "max_load_attempts": 500
+    "timeout": 30,  # 30초로 증가 (기존 10초)
+    "max_load_attempts": 500,
+    "selenium_timeout": 180,  # Selenium WebDriverWait 타임아웃 (3분)
+    "page_load_timeout": 60   # 페이지 로드 타임아웃 (1분)
 }
 
 # 세목 리스트 (조세심판원)

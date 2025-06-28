@@ -18,10 +18,11 @@ from src.repositories.sqlite_repository import SQLiteRepository
 # 클래스 기반 크롤러들 import
 from src.crawlers.tax_tribunal_crawler import TaxTribunalCrawler
 from src.crawlers.nts_authority_crawler import NTSAuthorityCrawler
+from src.crawlers.nts_precedent_crawler import NTSPrecedentCrawler
 
 # 레거시 크롤러 함수들 (아직 클래스로 변환되지 않은 것들)
 from example import (
-    crawl_nts_precedents, crawl_moef_site, crawl_mois_site, crawl_bai_site
+    crawl_moef_site, crawl_mois_site, crawl_bai_site
 )
 
 # 임시 래퍼 클래스들 (향후 완전한 클래스로 대체 예정)
@@ -59,10 +60,8 @@ def main():
         crawlers = {
             "tax_tribunal": TaxTribunalCrawler(),
             "nts_authority": NTSAuthorityCrawler(),
+            "nts_precedent": NTSPrecedentCrawler(),
             # 레거시 크롤러들을 래퍼로 감싸서 사용
-            "nts_precedent": LegacyCrawlerWrapper(
-                "국세청_판례", "nts_precedent", crawl_nts_precedents, "문서번호"
-            ),
             "moef": LegacyCrawlerWrapper(
                 "기획재정부", "moef", crawl_moef_site, "문서번호"
             ),

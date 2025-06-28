@@ -28,12 +28,13 @@ from src.services.crawler_service import CrawlingService
 from src.repositories.sqlite_repository import SQLiteRepository
 from src.crawlers.tax_tribunal_crawler import TaxTribunalCrawler
 from src.crawlers.nts_authority_crawler import NTSAuthorityCrawler
+from src.crawlers.nts_precedent_crawler import NTSPrecedentCrawler
 from src.config.settings import GUI_CONFIG
 
 # 웹 환경용 레거시 크롤러들 import (tkinter 의존성 없음)
 try:
     from src.crawlers.web_legacy_crawlers import (
-        crawl_nts_precedents, crawl_moef_site, crawl_mois_site, crawl_bai_site
+        crawl_moef_site, crawl_mois_site, crawl_bai_site
     )
     LEGACY_CRAWLERS_AVAILABLE = True
     print("✅ 웹 환경용 레거시 크롤러 로드 성공")
@@ -42,9 +43,6 @@ except ImportError as e:
     LEGACY_CRAWLERS_AVAILABLE = False
     
     # 더미 함수들로 대체
-    def crawl_nts_precedents(**kwargs):
-        raise NotImplementedError("웹 레거시 크롤러 사용 불가")
-    
     def crawl_moef_site(**kwargs):
         raise NotImplementedError("웹 레거시 크롤러 사용 불가")
         
@@ -103,14 +101,12 @@ repository.force_schema_update()
 crawlers = {
     "tax_tribunal": TaxTribunalCrawler(),
     "nts_authority": NTSAuthorityCrawler(),
+    "nts_precedent": NTSPrecedentCrawler(),
 }
 
 # 레거시 크롤러들 (tkinter 사용 가능한 경우에만 추가)
 if LEGACY_CRAWLERS_AVAILABLE:
     crawlers.update({
-        "nts_precedent": LegacyCrawlerWrapper(
-            "국세청_판례", "nts_precedent", crawl_nts_precedents, "문서번호"
-        ),
         "moef": LegacyCrawlerWrapper(
             "기획재정부", "moef", crawl_moef_site, "문서번호"
         ),
