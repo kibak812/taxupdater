@@ -143,6 +143,44 @@ site_to_choice_mapping = {
 save_data(site_key, new_entries, is_incremental=True)
 ```
 
+### 행정안전부 크롤링 특이사항 (2025.06.28 수정)
+행정안전부 사이트 접근 시 반드시 `upperMenuId` 파라미터가 필요:
+```python
+# 올바른 URL (필수!)
+mois_url = "https://www.olta.re.kr/explainInfo/authoInterpretationList.do?menuNo=9020000&upperMenuId=9000000"
+
+# 잘못된 URL (로그인 페이지로 리다이렉트됨)
+mois_url = "https://www.olta.re.kr/explainInfo/authoInterpretationList.do?menuNo=9020000"
+```
+
+#### HTML 구조 (행정안전부)
+```html
+<ul class="search_out exp">
+    <li>
+        <p><span class="part">세목</span>문서번호 (날짜)</p>
+        <p class="tt"><a onclick="authoritativePopUp(번호)">제목</a></p>
+        <p class="txt"><a>내용요약</a></p>
+    </li>
+</ul>
+```
+
+#### 데이터 추출 로직
+```python
+# 1. 세목 추출
+tax_category = item.find_element(By.CSS_SELECTOR, "span.part").text.strip()
+
+# 2. 날짜 패턴 매칭
+date_pattern = r'\((\d{4}\.\d{2}\.\d{2})\)'
+date_match = re.search(date_pattern, first_p_text)
+
+# 3. 문서번호 추출 (세목 제거 후)
+doc_number = before_date.replace(tax_category, "").strip()
+
+# 4. 링크 추출 (authoritativePopUp 함수에서 번호 추출)
+popup_match = re.search(r'authoritativePopUp\((\d+)\)', onclick_attr)
+link = f"https://www.olta.re.kr/explainInfo/authoInterpretationDetail.do?num={doc_id}"
+```
+
 ### 데이터 무결성 및 누적 저장 시스템
 - **자동 백업**: 모든 신규 데이터는 Excel 파일로 자동 백업
 - **누적 저장**: 기존 데이터를 유지하면서 신규 항목만 증분 저장

@@ -156,7 +156,7 @@ def crawl_mois_site(progress=None, status_message=None, **kwargs):
     
     # example.py의 crawl_mois_site 로직 사용
     max_pages = kwargs.get('max_pages', 5)
-    mois_url = "https://www.olta.re.kr/explainInfo/authoInterpretationList.do?menuNo=9020000"
+    mois_url = "https://www.olta.re.kr/explainInfo/authoInterpretationList.do?menuNo=9020000&upperMenuId=9000000"
     
     options = Options()
     for option in SELENIUM_OPTIONS:
@@ -169,7 +169,7 @@ def crawl_mois_site(progress=None, status_message=None, **kwargs):
         if status_message:
             status_message.config("행정안전부 데이터 로딩 중...")
         
-        time.sleep(5)
+        time.sleep(10)  # JavaScript 실행을 위한 더 긴 대기시간
         
         all_items = []
         page = 1
@@ -179,6 +179,13 @@ def crawl_mois_site(progress=None, status_message=None, **kwargs):
                 if status_message:
                     status_message.config(f"행정안전부 페이지 {page}/{max_pages} 크롤링 중...")
                 
+                # 첫 페이지에서 HTML 구조 분석
+                if page == 1:
+                    print("행정안전부 페이지 HTML 구조 분석 중...")
+                    page_source = driver.page_source[:3000]  # 처음 3000자만 출력
+                    print("페이지 소스 샘플:")
+                    print(page_source)
+                
                 # 정확한 선택자로 리스트 항목 찾기
                 items = driver.find_elements(By.CSS_SELECTOR, "ul.search_out.exp li")
                 
@@ -186,7 +193,6 @@ def crawl_mois_site(progress=None, status_message=None, **kwargs):
                     print(f"행정안전부 페이지 {page}: 'ul.search_out.exp li' 선택자로 항목을 찾을 수 없음")
                     break
                 
-                print(f"행정안전부: 'ul.search_out.exp li' 선택자로 {len(items)}개 항목 발견")
                 
                 page_items_count = 0
                 for item in items:
