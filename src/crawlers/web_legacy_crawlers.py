@@ -72,8 +72,8 @@ def crawl_nts_precedents(progress=None, status_message=None, **kwargs):
     if status_message is None:
         status_message = WebStatus()
     
-    # example.py의 crawl_nts_precedents 로직 사용
-    max_items = kwargs.get('max_items', 1000)
+    # example.py의 crawl_nts_precedents 로직 사용 (국세청 해석과 동일한 5000개로 증가)
+    max_items = kwargs.get('max_items', 5000)
     dynamic_url = "https://taxlaw.nts.go.kr/pd/USEPDI001M.do"
     
     options = Options()
@@ -85,7 +85,7 @@ def crawl_nts_precedents(progress=None, status_message=None, **kwargs):
         driver.get(dynamic_url)
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "more_show")))
         total_cases = 0
-        max_load_attempts = 500
+        max_load_attempts = 1000  # 5000개 수집을 위해 더 많은 시도 허용
         current_attempt = 0
         
         # 1단계: 데이터 로딩

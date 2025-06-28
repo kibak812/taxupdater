@@ -326,30 +326,68 @@ async def run_crawling_task(choice: str):
         import asyncio
         import concurrent.futures
         
-        # 간단한 진행상황 콜백 (웹용)
-        class WebProgress:
-            def __init__(self):
+        # WebSocket 연동 진행상황 콜백 (Thread-safe 실시간 웹 피드백)
+        class WebSocketProgress:
+            def __init__(self, loop, manager, choice):
                 self.value = 0
+                self.loop = loop
+                self.manager = manager
+                self.choice = choice
             
             def update(self):
-                pass
+                # Thread-safe WebSocket 전송
+                try:
+                    message = {
+                        "type": "crawl_progress",
+                        "choice": self.choice,
+                        "progress": self.value,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    # asyncio.run_coroutine_threadsafe로 비동기 작업 스케줄링
+                    asyncio.run_coroutine_threadsafe(
+                        self.manager.broadcast(message), 
+                        self.loop
+                    )
+                except Exception as e:
+                    print(f"진행률 WebSocket 전송 오류: {e}")
         
-        class WebStatus:
-            def __init__(self):
+        class WebSocketStatus:
+            def __init__(self, loop, manager, choice):
                 self.text = ""
+                self.loop = loop
+                self.manager = manager
+                self.choice = choice
             
             def config(self, text):
                 self.text = text
                 print(f"[크롤링 상태] {text}")
+                # Thread-safe WebSocket 전송
+                try:
+                    message = {
+                        "type": "crawl_status",
+                        "choice": self.choice,
+                        "status": text,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    # asyncio.run_coroutine_threadsafe로 비동기 작업 스케줄링
+                    asyncio.run_coroutine_threadsafe(
+                        self.manager.broadcast(message), 
+                        self.loop
+                    )
+                except Exception as e:
+                    print(f"상태 WebSocket 전송 오류: {e}")
             
             def update(self):
-                pass
+                # 상태 업데이트 시에도 전송
+                if self.text:
+                    self.config(self.text)
         
         def run_sync_crawling():
-            """동기 크롤링 실행"""
+            """동기 크롤링 실행 (Thread-safe WebSocket 연동)"""
             try:
-                progress = WebProgress()
-                status = WebStatus()
+                # 현재 이벤트 루프를 가져와서 WebSocket 연동 진행상황 객체 생성
+                progress = WebSocketProgress(loop, manager, choice)
+                status = WebSocketStatus(loop, manager, choice)
                 
                 # 크롤링 실행
                 crawling_service.execute_crawling(choice, progress, status, is_periodic=False)
@@ -400,7 +438,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "app:app",
         host="0.0.0.0",
-        port=8000,
+        port=8001,
         reload=True,
         log_level="info"
     )

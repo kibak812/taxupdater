@@ -73,23 +73,30 @@ class TaxCrawlerApp {
         switch (data.type) {
             case 'crawl_start':
                 this.showNotification(`크롤링 시작: ${this.getCrawlChoiceName(data.choice)}`, 'info');
-                this.updateCrawlStatus('진행 중...');
+                this.updateCrawlStatus('진행 중...', 0);
+                this.showCrawlStatusContainer(true);
+                break;
+                
+            case 'crawl_progress':
+                this.updateCrawlProgress(data.progress);
                 break;
                 
             case 'crawl_status':
-                this.updateCrawlStatus(data.status);
+                this.updateCrawlStatus(data.status, data.progress || null);
                 break;
                 
             case 'crawl_complete':
                 this.showNotification(`크롤링 완료: ${this.getCrawlChoiceName(data.choice)}`, 'success');
-                this.updateCrawlStatus('완료');
+                this.updateCrawlStatus('완료', 100);
+                this.showCrawlStatusContainer(false, 3000); // 3초 후 숨김
                 // 대시보드 새로고침
                 setTimeout(() => this.loadDashboardData(), 2000);
                 break;
                 
             case 'crawl_error':
                 this.showNotification(`크롤링 오류: ${data.error}`, 'error');
-                this.updateCrawlStatus('오류 발생');
+                this.updateCrawlStatus('오류 발생', null);
+                this.showCrawlStatusContainer(false, 5000); // 5초 후 숨김
                 break;
         }
     }
@@ -393,11 +400,20 @@ class TaxCrawlerApp {
         }
     }
 
-    updateCrawlStatus(status) {
+    updateCrawlStatus(status, progress = null) {
         // 크롤링 상태를 화면에 표시
         const statusElement = document.getElementById('crawlStatus');
         if (statusElement) {
-            statusElement.textContent = status;
+            let statusText = status;
+            if (progress !== null && progress >= 0) {
+                statusText += ` (${progress}%)`;
+            }
+            statusElement.textContent = statusText;
+        }
+        
+        // 진행률도 업데이트
+        if (progress !== null) {
+            this.updateCrawlProgress(progress);
         }
         
         // 모든 크롤링 버튼의 상태 업데이트
@@ -406,11 +422,38 @@ class TaxCrawlerApp {
                 const btnText = btn.querySelector('.btn-text');
                 const loading = btn.querySelector('.loading');
                 
-                btnText.textContent = '크롤링';
-                loading.style.display = 'none';
+                if (btnText) btnText.textContent = '크롤링';
+                if (loading) loading.style.display = 'none';
                 btn.disabled = false;
             }
         });
+    }
+
+    updateCrawlProgress(progress) {
+        // 진행률 바 업데이트
+        const progressBar = document.getElementById('crawlProgress');
+        if (progressBar) {
+            progressBar.style.width = `${Math.min(100, Math.max(0, progress))}%`;
+            progressBar.style.background = progress >= 100 ? '#10B981' : '#3B82F6';
+        }
+    }
+
+    showCrawlStatusContainer(show, hideAfter = null) {
+        const container = document.getElementById('crawlStatusContainer');
+        if (container) {
+            if (show) {
+                container.style.display = 'block';
+                // 진행률 초기화
+                this.updateCrawlProgress(0);
+            } else if (hideAfter) {
+                // 지정된 시간 후 숨김
+                setTimeout(() => {
+                    container.style.display = 'none';
+                }, hideAfter);
+            } else {
+                container.style.display = 'none';
+            }
+        }
     }
 
     showNotification(message, type = 'info') {

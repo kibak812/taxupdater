@@ -79,6 +79,7 @@ celerybeat.pid
 .venv
 env/
 venv/
+*venv/
 ENV/
 env.bak/
 venv.bak/
@@ -113,6 +114,7 @@ updated_cases/
 *.xlsx
 *.csv
 *.log
+*.db
 
 # IDE
 .vscode/
