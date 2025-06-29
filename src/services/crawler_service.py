@@ -8,8 +8,12 @@ import pandas as pd
 # 상위 디렉토리 모듈 import를 위한 경로 설정
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.interfaces.crawler_interface import CrawlerInterface, DataRepositoryInterface
-from src.services.notification_service import NotificationService
+from src.services.legacy_notification_service import NotificationService as LegacyNotificationService
 from src.config.logging_config import get_logger
+import sqlite3
+from datetime import datetime
+import json
+import asyncio
 
 
 class CrawlingService:
@@ -30,8 +34,23 @@ class CrawlingService:
         """
         self.crawlers = crawlers
         self.repository = repository
-        self.notification_service = NotificationService()
+        self.legacy_notification_service = LegacyNotificationService()
         self.logger = get_logger(__name__)
+        
+        # 새로운 모니터링 시스템용 notification_service는 필요할 때 import
+        self._notification_service = None
+    
+    @property
+    def notification_service(self):
+        """지연 로딩을 통한 notification_service 접근"""
+        if self._notification_service is None:
+            try:
+                from src.services.notification_service import NotificationService
+                self._notification_service = NotificationService()
+            except ImportError:
+                self.logger.warning("새로운 알림 서비스를 로드할 수 없습니다. 레거시 서비스를 사용합니다.")
+                self._notification_service = self.legacy_notification_service
+        return self._notification_service
     
     def execute_crawling(self, choice: str, progress: Optional[Callable], status_message: Optional[Callable], is_periodic: bool = False) -> None:
         """
@@ -93,9 +112,18 @@ class CrawlingService:
                 
                 summary_results.append(result)
                 
-                # 개별 사이트 완료 시 즉시 알림 (전체 크롤링이 아닌 경우)
+                # 새로운 데이터 로깅 및 알림 발송
+                if result.get('status') == 'success' and result.get('new_count', 0) > 0:
+                    session_id = f"{crawler_key}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                    self.log_new_data_and_notify(
+                        crawler_key, 
+                        result.get('new_entries', pd.DataFrame()), 
+                        session_id
+                    )
+                
+                # 개별 사이트 완료 시 즉시 알림 (전체 크롤링이 아닌 경우) - 레거시 알림
                 if choice != "7":
-                    alert_message = self.notification_service.create_new_data_alert(
+                    alert_message = self.legacy_notification_service.create_new_data_alert(
                         crawler_key, result.get('new_entries', pd.DataFrame()), 
                         result.get('crawling_stats', {})
                     )
@@ -390,3 +418,143 @@ class CrawlingService:
     def _show_message(self, message: str) -> None:
         """메시지 표시 (웹 환경 전용)"""
         self.logger.info(f"[알림] 크롤링 완료: {message}")
+    
+    def log_new_data_and_notify(self, site_key: str, new_entries: pd.DataFrame, session_id: str = None) -> None:
+        """새로운 데이터를 로그에 기록하고 알림 발송"""
+        if new_entries.empty:
+            return
+        
+        try:
+            # 사이트별 키 컬럼 매핑
+            key_column_mapping = {
+                "tax_tribunal": "청구번호",
+                "nts_authority": "문서번호", 
+                "nts_precedent": "문서번호",
+                "moef": "문서번호",
+                "mois": "문서번호",
+                "bai": "문서번호"
+            }
+            
+            key_column = key_column_mapping.get(site_key, "문서번호")
+            current_time = datetime.now()
+            
+            # new_data_log 테이블에 개별 데이터 기록
+            with sqlite3.connect(self.repository.db_path) as conn:
+                for _, row in new_entries.iterrows():
+                    data_id = str(row.get(key_column, "unknown"))
+                    data_title = str(row.get("제목", ""))[:200]  # 제목 길이 제한
+                    data_category = str(row.get("세목", ""))
+                    data_date = str(row.get("생산일자", row.get("결정일자", row.get("회신일자", ""))))
+                    
+                    # 데이터 요약 생성
+                    data_summary = self._create_data_summary(row, site_key)
+                    
+                    # 태그 생성
+                    tags = self._generate_tags(row, site_key)
+                    
+                    # 메타데이터 생성
+                    metadata = {
+                        "crawl_session_id": session_id,
+                        "original_data": dict(row.head(5)),  # 처음 5개 컬럼만 저장
+                        "site_key": site_key
+                    }
+                    
+                    conn.execute("""
+                        INSERT OR IGNORE INTO new_data_log 
+                        (site_key, data_id, data_type, data_title, data_summary,
+                         data_category, data_date, crawl_session_id, discovered_at,
+                         tags, metadata)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        site_key,
+                        data_id,
+                        "record",
+                        data_title,
+                        data_summary,
+                        data_category,
+                        data_date,
+                        session_id,
+                        current_time.isoformat(),
+                        json.dumps(tags, ensure_ascii=False),
+                        json.dumps(metadata, ensure_ascii=False)
+                    ))
+                
+                inserted_count = conn.total_changes
+                self.logger.info(f"새로운 데이터 로그 기록: {inserted_count}개")
+            
+            # 알림 발송 (비동기)
+            if hasattr(self.notification_service, 'send_new_data_notification'):
+                try:
+                    # asyncio 이벤트 루프가 있는 경우에만 알림 발송
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        asyncio.create_task(
+                            self.notification_service.send_new_data_notification(
+                                site_key, len(new_entries), session_id
+                            )
+                        )
+                    else:
+                        # 이벤트 루프가 없는 경우 새 루프 생성하여 실행
+                        asyncio.run(
+                            self.notification_service.send_new_data_notification(
+                                site_key, len(new_entries), session_id
+                            )
+                        )
+                except Exception as e:
+                    self.logger.warning(f"알림 발송 실패: {e}")
+            
+        except Exception as e:
+            self.logger.error(f"새로운 데이터 로깅 실패: {e}")
+    
+    def _create_data_summary(self, row: pd.Series, site_key: str) -> str:
+        """데이터 요약 생성"""
+        try:
+            if site_key == "tax_tribunal":
+                return f"{row.get('세목', '')} - {row.get('유형', '')} ({row.get('결정일', '')})"
+            elif site_key in ["nts_authority", "nts_precedent"]:
+                return f"{row.get('세목', '')} 관련 ({row.get('생산일자', '')})"
+            elif site_key == "moef":
+                return f"기획재정부 해석 ({row.get('회신일자', '')})"
+            elif site_key == "mois":
+                return f"{row.get('세목', '')} 유권해석 ({row.get('생산일자', '')})"
+            elif site_key == "bai":
+                return f"{row.get('청구분야', '')} 심사 ({row.get('결정일자', '')})"
+            else:
+                return str(row.get("제목", ""))[:100]
+        except Exception:
+            return "데이터 요약 생성 실패"
+    
+    def _generate_tags(self, row: pd.Series, site_key: str) -> List[str]:
+        """데이터 태그 생성"""
+        tags = [site_key]
+        
+        try:
+            # 세목 태그
+            if "세목" in row and row["세목"]:
+                tags.append(f"세목:{row['세목']}")
+            
+            # 청구분야 태그 (감사원)
+            if "청구분야" in row and row["청구분야"]:
+                tags.append(f"분야:{row['청구분야']}")
+            
+            # 유형 태그 (조세심판원)
+            if "유형" in row and row["유형"]:
+                tags.append(f"유형:{row['유형']}")
+            
+            # 시간 태그
+            current_time = datetime.now()
+            tags.append(f"발견:{current_time.strftime('%Y-%m')}")
+            
+            # 중요도 태그 (제목에 특정 키워드가 있는 경우)
+            title = str(row.get("제목", "")).lower()
+            important_keywords = ["긴급", "중요", "신설", "개정", "폐지", "특례"]
+            
+            for keyword in important_keywords:
+                if keyword in title:
+                    tags.append("중요")
+                    break
+            
+        except Exception as e:
+            self.logger.warning(f"태그 생성 중 오류: {e}")
+        
+        return tags[:10]  # 최대 10개 태그

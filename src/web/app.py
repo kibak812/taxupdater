@@ -32,6 +32,10 @@ from src.crawlers.nts_precedent_crawler import NTSPrecedentCrawler
 from src.config.settings import GUI_CONFIG
 from src.config.logging_config import setup_logging, get_logger
 
+# 새로운 모니터링 시스템 import
+from src.services.scheduler_service import SchedulerService
+from src.services.notification_service import NotificationService
+
 # 로깅 시스템 초기화
 setup_logging(log_level="INFO", log_to_file=True)
 logger = get_logger(__name__)
@@ -153,6 +157,10 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# 새로운 모니터링 시스템 서비스 초기화 (WebSocket 매니저 전달)
+scheduler_service = SchedulerService(crawling_service=crawling_service)
+notification_service = NotificationService(websocket_manager=manager)
+
 # 사이트 정보 매핑 (동적으로 생성)
 BASE_SITE_INFO = {
     "tax_tribunal": {"name": "조세심판원", "color": "#3B82F6"},
@@ -168,7 +176,12 @@ SITE_INFO = {key: value for key, value in BASE_SITE_INFO.items() if key in crawl
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    """메인 대시보드 페이지"""
+    """메인 대시보드 페이지 - 새로운 모니터링 시스템으로 리다이렉트"""
+    return templates.TemplateResponse("monitoring.html", {"request": request})
+
+@app.get("/legacy", response_class=HTMLResponse)
+async def legacy_dashboard(request: Request):
+    """레거시 대시보드 페이지"""
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/sites/{site_key}", response_class=HTMLResponse)
@@ -386,6 +399,328 @@ async def get_statistics():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Statistics error: {str(e)}")
 
+# === 새로운 모니터링 시스템 API 엔드포인트 ===
+
+@app.get("/api/schedules")
+async def get_schedules():
+    """크롤링 스케줄 목록 조회"""
+    try:
+        status = scheduler_service.get_schedule_status()
+        return status
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"스케줄 조회 실패: {str(e)}")
+
+@app.get("/api/schedules/{site_key}")
+async def get_site_schedule(site_key: str):
+    """특정 사이트 스케줄 상세 조회"""
+    try:
+        if site_key not in SITE_INFO:
+            raise HTTPException(status_code=404, detail="Site not found")
+        
+        status = scheduler_service.get_schedule_status(site_key)
+        return status
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"사이트 스케줄 조회 실패: {str(e)}")
+
+@app.post("/api/schedules")
+async def create_or_update_schedule(request: Request):
+    """크롤링 스케줄 생성/수정"""
+    try:
+        data = await request.json()
+        site_key = data.get("site_key")
+        cron_expression = data.get("cron_expression")
+        enabled = data.get("enabled", True)
+        priority = data.get("priority", 0)
+        notification_threshold = data.get("notification_threshold", 1)
+        
+        if not site_key or not cron_expression:
+            raise HTTPException(status_code=400, detail="site_key와 cron_expression이 필요합니다")
+        
+        if site_key not in SITE_INFO:
+            raise HTTPException(status_code=404, detail="Site not found")
+        
+        success = scheduler_service.add_crawl_schedule(
+            site_key, cron_expression, enabled, priority, notification_threshold
+        )
+        
+        if success:
+            return {
+                "status": "success",
+                "message": f"{SITE_INFO[site_key]['name']} 스케줄이 업데이트되었습니다",
+                "site_key": site_key
+            }
+        else:
+            raise HTTPException(status_code=500, detail="스케줄 업데이트 실패")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"스케줄 생성/수정 실패: {str(e)}")
+
+@app.delete("/api/schedules/{site_key}")
+async def delete_schedule(site_key: str):
+    """크롤링 스케줄 삭제(비활성화)"""
+    try:
+        if site_key not in SITE_INFO:
+            raise HTTPException(status_code=404, detail="Site not found")
+        
+        success = scheduler_service.remove_crawl_schedule(site_key)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": f"{SITE_INFO[site_key]['name']} 스케줄이 비활성화되었습니다"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="스케줄 삭제 실패")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"스케줄 삭제 실패: {str(e)}")
+
+@app.post("/api/schedules/{site_key}/trigger")
+async def trigger_manual_crawl(site_key: str, request: Request):
+    """수동 크롤링 트리거"""
+    try:
+        if site_key not in SITE_INFO:
+            raise HTTPException(status_code=404, detail="Site not found")
+        
+        data = await request.json()
+        delay_seconds = data.get("delay_seconds", 0)
+        
+        success = scheduler_service.trigger_manual_crawl(site_key, delay_seconds)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": f"{SITE_INFO[site_key]['name']} 수동 크롤링이 예약되었습니다",
+                "delay_seconds": delay_seconds
+            }
+        else:
+            raise HTTPException(status_code=500, detail="수동 크롤링 트리거 실패")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"수동 크롤링 트리거 실패: {str(e)}")
+
+@app.get("/api/notifications")
+async def get_notifications(
+    site_key: str = None, 
+    notification_type: str = None, 
+    limit: int = 50, 
+    unread_only: bool = False
+):
+    """알림 목록 조회"""
+    try:
+        notifications = await notification_service.get_notifications(
+            site_key, notification_type, limit, unread_only
+        )
+        return {
+            "notifications": notifications,
+            "total_count": len(notifications)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"알림 조회 실패: {str(e)}")
+
+@app.post("/api/notifications/{notification_id}/read")
+async def mark_notification_read(notification_id: int):
+    """알림 읽음 처리"""
+    try:
+        success = await notification_service.mark_notification_read(notification_id)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "알림이 읽음 처리되었습니다"
+            }
+        else:
+            raise HTTPException(status_code=404, detail="알림을 찾을 수 없습니다")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"알림 읽음 처리 실패: {str(e)}")
+
+@app.get("/api/notifications/stats")
+async def get_notification_stats(site_key: str = None):
+    """알림 통계 조회"""
+    try:
+        stats = await notification_service.get_notification_stats(site_key)
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"알림 통계 조회 실패: {str(e)}")
+
+@app.get("/api/new-data")
+async def get_new_data(
+    site_key: str = None, 
+    hours: int = 24, 
+    limit: int = 100
+):
+    """새로운 데이터 조회"""
+    try:
+        import sqlite3
+        from datetime import timedelta
+        
+        # 조회 시간 범위 계산
+        cutoff_time = datetime.now() - timedelta(hours=hours)
+        
+        with sqlite3.connect(repository.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # 쿼리 구성
+            where_conditions = ["discovered_at >= ?"]
+            params = [cutoff_time.isoformat()]
+            
+            if site_key:
+                where_conditions.append("site_key = ?")
+                params.append(site_key)
+            
+            where_clause = " AND ".join(where_conditions)
+            
+            query = f"""
+                SELECT log_id, site_key, data_id, data_title, data_summary,
+                       data_category, data_date, discovered_at, is_important,
+                       notification_sent, tags, metadata
+                FROM new_data_log 
+                WHERE {where_clause}
+                ORDER BY discovered_at DESC
+                LIMIT ?
+            """
+            
+            params.append(limit)
+            cursor.execute(query, params)
+            
+            columns = [desc[0] for desc in cursor.description]
+            new_data = []
+            
+            for row in cursor.fetchall():
+                data_row = dict(zip(columns, row))
+                
+                # JSON 필드 파싱
+                if data_row['tags']:
+                    data_row['tags'] = json.loads(data_row['tags'])
+                if data_row['metadata']:
+                    data_row['metadata'] = json.loads(data_row['metadata'])
+                
+                # 사이트 이름 추가
+                data_row['site_name'] = SITE_INFO.get(data_row['site_key'], {}).get('name', data_row['site_key'])
+                
+                new_data.append(data_row)
+        
+        return {
+            "new_data": new_data,
+            "total_count": len(new_data),
+            "hours": hours,
+            "cutoff_time": cutoff_time.isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"새로운 데이터 조회 실패: {str(e)}")
+
+@app.get("/api/system-status")
+async def get_system_status():
+    """시스템 상태 조회"""
+    try:
+        import sqlite3
+        
+        with sqlite3.connect(repository.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # 시스템 상태 조회
+            cursor.execute("""
+                SELECT site_key, component_type, status, last_check, last_success,
+                       last_error, error_message, consecutive_errors, health_score,
+                       uptime_seconds, response_time_ms
+                FROM system_status
+                ORDER BY site_key, component_type
+            """)
+            
+            columns = [desc[0] for desc in cursor.description]
+            system_status = []
+            
+            for row in cursor.fetchall():
+                status_row = dict(zip(columns, row))
+                # 사이트 이름 추가
+                status_row['site_name'] = SITE_INFO.get(status_row['site_key'], {}).get('name', status_row['site_key'])
+                system_status.append(status_row)
+        
+        # 스케줄러 상태 추가
+        scheduler_status = {
+            "scheduler_running": scheduler_service.is_running(),
+            "active_jobs": len(scheduler_service.scheduler.get_jobs()) if scheduler_service.is_running() else 0
+        }
+        
+        return {
+            "system_status": system_status,
+            "scheduler_status": scheduler_status,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"시스템 상태 조회 실패: {str(e)}")
+
+@app.get("/api/job-history")
+async def get_job_history(site_key: str = None, limit: int = 50):
+    """작업 이력 조회"""
+    try:
+        history = scheduler_service.get_job_history(site_key, limit)
+        
+        # 사이트 이름 추가
+        for item in history:
+            item['site_name'] = SITE_INFO.get(item['site_key'], {}).get('name', item['site_key'])
+        
+        return {
+            "job_history": history,
+            "total_count": len(history)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"작업 이력 조회 실패: {str(e)}")
+
+@app.post("/api/scheduler/start")
+async def start_scheduler():
+    """스케줄러 시작"""
+    try:
+        if scheduler_service.is_running():
+            return {
+                "status": "already_running",
+                "message": "스케줄러가 이미 실행 중입니다"
+            }
+        
+        scheduler_service.start()
+        
+        # 시스템 알림 발송
+        await notification_service.send_system_notification(
+            "스케줄러가 시작되었습니다", "normal", "system"
+        )
+        
+        return {
+            "status": "started",
+            "message": "스케줄러가 시작되었습니다"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"스케줄러 시작 실패: {str(e)}")
+
+@app.post("/api/scheduler/stop")
+async def stop_scheduler():
+    """스케줄러 중지"""
+    try:
+        if not scheduler_service.is_running():
+            return {
+                "status": "already_stopped",
+                "message": "스케줄러가 이미 중지되어 있습니다"
+            }
+        
+        scheduler_service.stop()
+        
+        # 시스템 알림 발송
+        await notification_service.send_system_notification(
+            "스케줄러가 중지되었습니다", "normal", "system"
+        )
+        
+        return {
+            "status": "stopped",
+            "message": "스케줄러가 중지되었습니다"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"스케줄러 중지 실패: {str(e)}")
+
 async def run_crawling_task(choice: str):
     """크롤링 작업 실행 (비동기)"""
     try:
@@ -517,11 +852,31 @@ async def startup_event():
     """서버 시작 시 이벤트"""
     logger.info("FastAPI 서버 시작")
     logger.info("웹 인터페이스: http://localhost:8001")
+    
+    # 스케줄러 시작
+    try:
+        scheduler_service.start()
+        logger.info("자동 스케줄러 시작됨")
+        
+        # 시스템 시작 알림
+        await notification_service.send_system_notification(
+            "모니터링 시스템이 시작되었습니다", "normal", "system"
+        )
+    except Exception as e:
+        logger.error(f"스케줄러 시작 실패: {e}")
 
 @app.on_event("shutdown") 
 async def shutdown_event():
     """서버 종료 시 이벤트"""
     logger.info("FastAPI 서버 종료")
+    
+    # 스케줄러 중지
+    try:
+        if scheduler_service.is_running():
+            scheduler_service.stop()
+            logger.info("스케줄러 정상 종료됨")
+    except Exception as e:
+        logger.error(f"스케줄러 종료 실패: {e}")
 
 if __name__ == "__main__":
     uvicorn.run(

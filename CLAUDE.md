@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## 프로젝트 개요
-세금 법령 크롤링 시스템 - SQLite 기반 데이터 저장 및 FastAPI 웹 인터페이스 제공
+세금 법령 자동 모니터링 시스템 - 주기적 크롤링, 새로운 데이터 탐지, 실시간 알림 기능을 갖춘 완전 자동화된 모니터링 플랫폼
 
 ## 핵심 개발 명령어
 
@@ -294,3 +294,75 @@ document.addEventListener('DOMContentLoaded', () => {
     window.app = app; // 전역으로 노출하여 HTML에서 접근 가능
 });
 ```
+
+## 🚀 주요 업데이트 (2025.06.30): 자동 모니터링 시스템 완성
+
+### 📋 새로운 기능
+1. **주기적 자동 크롤링**: APScheduler 기반 백그라운드 스케줄링
+2. **새로운 데이터 탐지**: 실시간 새로운 데이터 발견 및 로깅
+3. **실시간 알림 시스템**: WebSocket 기반 즉시 알림
+4. **모니터링 중심 UI**: 새로운 데이터 중심의 대시보드
+
+### 🗃️ 새로운 데이터베이스 테이블
+- **`crawl_schedules`**: 사이트별 크롤링 스케줄 관리
+- **`notification_history`**: 알림 이력 및 상태 관리
+- **`new_data_log`**: 새로운 데이터 발견 로그
+- **`system_status`**: 시스템 건강도 및 상태 모니터링
+
+### 🔧 새로운 백엔드 시스템
+- **SchedulerService**: APScheduler 기반 주기적 크롤링
+- **NotificationService**: 다중 채널 알림 발송
+- **자동 데이터 로깅**: 새로운 데이터 자동 태깅 및 분류
+
+### 🎨 새로운 프론트엔드
+- **모니터링 대시보드** (`/`): 새로운 모니터링 중심 UI
+- **레거시 대시보드** (`/legacy`): 기존 수동 크롤링 UI
+- **탭 기반 네비게이션**: 모니터링/스케줄/알림/시스템 상태
+- **실시간 업데이트**: WebSocket 기반 실시간 데이터 갱신
+
+### 📡 새로운 API 엔드포인트
+```
+GET    /api/schedules              - 스케줄 목록 조회
+POST   /api/schedules              - 스케줄 생성/수정
+DELETE /api/schedules/{site_key}   - 스케줄 삭제
+POST   /api/schedules/{site_key}/trigger - 수동 크롤링 트리거
+
+GET    /api/notifications          - 알림 목록 조회
+POST   /api/notifications/{id}/read - 알림 읽음 처리
+GET    /api/notifications/stats    - 알림 통계
+
+GET    /api/new-data               - 새로운 데이터 조회
+GET    /api/system-status          - 시스템 상태 조회
+GET    /api/job-history            - 작업 이력 조회
+
+POST   /api/scheduler/start        - 스케줄러 시작
+POST   /api/scheduler/stop         - 스케줄러 중지
+```
+
+### 🎯 핵심 워크플로우
+1. **자동 스케줄링**: 사이트별 설정된 주기에 따라 자동 크롤링
+2. **새로운 데이터 탐지**: 크롤링 결과와 기존 데이터 비교하여 신규 데이터 식별
+3. **즉시 알림**: 새로운 데이터 발견 시 WebSocket을 통한 실시간 알림
+4. **상세 로깅**: 모든 새로운 데이터를 태그와 메타데이터와 함께 로깅
+5. **시스템 모니터링**: 크롤러 상태, 성공률, 응답시간 등 종합 모니터링
+
+### 🔄 마이그레이션 가이드
+```bash
+# 1. 의존성 업데이트
+pip install -r requirements.txt
+
+# 2. 데이터베이스 마이그레이션 실행
+python src/database/migrations.py
+
+# 3. 새로운 모니터링 시스템 접속
+# http://localhost:8001 (새로운 모니터링 UI)
+# http://localhost:8001/legacy (기존 수동 크롤링 UI)
+```
+
+### ⚙️ 주요 설정
+- **기본 스케줄**: 각 사이트마다 6-12시간 간격으로 자동 크롤링
+- **알림 임계값**: 새로운 데이터 1개 이상 발견 시 알림
+- **자동 백업**: 신규 데이터 Excel 백업 유지
+- **실시간 연결**: WebSocket 자동 재연결 지원
+
+이제 세금 법령 크롤링 시스템이 **완전 자동화된 모니터링 플랫폼**으로 진화했습니다. 수동 크롤링에서 벗어나 24/7 자동 모니터링을 통해 새로운 법령과 해석을 놓치지 않고 적시에 탐지할 수 있습니다.
