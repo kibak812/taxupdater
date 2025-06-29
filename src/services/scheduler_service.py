@@ -273,9 +273,11 @@ class SchedulerService:
             
             # 크롤링 서비스 실행
             if self.crawling_service:
-                success = self.crawling_service.execute_crawling(
+                # execute_crawling은 void 함수이므로 예외가 발생하지 않으면 성공으로 간주
+                self.crawling_service.execute_crawling(
                     choice, None, None, is_periodic=True
                 )
+                success = True
             else:
                 self.logger.error("크롤링 서비스가 설정되지 않음")
                 raise ValueError("크롤링 서비스가 설정되지 않음")
@@ -283,12 +285,8 @@ class SchedulerService:
             end_time = datetime.now()
             duration = int((end_time - start_time).total_seconds())
             
-            if success:
-                # 성공 처리
-                self._handle_crawl_success(site_key, session_id, duration, is_manual)
-            else:
-                # 실패 처리
-                self._handle_crawl_failure(site_key, session_id, duration, "크롤링 실행 실패")
+            # 성공 처리 (예외가 발생하지 않았다면 성공)
+            self._handle_crawl_success(site_key, session_id, duration, is_manual)
             
         except Exception as e:
             # 예외 처리
@@ -326,16 +324,10 @@ class SchedulerService:
             # 알림 발송 (새로운 데이터가 있을 경우)
             if new_data_count > 0:
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        asyncio.create_task(self.notification_service.send_new_data_notification(
-                            site_key, new_data_count, session_id
-                        ))
-                    else:
-                        # 새 이벤트 루프에서 실행
-                        asyncio.run(self.notification_service.send_new_data_notification(
-                            site_key, new_data_count, session_id
-                        ))
+                    # ThreadPoolExecutor에서는 새 이벤트 루프 필요
+                    asyncio.run(self.notification_service.send_new_data_notification(
+                        site_key, new_data_count, session_id
+                    ))
                 except Exception as async_error:
                     self.logger.warning(f"새로운 데이터 알림 발송 실패: {async_error}")
             
@@ -365,18 +357,11 @@ class SchedulerService:
             # 시스템 상태 업데이트
             self._update_system_status(site_key, 'error', error_message)
             
-            # 에러 알림 발송 (동기 환경에서 안전하게 처리)
+            # 에러 알림 발송 (ThreadPoolExecutor에서 새 이벤트 루프 사용)
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.create_task(self.notification_service.send_error_notification(
-                        site_key, error_message, session_id
-                    ))
-                else:
-                    # 새 이벤트 루프에서 실행
-                    asyncio.run(self.notification_service.send_error_notification(
-                        site_key, error_message, session_id
-                    ))
+                asyncio.run(self.notification_service.send_error_notification(
+                    site_key, error_message, session_id
+                ))
             except Exception as async_error:
                 self.logger.warning(f"에러 알림 발송 실패: {async_error}")
             
