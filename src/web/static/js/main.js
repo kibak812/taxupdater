@@ -540,6 +540,7 @@ class TaxCrawlerApp {
 let app;
 document.addEventListener('DOMContentLoaded', () => {
     app = new TaxCrawlerApp();
+    window.app = app; // 전역으로 노출
 });
 
 // 전역 함수들 (HTML에서 직접 호출용)

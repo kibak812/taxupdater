@@ -254,6 +254,7 @@ except sqlite3.IntegrityError:
 1. **심판원 크롤링 로그 중복 제거**: 크롤러와 WebSocket 상태 로그 중복 방지
 2. **WebSocketProgress 에러 해결**: `progress['value']` → `progress.value` 수정
 3. **전체 크롤링 API 경로 매칭 수정**: `/api/crawl/all`을 `/api/crawl/{site_key}` 앞에 정의하여 올바른 매칭 보장
+4. **WebSocket 연결 상태 표시 수정**: `window.app` 전역 노출로 실시간 연결 상태 정확히 표시
 
 ### 🚀 전체 크롤링 시스템 완성
 - **FastAPI 경로 순서 최적화**: 구체적인 경로(`/api/crawl/all`)를 와일드카드 경로(`/api/crawl/{site_key}`) 앞에 배치
@@ -276,4 +277,20 @@ progress['value'] = percentage     # ❌ 잘못된 방식 (tkinter 스타일)
 
 # 전체 크롤링 실행 로직
 crawling_service.execute_crawling("7", None, None, is_periodic=False)
+
+# WebSocket 연결 상태 표시 해결책
+window.app = app;  # TaxCrawlerApp 인스턴스를 전역으로 노출
+```
+
+### ⚡ WebSocket 연결 상태 표시 문제 해결 (2025.06.29)
+**문제**: 웹 페이지 하단에 "🔌 실시간 연결 상태: 연결 끊어짐 ❌" 표시
+**원인**: HTML의 연결 상태 체크 코드에서 `window.app` 객체에 접근할 수 없음
+**해결책**: `main.js`에서 TaxCrawlerApp 인스턴스를 전역으로 노출
+
+```javascript
+// src/web/static/js/main.js:543
+document.addEventListener('DOMContentLoaded', () => {
+    app = new TaxCrawlerApp();
+    window.app = app; // 전역으로 노출하여 HTML에서 접근 가능
+});
 ```

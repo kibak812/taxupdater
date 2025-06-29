@@ -138,21 +138,21 @@
 
         // WebSocket 연결 상태 모니터링
         document.addEventListener('DOMContentLoaded', function() {
-            // 초기 연결 상태
+            // 초기 연결 상태 (더 오래 기다림)
             setTimeout(() => {
                 if (window.app && window.app.isConnected) {
                     updateConnectionStatus(true);
                 } else {
                     updateConnectionStatus(false);
                 }
-            }, 2000);
+            }, 3000);
 
             // 주기적으로 연결 상태 확인
             setInterval(() => {
                 if (window.app) {
                     updateConnectionStatus(window.app.isConnected);
                 }
-            }, 5000);
+            }, 3000);
         });
     </script>
 </body>
