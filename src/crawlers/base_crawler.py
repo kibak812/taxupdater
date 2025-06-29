@@ -1,7 +1,7 @@
 import sys
 import os
 import pandas as pd
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
@@ -9,6 +9,7 @@ from selenium.webdriver.chrome.options import Options
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.interfaces.crawler_interface import CrawlerInterface
 from src.config.settings import SELENIUM_OPTIONS, CRAWLING_CONFIG
+from src.config.logging_config import get_logger
 
 
 class BaseCrawler(CrawlerInterface):
@@ -23,6 +24,7 @@ class BaseCrawler(CrawlerInterface):
         self.site_name = site_name
         self.site_key = site_key
         self.config = CRAWLING_CONFIG.copy()
+        self.logger = get_logger(__name__)
     
     def get_site_name(self) -> str:
         return self.site_name
@@ -53,7 +55,7 @@ class BaseCrawler(CrawlerInterface):
             options.add_argument(option)
         return webdriver.Chrome(options=options)
     
-    def safe_selenium_operation(self, operation_func, retries: int = None, delay: int = None):
+    def safe_selenium_operation(self, operation_func: Callable, retries: Optional[int] = None, delay: Optional[int] = None) -> Any:
         """
         안전한 Selenium 작업 실행 (재시도 로직 포함)
         
@@ -71,29 +73,29 @@ class BaseCrawler(CrawlerInterface):
             try:
                 return operation_func()
             except Exception as e:
-                print(f"Selenium 작업 시도 {attempt + 1} 실패: {e}")
+                self.logger.warning(f"Selenium 작업 시도 {attempt + 1} 실패: {e}")
                 if attempt < retries - 1:
-                    print(f"{delay}초 후 재시도...")
+                    self.logger.info(f"{delay}초 후 재시도...")
                     import time
                     time.sleep(delay)
                 else:
-                    print("최대 재시도 횟수 도달. 작업 실패.")
+                    self.logger.error("최대 재시도 횟수 도달. 작업 실패.")
                     raise e
     
-    def update_progress_safely(self, progress_callback, value: int, message: str = ""):
+    def update_progress_safely(self, progress_callback: Optional[Callable], value: int, message: str = "") -> None:
         """안전한 진행률 업데이트"""
         try:
             if progress_callback and hasattr(progress_callback, '__call__'):
                 progress_callback(value, message)
             elif progress_callback and hasattr(progress_callback, 'value'):
-                # tkinter Progressbar 객체인 경우
-                progress_callback['value'] = value
+                # WebSocketProgress 객체인 경우
+                progress_callback.value = value
                 if hasattr(progress_callback, 'update'):
                     progress_callback.update()
         except Exception as e:
-            print(f"진행률 업데이트 중 오류: {e}")
+            self.logger.error(f"진행률 업데이트 중 오류: {e}")
     
-    def update_status_safely(self, status_callback, message: str):
+    def update_status_safely(self, status_callback: Optional[Callable], message: str) -> None:
         """안전한 상태 메시지 업데이트"""
         try:
             if status_callback and hasattr(status_callback, '__call__'):
@@ -104,7 +106,7 @@ class BaseCrawler(CrawlerInterface):
                 if hasattr(status_callback, 'update'):
                     status_callback.update()
         except Exception as e:
-            print(f"상태 메시지 업데이트 중 오류: {e}")
+            self.logger.error(f"상태 메시지 업데이트 중 오류: {e}")
     
     def preprocess_data(self, data: pd.DataFrame) -> pd.DataFrame:
         """기본 데이터 전처리"""
@@ -119,7 +121,7 @@ class BaseCrawler(CrawlerInterface):
             data = data.drop_duplicates(subset=[key_column], keep='first')
             removed_count = original_count - len(data)
             if removed_count > 0:
-                print(f"{self.site_name}: 중복 {removed_count}개 제거")
+                self.logger.info(f"{self.site_name}: 중복 {removed_count}개 제거")
         
         # 2. 빈 값 정리
         data = data.fillna("")
@@ -145,6 +147,37 @@ class BaseCrawler(CrawlerInterface):
         data = data.reset_index(drop=True)
         
         return data
+    
+    def log_crawler_start(self) -> None:
+        """크롤러 시작 로깅"""
+        self.logger.info(f"[{self.site_name}] 크롤링 시작")
+    
+    def log_crawler_complete(self, total_items: int) -> None:
+        """크롤러 완료 로깅"""
+        self.logger.info(f"[{self.site_name}] 크롤링 완료 - 총 {total_items}개 항목 수집")
+    
+    def log_crawler_error(self, error: Exception) -> None:
+        """크롤러 오류 로깅"""
+        self.logger.error(f"[{self.site_name}] 크롤링 오류: {error}")
+    
+    def log_progress(self, current: int, total: int, message: str = "") -> None:
+        """크롤링 진행률 로깅"""
+        from src.config.logging_config import log_crawler_progress
+        log_crawler_progress(self.site_name, current, total, message)
+    
+    def log_data_validation(self, is_valid: bool, item_count: int) -> None:
+        """데이터 검증 결과 로깅"""
+        if is_valid:
+            self.logger.info(f"[{self.site_name}] 데이터 검증 성공 - {item_count}개 항목")
+        else:
+            self.logger.warning(f"[{self.site_name}] 데이터 검증 실패 - {item_count}개 항목")
+    
+    def log_selenium_action(self, action: str, details: str = "") -> None:
+        """Selenium 작업 로깅"""
+        message = f"[{self.site_name}] Selenium {action}"
+        if details:
+            message += f" - {details}"
+        self.logger.debug(message)
     
     def get_default_config(self) -> Dict[str, Any]:
         """기본 설정 반환"""

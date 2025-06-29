@@ -30,6 +30,11 @@ from src.crawlers.tax_tribunal_crawler import TaxTribunalCrawler
 from src.crawlers.nts_authority_crawler import NTSAuthorityCrawler
 from src.crawlers.nts_precedent_crawler import NTSPrecedentCrawler
 from src.config.settings import GUI_CONFIG
+from src.config.logging_config import setup_logging, get_logger
+
+# 로깅 시스템 초기화
+setup_logging(log_level="INFO", log_to_file=True)
+logger = get_logger(__name__)
 
 # 웹 환경용 레거시 크롤러들 import (tkinter 의존성 없음)
 try:
@@ -37,9 +42,9 @@ try:
         crawl_moef_site, crawl_mois_site, crawl_bai_site
     )
     LEGACY_CRAWLERS_AVAILABLE = True
-    print("✅ 웹 환경용 레거시 크롤러 로드 성공")
+    logger.info("웹 환경용 레거시 크롤러 로드 성공")
 except ImportError as e:
-    print(f"❌ 웹 레거시 크롤러 import 실패: {e}")
+    logger.error(f"웹 레거시 크롤러 import 실패: {e}")
     LEGACY_CRAWLERS_AVAILABLE = False
     
     # 더미 함수들로 대체
@@ -94,7 +99,7 @@ templates = Jinja2Templates(directory=str(templates_path))
 repository = SQLiteRepository()
 
 # 기존 데이터베이스 스키마 업데이트 (웹 서버 시작 시)
-print("🔄 기존 데이터베이스 스키마 업데이트 중...")
+logger.info("기존 데이터베이스 스키마 업데이트 중...")
 repository.force_schema_update()
 
 # 기본 크롤러 (항상 사용 가능)
@@ -117,9 +122,9 @@ if LEGACY_CRAWLERS_AVAILABLE:
             "감사원", "bai", crawl_bai_site, "문서번호"
         )
     })
-    print(f"✅ 모든 크롤러 사용 가능: {len(crawlers)}개")
+    logger.info(f"모든 크롤러 사용 가능: {len(crawlers)}개")
 else:
-    print(f"⚠️  기본 크롤러만 사용 가능: {len(crawlers)}개 (레거시 크롤러 제외)")
+    logger.warning(f"기본 크롤러만 사용 가능: {len(crawlers)}개 (레거시 크롤러 제외)")
 
 crawling_service = CrawlingService(crawlers, repository)
 
@@ -251,6 +256,75 @@ async def get_site_data(site_key: str, page: int = 1, limit: int = 50, search: s
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Site data error: {str(e)}")
 
+@app.post("/api/crawl/all")
+async def start_all_crawling():
+    """전체 사이트 크롤링 시작"""
+    try:
+        logger.info("전체 크롤링 API 함수 진입")
+        logger.info(f"사용 가능한 크롤러: {list(crawlers.keys())}")
+        logger.info(f"SITE_INFO 키: {list(SITE_INFO.keys())}")
+        
+        # 전체 크롤링 백그라운드 실행
+        async def run_all_crawling():
+            try:
+                await manager.broadcast({
+                    "type": "crawl_start",
+                    "choice": "all",
+                    "timestamp": datetime.now().isoformat()
+                })
+                
+                import concurrent.futures
+                
+                def run_all_sync():
+                    try:
+                        logger.info("전체 크롤링 시작 (동기)")
+                        # choice = "7"로 전체 크롤링 실행
+                        crawling_service.execute_crawling("7", None, None, is_periodic=False)
+                        logger.info("전체 크롤링 완료")
+                        return {"status": "success"}
+                    except Exception as e:
+                        logger.error(f"전체 크롤링 오류: {e}")
+                        return {"status": "error", "error": str(e)}
+                
+                # ThreadPoolExecutor로 실행
+                loop = asyncio.get_event_loop()
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    result = await loop.run_in_executor(executor, run_all_sync)
+                
+                # 완료 알림
+                if result["status"] == "success":
+                    await manager.broadcast({
+                        "type": "crawl_complete",
+                        "choice": "all",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                else:
+                    await manager.broadcast({
+                        "type": "crawl_error",
+                        "error": result.get("error", "알 수 없는 오류"),
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    
+            except Exception as e:
+                logger.error(f"전체 크롤링 태스크 오류: {e}")
+                await manager.broadcast({
+                    "type": "crawl_error",
+                    "error": str(e),
+                    "timestamp": datetime.now().isoformat()
+                })
+        
+        # 백그라운드로 전체 크롤링 실행
+        asyncio.create_task(run_all_crawling())
+        
+        return {
+            "status": "started",
+            "message": "전체 사이트 크롤링을 시작했습니다."
+        }
+    
+    except Exception as e:
+        logger.error(f"전체 크롤링 시작 에러: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"All crawling start error: {str(e)}")
+
 @app.post("/api/crawl/{site_key}")
 async def start_crawling(site_key: str):
     """개별 사이트 크롤링 시작"""
@@ -284,21 +358,6 @@ async def start_crawling(site_key: str):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Crawling start error: {str(e)}")
-
-@app.post("/api/crawl/all")
-async def start_all_crawling():
-    """전체 사이트 크롤링 시작"""
-    try:
-        # 비동기적으로 전체 크롤링 실행
-        asyncio.create_task(run_crawling_task("7"))  # choice = "7"은 전체 크롤링
-        
-        return {
-            "status": "started",
-            "message": "전체 사이트 크롤링을 시작했습니다."
-        }
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"All crawling start error: {str(e)}")
 
 @app.get("/api/stats")
 async def get_statistics():
@@ -363,7 +422,7 @@ async def run_crawling_task(choice: str):
                         self.loop
                     )
                 except Exception as e:
-                    print(f"진행률 WebSocket 전송 오류: {e}")
+                    logger.error(f"진행률 WebSocket 전송 오류: {e}")
         
         class WebSocketStatus:
             def __init__(self, loop, manager, choice):
@@ -374,7 +433,6 @@ async def run_crawling_task(choice: str):
             
             def config(self, text):
                 self.text = text
-                print(f"[크롤링 상태] {text}")
                 # Thread-safe WebSocket 전송
                 try:
                     message = {
@@ -389,7 +447,7 @@ async def run_crawling_task(choice: str):
                         self.loop
                     )
                 except Exception as e:
-                    print(f"상태 WebSocket 전송 오류: {e}")
+                    logger.error(f"상태 WebSocket 전송 오류: {e}")
             
             def update(self):
                 # 상태 업데이트 시에도 전송
@@ -403,12 +461,18 @@ async def run_crawling_task(choice: str):
                 progress = WebSocketProgress(loop, manager, choice)
                 status = WebSocketStatus(loop, manager, choice)
                 
+                logger.info(f"크롤링 실행 시작: choice={choice}")
+                
                 # 크롤링 실행
                 crawling_service.execute_crawling(choice, progress, status, is_periodic=False)
+                logger.info(f"크롤링 실행 완료: choice={choice}")
                 return {"status": "success", "message": "크롤링 완료"}
                 
             except Exception as e:
-                print(f"크롤링 실행 오류: {e}")
+                logger.error(f"크롤링 실행 오류 (choice={choice}): {e}")
+                logger.error(f"오류 타입: {type(e).__name__}")
+                import traceback
+                logger.error(f"스택 트레이스: {traceback.format_exc()}")
                 return {"status": "error", "error": str(e)}
         
         # ThreadPoolExecutor로 동기 함수를 비동기 실행
@@ -447,6 +511,17 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+@app.on_event("startup")
+async def startup_event():
+    """서버 시작 시 이벤트"""
+    logger.info("FastAPI 서버 시작")
+    logger.info("웹 인터페이스: http://localhost:8001")
+
+@app.on_event("shutdown") 
+async def shutdown_event():
+    """서버 종료 시 이벤트"""
+    logger.info("FastAPI 서버 종료")
 
 if __name__ == "__main__":
     uvicorn.run(

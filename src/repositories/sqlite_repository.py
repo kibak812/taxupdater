@@ -2,7 +2,7 @@ import os
 import sqlite3
 import pandas as pd
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import sys
 import json
 
@@ -10,6 +10,7 @@ import json
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.interfaces.crawler_interface import DataRepositoryInterface
 from src.config.settings import FILE_CONFIG, DATA_COLUMNS, KEY_COLUMNS
+from src.config.logging_config import get_logger
 
 
 class SQLiteRepository(DataRepositoryInterface):
@@ -23,6 +24,7 @@ class SQLiteRepository(DataRepositoryInterface):
     def __init__(self, db_path: str = "data/tax_data.db"):
         self.db_path = db_path
         self.backup_folder = "data/backups"
+        self.logger = get_logger(__name__)
         
         # 데이터 폴더 생성
         db_dir = os.path.dirname(self.db_path)
@@ -35,9 +37,9 @@ class SQLiteRepository(DataRepositoryInterface):
         # 데이터베이스 초기화
         try:
             self._initialize_database()
-            print(f"✅ SQLite 저장소 초기화 완료: {self.db_path}")
+            self.logger.info(f"SQLite 저장소 초기화 완료: {self.db_path}")
         except Exception as e:
-            print(f"❌ SQLite 저장소 초기화 실패: {e}")
+            self.logger.error(f"SQLite 저장소 초기화 실패: {e}")
             raise
     
     def _initialize_database(self):
@@ -64,10 +66,10 @@ class SQLiteRepository(DataRepositoryInterface):
                     self._create_site_table(cursor, site_key, columns)
                 
                 conn.commit()
-                print(f"SQLite 데이터베이스 초기화 완료: {self.db_path}")
+                self.logger.info(f"SQLite 데이터베이스 초기화 완료: {self.db_path}")
                 
         except Exception as e:
-            print(f"데이터베이스 초기화 실패: {e}")
+            self.logger.error(f"데이터베이스 초기화 실패: {e}")
             raise
     
     def _create_site_table(self, cursor: sqlite3.Cursor, site_key: str, columns: List[str]):
@@ -103,11 +105,11 @@ class SQLiteRepository(DataRepositoryInterface):
                 )
             """
             cursor.execute(create_sql)
-            print(f"새 테이블 생성: {table_name}")
+            self.logger.info(f"새 테이블 생성: {table_name}")
         else:
             # 기존 테이블 스키마 업데이트
             self._update_table_schema(cursor, table_name, columns)
-            print(f"기존 테이블 스키마 업데이트: {table_name}")
+            self.logger.info(f"기존 테이블 스키마 업데이트: {table_name}")
         
         # 인덱스 생성 (컬럼 존재 확인 후)
         self._create_indexes_safely(cursor, table_name)
@@ -118,7 +120,7 @@ class SQLiteRepository(DataRepositoryInterface):
             VALUES (?, ?, 0)
         """, (site_key, table_name))
         
-        print(f"테이블 생성/확인 완료: {table_name} ({len(columns)}개 컬럼)")
+        self.logger.info(f"테이블 생성/확인 완료: {table_name} ({len(columns)}개 컬럼)")
     
     def _update_table_schema(self, cursor: sqlite3.Cursor, table_name: str, columns: List[str]):
         """기존 테이블 스키마 업데이트 (필요한 컬럼 추가)"""
@@ -141,9 +143,9 @@ class SQLiteRepository(DataRepositoryInterface):
                         update_sql = f"UPDATE [{table_name}] SET {meta_col} = CURRENT_TIMESTAMP WHERE {meta_col} IS NULL"
                         cursor.execute(update_sql)
                         
-                        print(f"  컬럼 추가 성공: {meta_col}")
+                        self.logger.info(f"  컬럼 추가 성공: {meta_col}")
                     except sqlite3.Error as e:
-                        print(f"  컬럼 추가 실패 ({meta_col}): {e}")
+                        self.logger.warning(f"  컬럼 추가 실패 ({meta_col}): {e}")
             
             # 데이터 컬럼들도 확인하여 누락된 것이 있으면 추가
             for col in columns:
@@ -151,12 +153,12 @@ class SQLiteRepository(DataRepositoryInterface):
                     try:
                         alter_sql = f"ALTER TABLE [{table_name}] ADD COLUMN [{col}] TEXT"
                         cursor.execute(alter_sql)
-                        print(f"  데이터 컬럼 추가: {col}")
+                        self.logger.info(f"  데이터 컬럼 추가: {col}")
                     except sqlite3.Error as e:
-                        print(f"  데이터 컬럼 추가 실패 ({col}): {e}")
+                        self.logger.warning(f"  데이터 컬럼 추가 실패 ({col}): {e}")
                         
         except Exception as e:
-            print(f"스키마 업데이트 오류 ({table_name}): {e}")
+            self.logger.error(f"스키마 업데이트 오류 ({table_name}): {e}")
     
     def _create_indexes_safely(self, cursor: sqlite3.Cursor, table_name: str):
         """컬럼 존재 확인 후 안전한 인덱스 생성"""
@@ -168,12 +170,12 @@ class SQLiteRepository(DataRepositoryInterface):
             # created_at 컬럼이 있는 경우에만 인덱스 생성
             if 'created_at' in existing_columns:
                 cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{table_name}_created_at ON [{table_name}] (created_at DESC)")
-                print(f"  인덱스 생성: idx_{table_name}_created_at")
+                self.logger.info(f"  인덱스 생성: idx_{table_name}_created_at")
             else:
-                print(f"  created_at 컬럼 없음, 인덱스 생성 건너뜀")
+                self.logger.info(f"  created_at 컬럼 없음, 인덱스 생성 건너뜀")
                 
         except Exception as e:
-            print(f"인덱스 생성 오류 ({table_name}): {e}")
+            self.logger.error(f"인덱스 생성 오류 ({table_name}): {e}")
     
     def load_existing_data(self, site_key: str) -> pd.DataFrame:
         """기존 데이터 로드"""
@@ -203,18 +205,18 @@ class SQLiteRepository(DataRepositoryInterface):
                 meta_columns = ['created_at', 'updated_at']
                 df = df.drop(columns=[col for col in meta_columns if col in df.columns])
                 
-                print(f"[SQLite] {site_key} 기존 데이터 로드: {len(df)}개")
+                self.logger.info(f"[SQLite] {site_key} 기존 데이터 로드: {len(df)}개")
                 return df
                 
         except Exception as e:
-            print(f"데이터 로드 실패 ({site_key}): {e}")
+            self.logger.error(f"데이터 로드 실패 ({site_key}): {e}")
             return self._create_empty_dataframe(site_key)
     
     def save_data(self, site_key: str, data: pd.DataFrame, is_incremental: bool = True) -> bool:
         """데이터 저장 (UNIQUE constraint 에러 방지)"""
         try:
             if data.empty:
-                print(f"[SQLite] {site_key}: 저장할 데이터가 없음")
+                self.logger.info(f"[SQLite] {site_key}: 저장할 데이터가 없음")
                 return True
             
             table_name = f"{site_key}_data"
@@ -230,26 +232,26 @@ class SQLiteRepository(DataRepositoryInterface):
                         try:
                             new_entries.to_sql(table_name, conn, if_exists='append', index=False, method='multi')
                         except sqlite3.IntegrityError as ie:
-                            print(f"[SQLite] {site_key}: UNIQUE constraint 에러 발생, INSERT OR IGNORE 방식 사용")
+                            self.logger.warning(f"[SQLite] {site_key}: UNIQUE constraint 에러 발생, INSERT OR IGNORE 방식 사용")
                             # 개별 행씩 INSERT OR IGNORE 처리
                             self._insert_with_ignore(conn, table_name, new_entries, key_column)
                         
                         # 메타데이터 업데이트
                         self._update_metadata(conn, site_key, len(new_entries))
                         
-                        print(f"[SQLite] {site_key}: {len(new_entries)}개 신규 항목 저장 완료")
+                        self.logger.info(f"[SQLite] {site_key}: {len(new_entries)}개 신규 항목 저장 완료")
                     else:
-                        print(f"[SQLite] {site_key}: 새로운 데이터 없음")
+                        self.logger.info(f"[SQLite] {site_key}: 새로운 데이터 없음")
                 else:
                     # 전체 교체
                     data.to_sql(table_name, conn, if_exists='replace', index=False, method='multi')
                     self._update_metadata(conn, site_key, len(data), replace=True)
-                    print(f"[SQLite] {site_key}: {len(data)}개 항목 전체 저장 완료")
+                    self.logger.info(f"[SQLite] {site_key}: {len(data)}개 항목 전체 저장 완료")
                 
                 return True
                 
         except Exception as e:
-            print(f"데이터 저장 실패 ({site_key}): {e}")
+            self.logger.error(f"데이터 저장 실패 ({site_key}): {e}")
             return False
     
     def compare_and_get_new_entries(self, site_key: str, new_data: pd.DataFrame, key_column: str) -> pd.DataFrame:
@@ -281,21 +283,21 @@ class SQLiteRepository(DataRepositoryInterface):
                 # 임시 테이블 삭제
                 conn.execute(f"DROP TABLE IF EXISTS [{temp_table}]")
                 
-                print(f"[SQLite] {site_key} 데이터 비교:")
-                print(f"  새 데이터: {len(new_data)}개")
-                print(f"  신규 항목: {len(new_entries)}개")
+                self.logger.info(f"[SQLite] {site_key} 데이터 비교:")
+                self.logger.info(f"  새 데이터: {len(new_data)}개")
+                self.logger.info(f"  신규 항목: {len(new_entries)}개")
                 
                 return new_entries
                 
         except Exception as e:
-            print(f"신규 데이터 추출 실패 ({site_key}): {e}")
+            self.logger.error(f"신규 데이터 추출 실패 ({site_key}): {e}")
             # 폴백: pandas 방식
             existing_data = self.load_existing_data(site_key)
             if existing_data.empty:
                 return new_data
             
             new_entries = new_data[~new_data[key_column].isin(existing_data[key_column])]
-            print(f"[Fallback] {site_key}: {len(new_entries)}개 신규 항목")
+            self.logger.info(f"[Fallback] {site_key}: {len(new_entries)}개 신규 항목")
             return new_entries
     
     def backup_data(self, site_key: str, data: pd.DataFrame) -> str:
@@ -317,11 +319,11 @@ class SQLiteRepository(DataRepositoryInterface):
                     WHERE site_key = ?
                 """, (backup_file, site_key))
             
-            print(f"[SQLite] 백업 완료: {backup_file}")
+            self.logger.info(f"[SQLite] 백업 완료: {backup_file}")
             return backup_file
             
         except Exception as e:
-            print(f"백업 실패 ({site_key}): {e}")
+            self.logger.error(f"백업 실패 ({site_key}): {e}")
             return ""
     
     def get_statistics(self, site_key: str) -> Dict[str, Any]:
@@ -378,7 +380,7 @@ class SQLiteRepository(DataRepositoryInterface):
                 return stats
                 
         except Exception as e:
-            print(f"통계 정보 조회 실패 ({site_key}): {e}")
+            self.logger.error(f"통계 정보 조회 실패 ({site_key}): {e}")
             return {"total_count": 0, "last_updated": None, "error": str(e)}
     
     def _insert_with_ignore(self, conn: sqlite3.Connection, table_name: str, data: pd.DataFrame, key_column: str):
@@ -404,13 +406,13 @@ class SQLiteRepository(DataRepositoryInterface):
                     if cursor.rowcount > 0:
                         success_count += 1
                 except Exception as e:
-                    print(f"  행 삽입 실패: {e}")
+                    self.logger.warning(f"  행 삽입 실패: {e}")
             
             conn.commit()
-            print(f"[SQLite] INSERT OR IGNORE: {success_count}/{len(data)}개 행 성공적으로 삽입")
+            self.logger.info(f"[SQLite] INSERT OR IGNORE: {success_count}/{len(data)}개 행 성공적으로 삽입")
             
         except Exception as e:
-            print(f"INSERT OR IGNORE 실패: {e}")
+            self.logger.error(f"INSERT OR IGNORE 실패: {e}")
             raise
 
     def _update_metadata(self, conn: sqlite3.Connection, site_key: str, added_count: int, replace: bool = False):
@@ -464,14 +466,14 @@ class SQLiteRepository(DataRepositoryInterface):
     def force_schema_update(self):
         """강제 스키마 업데이트 (수동 실행용)"""
         try:
-            print("🔄 강제 스키마 업데이트 시작...")
+            self.logger.info("강제 스키마 업데이트 시작...")
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
                 # 각 사이트별 테이블 업데이트
                 for site_key, columns in DATA_COLUMNS.items():
                     table_name = f"{site_key}_data"
-                    print(f"  📋 {table_name} 스키마 업데이트 중...")
+                    self.logger.info(f"  {table_name} 스키마 업데이트 중...")
                     
                     # 테이블 존재 확인
                     cursor.execute(f"""
@@ -483,13 +485,13 @@ class SQLiteRepository(DataRepositoryInterface):
                         self._update_table_schema(cursor, table_name, columns)
                         self._create_indexes_safely(cursor, table_name)
                     else:
-                        print(f"    ⚠️  테이블 {table_name} 없음, 건너뜀")
+                        self.logger.warning(f"    테이블 {table_name} 없음, 건너뜀")
                 
                 conn.commit()
             
-            print("✅ 강제 스키마 업데이트 완료")
+            self.logger.info("강제 스키마 업데이트 완료")
             return True
             
         except Exception as e:
-            print(f"❌ 강제 스키마 업데이트 실패: {e}")
+            self.logger.error(f"강제 스키마 업데이트 실패: {e}")
             return False

@@ -11,6 +11,11 @@ import os
 # 현재 디렉토리를 Python 경로에 추가
 sys.path.append(os.path.dirname(__file__))
 
+# 로깅 시스템 초기화
+from src.config.logging_config import setup_logging, get_logger
+setup_logging(log_level="INFO", log_to_file=True)
+logger = get_logger(__name__)
+
 from src.gui.main_window import MainWindow
 from src.services.crawler_service import CrawlingService
 from src.repositories.sqlite_repository import SQLiteRepository

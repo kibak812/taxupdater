@@ -238,6 +238,7 @@ except sqlite3.IntegrityError:
 - **백그라운드 크롤링**: ThreadPoolExecutor 기반
 - **자동 백업**: 신규 데이터 Excel 백업
 - **중복 제거**: SQL JOIN 기반 고성능 처리
+- **전체 크롤링**: `/api/crawl/all` 엔드포인트 통한 모든 사이트 일괄 크롤링
 
 ## 개발 가이드라인
 - 파일 수정 전 항상 Read 도구로 파일 내용 확인
@@ -246,3 +247,33 @@ except sqlite3.IntegrityError:
 - 웹 전용 환경 (tkinter 의존성 완전 제거)
 - 모든 데이터 접근 시 컬럼 존재 여부 확인
 - UNIQUE constraint 에러 시 INSERT OR IGNORE 처리
+
+## 최신 개발 현황 (2025.06.29)
+
+### 🔧 버그 수정 및 개선사항
+1. **심판원 크롤링 로그 중복 제거**: 크롤러와 WebSocket 상태 로그 중복 방지
+2. **WebSocketProgress 에러 해결**: `progress['value']` → `progress.value` 수정
+3. **전체 크롤링 API 경로 매칭 수정**: `/api/crawl/all`을 `/api/crawl/{site_key}` 앞에 정의하여 올바른 매칭 보장
+
+### 🚀 전체 크롤링 시스템 완성
+- **FastAPI 경로 순서 최적화**: 구체적인 경로(`/api/crawl/all`)를 와일드카드 경로(`/api/crawl/{site_key}`) 앞에 배치
+- **백그라운드 비동기 실행**: `asyncio.create_task()`를 통한 논블로킹 전체 크롤링
+- **WebSocket 실시간 피드백**: 전체 크롤링 시작/완료/에러 상태 실시간 전송
+- **ThreadPoolExecutor 활용**: 동기 크롤링 서비스를 비동기 환경에서 안전하게 실행
+
+### 🎯 핵심 기술적 해결책
+```python
+# FastAPI 경로 정의 순서 (중요!)
+@app.post("/api/crawl/all")        # 구체적 경로 먼저
+async def start_all_crawling(): ...
+
+@app.post("/api/crawl/{site_key}") # 와일드카드 경로 나중
+async def start_crawling(): ...
+
+# WebSocket 진행률 업데이트 방식
+progress.value = percentage        # ✅ 올바른 방식
+progress['value'] = percentage     # ❌ 잘못된 방식 (tkinter 스타일)
+
+# 전체 크롤링 실행 로직
+crawling_service.execute_crawling("7", None, None, is_periodic=False)
+```
