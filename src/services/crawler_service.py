@@ -289,7 +289,7 @@ class CrawlingService:
                     self.logger.info(f"  저장 완료: {len(new_entries)}개 신규 항목")
                     
                     # 샘플 새 데이터 정보 출력
-                    samples = self.notification_service.get_new_data_samples(new_entries, crawler_key, 3)
+                    samples = self._get_new_data_samples(new_entries, crawler_key, 3)
                     if samples:
                         self.logger.info(f"  신규 데이터 샘플: {', '.join(samples)}")
                 else:
@@ -327,7 +327,7 @@ class CrawlingService:
                 'existing_count': len(existing_data),
                 'new_entries': new_entries,
                 'crawling_stats': crawling_stats,
-                'key_samples': self.notification_service.get_new_data_samples(new_entries, crawler_key, 5)
+                'key_samples': self._get_new_data_samples(new_entries, crawler_key, 5)
             }
                 
         except Exception as e:
@@ -558,3 +558,41 @@ class CrawlingService:
             self.logger.warning(f"태그 생성 중 오류: {e}")
         
         return tags[:10]  # 최대 10개 태그
+    
+    def _get_new_data_samples(self, new_entries: pd.DataFrame, site_key: str, limit: int = 3) -> List[str]:
+        """새로운 데이터 샘플 생성"""
+        if new_entries.empty:
+            return []
+        
+        try:
+            # 사이트별 키 컬럼 매핑
+            key_column_mapping = {
+                "tax_tribunal": "청구번호",
+                "nts_authority": "문서번호", 
+                "nts_precedent": "문서번호",
+                "moef": "문서번호",
+                "mois": "문서번호",
+                "bai": "문서번호"
+            }
+            
+            key_column = key_column_mapping.get(site_key, "문서번호")
+            samples = []
+            
+            # 제한된 수만큼 샘플 생성
+            for i in range(min(limit, len(new_entries))):
+                row = new_entries.iloc[i]
+                key_value = str(row.get(key_column, "unknown"))
+                title = str(row.get("제목", ""))[:50]  # 제목 50자 제한
+                
+                if title:
+                    sample = f"{key_value} ({title}...)"
+                else:
+                    sample = key_value
+                
+                samples.append(sample)
+            
+            return samples
+            
+        except Exception as e:
+            self.logger.warning(f"샘플 생성 중 오류: {e}")
+            return []

@@ -325,9 +325,19 @@ class SchedulerService:
             
             # 알림 발송 (새로운 데이터가 있을 경우)
             if new_data_count > 0:
-                asyncio.create_task(self.notification_service.send_new_data_notification(
-                    site_key, new_data_count, session_id
-                ))
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        asyncio.create_task(self.notification_service.send_new_data_notification(
+                            site_key, new_data_count, session_id
+                        ))
+                    else:
+                        # 새 이벤트 루프에서 실행
+                        asyncio.run(self.notification_service.send_new_data_notification(
+                            site_key, new_data_count, session_id
+                        ))
+                except Exception as async_error:
+                    self.logger.warning(f"새로운 데이터 알림 발송 실패: {async_error}")
             
             self.logger.info(f"크롤링 성공: {site_key} (소요시간: {duration}초, 신규: {new_data_count}개)")
             
@@ -355,10 +365,20 @@ class SchedulerService:
             # 시스템 상태 업데이트
             self._update_system_status(site_key, 'error', error_message)
             
-            # 에러 알림 발송
-            asyncio.create_task(self.notification_service.send_error_notification(
-                site_key, error_message, session_id
-            ))
+            # 에러 알림 발송 (동기 환경에서 안전하게 처리)
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(self.notification_service.send_error_notification(
+                        site_key, error_message, session_id
+                    ))
+                else:
+                    # 새 이벤트 루프에서 실행
+                    asyncio.run(self.notification_service.send_error_notification(
+                        site_key, error_message, session_id
+                    ))
+            except Exception as async_error:
+                self.logger.warning(f"에러 알림 발송 실패: {async_error}")
             
             self.logger.error(f"크롤링 실패: {site_key} (에러: {error_message})")
             
