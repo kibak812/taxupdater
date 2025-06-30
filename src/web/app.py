@@ -175,18 +175,47 @@ BASE_SITE_INFO = {
 SITE_INFO = {key: value for key, value in BASE_SITE_INFO.items() if key in crawlers}
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request):
-    """메인 대시보드 페이지 - 새로운 모니터링 시스템으로 리다이렉트"""
-    return templates.TemplateResponse("monitoring.html", {"request": request})
+async def main_dashboard(request: Request):
+    """메인 페이지 - 새로운 전문가용 대시보드"""
+    return templates.TemplateResponse("dashboard.html", {"request": request})
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def expert_dashboard(request: Request):
+    """전문가용 대시보드 페이지"""
+    return templates.TemplateResponse("dashboard.html", {"request": request})
 
 @app.get("/legacy", response_class=HTMLResponse)
 async def legacy_dashboard(request: Request):
-    """레거시 대시보드 페이지"""
+    """레거시 모니터링 시스템"""
+    return templates.TemplateResponse("monitoring.html", {"request": request})
+
+@app.get("/legacy/old", response_class=HTMLResponse)
+async def legacy_old_dashboard(request: Request):
+    """레거시 대시보드 페이지 (구 버전)"""
     return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/data/{site_key}", response_class=HTMLResponse)
+async def data_table_view(request: Request, site_key: str):
+    """전문가용 데이터 목록 뷰"""
+    if site_key not in SITE_INFO:
+        raise HTTPException(status_code=404, detail="Site not found")
+    
+    site_info = SITE_INFO[site_key]
+    return templates.TemplateResponse("data_table.html", {
+        "request": request,
+        "site_key": site_key,
+        "site_name": site_info["name"],
+        "site_color": site_info["color"]
+    })
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    """설정 페이지"""
+    return templates.TemplateResponse("settings.html", {"request": request})
 
 @app.get("/sites/{site_key}", response_class=HTMLResponse)
 async def site_detail(request: Request, site_key: str):
-    """사이트별 상세 페이지"""
+    """사이트별 상세 페이지 (레거시)"""
     if site_key not in SITE_INFO:
         raise HTTPException(status_code=404, detail="Site not found")
     

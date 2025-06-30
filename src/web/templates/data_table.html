@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ site_name }} - 데이터 목록</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23667085'><path d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z'/></svg>">
+    <style>
+        /* Additional styles specific to data table */
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-lg);
+            font-size: var(--font-size-sm);
+            color: var(--color-gray-600);
+        }
+        
+        .breadcrumb a {
+            color: var(--color-primary);
+            text-decoration: none;
+        }
+        
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+        
+        .filter-status {
+            background: white;
+            padding: var(--spacing-lg);
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--color-gray-200);
+            margin-bottom: var(--spacing-xl);
+        }
+        
+        .filter-status h2 {
+            margin: 0 0 var(--spacing-sm) 0;
+            color: var(--color-gray-900);
+            font-size: var(--font-size-xl);
+            font-weight: 600;
+        }
+        
+        .filter-description {
+            color: var(--color-gray-600);
+            margin: 0;
+        }
+        
+        .data-controls {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            gap: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+        }
+        
+        .search-box {
+            flex: 1;
+            max-width: 400px;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: var(--spacing-sm) var(--spacing-md);
+            border: 1px solid var(--color-gray-300);
+            border-radius: var(--radius-md);
+            font-size: var(--font-size-sm);
+            background: white;
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+        
+        .data-table-container {
+            background: white;
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--color-gray-200);
+            overflow: hidden;
+            box-shadow: var(--shadow-md);
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .data-table th {
+            background: var(--color-gray-50);
+            padding: var(--spacing-md) var(--spacing-lg);
+            text-align: left;
+            font-weight: 600;
+            font-size: var(--font-size-sm);
+            color: var(--color-gray-700);
+            border-bottom: 1px solid var(--color-gray-200);
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+        
+        .data-table th:hover {
+            background: var(--color-gray-100);
+        }
+        
+        .data-table th.sortable::after {
+            content: '↕';
+            position: absolute;
+            right: var(--spacing-sm);
+            opacity: 0.5;
+            font-size: var(--font-size-xs);
+        }
+        
+        .data-table th.sort-asc::after {
+            content: '↑';
+            opacity: 1;
+            color: var(--color-primary);
+        }
+        
+        .data-table th.sort-desc::after {
+            content: '↓';
+            opacity: 1;
+            color: var(--color-primary);
+        }
+        
+        .data-table td {
+            padding: var(--spacing-md) var(--spacing-lg);
+            border-bottom: 1px solid var(--color-gray-200);
+            font-size: var(--font-size-sm);
+            vertical-align: top;
+        }
+        
+        .data-table tr:hover {
+            background: var(--color-gray-50);
+        }
+        
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .organization-badge {
+            display: inline-block;
+            padding: var(--spacing-xs) var(--spacing-sm);
+            background: var(--badge-color, var(--color-gray-100));
+            color: var(--badge-text-color, var(--color-gray-700));
+            border-radius: var(--radius-sm);
+            font-size: var(--font-size-xs);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        
+        .document-number {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            color: var(--color-gray-900);
+        }
+        
+        .document-title {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .document-title a {
+            color: var(--color-primary);
+            text-decoration: none;
+        }
+        
+        .document-title a:hover {
+            text-decoration: underline;
+        }
+        
+        .date-cell {
+            color: var(--color-gray-600);
+            white-space: nowrap;
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: var(--spacing-sm);
+            padding: var(--spacing-lg);
+        }
+        
+        .pagination button {
+            padding: var(--spacing-sm) var(--spacing-md);
+            border: 1px solid var(--color-gray-300);
+            background: white;
+            color: var(--color-gray-700);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-size: var(--font-size-sm);
+        }
+        
+        .pagination button:hover:not(:disabled) {
+            background: var(--color-gray-50);
+        }
+        
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .pagination button.active {
+            background: var(--color-primary);
+            color: white;
+            border-color: var(--color-primary);
+        }
+        
+        .pagination-info {
+            color: var(--color-gray-600);
+            font-size: var(--font-size-sm);
+        }
+        
+        .loading-state {
+            text-align: center;
+            padding: var(--spacing-3xl);
+            color: var(--color-gray-500);
+        }
+        
+        .error-state {
+            text-align: center;
+            padding: var(--spacing-3xl);
+            color: var(--color-danger);
+        }
+        
+        @media (max-width: 768px) {
+            .data-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .data-table-container {
+                overflow-x: auto;
+            }
+            
+            .data-table {
+                min-width: 800px;
+            }
+        }
+    </style>
+</head>
+<body class="dashboard-body">
+    <!-- Header -->
+    <header class="dashboard-header">
+        <div class="container">
+            <div class="header-content">
+                <div class="header-left">
+                    <div class="header-logo">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="header-text">
+                        <h1>{{ site_name }} - 데이터 목록</h1>
+                        <p>전문가 분석을 위한 종합 데이터 뷰</p>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="header-actions">
+                        <button class="btn btn-outline" onclick="window.location.href='/dashboard'">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            대시보드로 돌아가기
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="dashboard-main">
+        <div class="container">
+            <!-- Breadcrumb -->
+            <nav class="breadcrumb">
+                <a href="/dashboard">대시보드</a>
+                <span>/</span>
+                <span>{{ site_name }}</span>
+            </nav>
+
+            <!-- Filter Status -->
+            <div class="filter-status">
+                <h2 id="filterTitle">데이터 로딩 중...</h2>
+                <p class="filter-description" id="filterDescription">분석을 위한 데이터를 로딩하고 있습니다. 잠시만 기다려주세요.</p>
+            </div>
+
+            <!-- Data Controls -->
+            <div class="data-controls">
+                <div class="search-box">
+                    <input type="text" class="search-input" id="searchInput" placeholder="문서번호, 제목, 내용으로 검색...">
+                </div>
+                <div class="section-actions">
+                    <button class="btn btn-outline btn-sm" id="exportBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        내보내기
+                    </button>
+                    <button class="btn btn-outline btn-sm" id="refreshBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        새로고침
+                    </button>
+                </div>
+            </div>
+
+            <!-- Data Table -->
+            <div class="data-table-container">
+                <table class="data-table" id="dataTable">
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-column="organization">기관</th>
+                            <th class="sortable" data-column="document_number">문서번호</th>
+                            <th class="sortable" data-column="title">제목</th>
+                            <th class="sortable" data-column="published_date">게시일</th>
+                            <th class="sortable" data-column="collected_date">수집일</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTableBody">
+                        <!-- Data will be loaded here -->
+                    </tbody>
+                </table>
+                
+                <!-- Loading/Error States -->
+                <div id="loadingState" class="loading-state">
+                    <div class="spinner" style="margin: 0 auto var(--spacing-md);"></div>
+                    <p>데이터 로딩 중...</p>
+                </div>
+                
+                <div id="errorState" class="error-state" style="display: none;">
+                    <p>데이터 로딩에 실패했습니다. 다시 시도해주세요.</p>
+                    <button class="btn btn-primary btn-sm" onclick="dataTable.loadData()">다시 시도</button>
+                </div>
+                
+                <div id="emptyState" class="empty-state" style="display: none;">
+                    <div class="empty-state-icon">📄</div>
+                    <div class="empty-state-title">데이터 없음</div>
+                    <div class="empty-state-description">현재 필터 조건에 맞는 데이터가 없습니다.</div>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination" id="pagination" style="display: none;">
+                <!-- Pagination will be generated dynamically -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script>
+        // Pass server-side data to JavaScript
+        window.siteConfig = {
+            siteKey: '{{ site_key }}',
+            siteName: '{{ site_name }}',
+            siteColor: '{{ site_color }}'
+        };
+    </script>
+    <script src="/static/js/data_table.js"></script>
+</body>
+</html>
