@@ -6,6 +6,7 @@ APScheduler를 사용한 주기적 크롤링 시스템
 import os
 import sqlite3
 import asyncio
+import json
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -299,6 +300,197 @@ class SchedulerService:
             self.running_jobs.discard(site_key)
             self._update_system_status(site_key, 'healthy')
     
+    def _execute_all_sites_crawl(self):
+        """전체 사이트 크롤링 실행 및 로그 기록"""
+        start_time = datetime.now()
+        log_id = None
+        site_results = {}
+        total_new_count = 0
+        
+        try:
+            # 크롤링 실행 로그 시작 기록
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO crawl_execution_log 
+                    (execution_type, trigger_source, start_time, status, total_sites)
+                    VALUES ('scheduled', 'scheduler', ?, 'running', 
+                        (SELECT COUNT(*) FROM crawl_schedules WHERE enabled = 1))
+                """, (start_time.isoformat(),))
+                log_id = cursor.lastrowid
+                conn.commit()
+            
+            self.logger.info(f"전체 크롤링 시작 (로그 ID: {log_id})")
+            
+            # 활성화된 모든 사이트 크롤링 실행
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT site_key, site_name 
+                    FROM crawl_schedules 
+                    WHERE enabled = 1 
+                    ORDER BY priority DESC
+                """)
+                sites = cursor.fetchall()
+            
+            success_count = 0
+            failed_count = 0
+            
+            for site_key, site_name in sites:
+                try:
+                    # 개별 사이트 크롤링 실행
+                    self.logger.info(f"크롤링 중: {site_name} ({site_key})")
+                    
+                    # 크롤링 실행
+                    self._execute_crawl_job(site_key, is_manual=False)
+                    
+                    # 크롤링 후 최근 생성된 데이터 개수 확인 (실제 신규 데이터만)
+                    new_count = self._get_recent_site_data_count(site_key, minutes=10)
+                    
+                    site_results[site_key] = {
+                        "status": "success",
+                        "new_count": new_count,
+                        "site_name": site_name
+                    }
+                    total_new_count += new_count
+                    success_count += 1
+                    
+                except Exception as e:
+                    self.logger.error(f"{site_name} 크롤링 실패: {e}")
+                    site_results[site_key] = {
+                        "status": "failed",
+                        "error": str(e),
+                        "site_name": site_name
+                    }
+                    failed_count += 1
+            
+            # 최종 상태 결정
+            if failed_count == 0:
+                final_status = "success"
+            elif success_count > 0:
+                final_status = "partial_success"
+            else:
+                final_status = "failed"
+            
+            # 크롤링 실행 로그 완료 기록
+            end_time = datetime.now()
+            duration = int((end_time - start_time).total_seconds())
+            
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE crawl_execution_log
+                    SET end_time = ?, status = ?, success_sites = ?, failed_sites = ?,
+                        site_results = ?, total_new_data_count = ?, 
+                        total_duration_seconds = ?
+                    WHERE log_id = ?
+                """, (
+                    end_time.isoformat(), final_status, success_count, failed_count,
+                    json.dumps(site_results, ensure_ascii=False), total_new_count, 
+                    duration, log_id
+                ))
+                conn.commit()
+            
+            self.logger.info(f"전체 크롤링 완료: 성공 {success_count}, 실패 {failed_count}, "
+                           f"신규 데이터 {total_new_count}개 (소요시간: {duration}초)")
+            
+            # 신규 데이터가 있으면 알림 발송
+            if total_new_count > 0:
+                try:
+                    summary = self._create_crawl_summary(site_results)
+                    asyncio.run(self.notification_service.send_all_sites_notification(
+                        total_new_count, summary, f"crawl_log_{log_id}"
+                    ))
+                except Exception as e:
+                    self.logger.warning(f"전체 크롤링 알림 발송 실패: {e}")
+                    
+        except Exception as e:
+            self.logger.error(f"전체 크롤링 실행 실패: {e}")
+            
+            # 에러 로그 기록
+            if log_id:
+                end_time = datetime.now()
+                duration = int((end_time - start_time).total_seconds())
+                
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        UPDATE crawl_execution_log
+                        SET end_time = ?, status = 'failed', 
+                            error_summary = ?, total_duration_seconds = ?
+                        WHERE log_id = ?
+                    """, (end_time.isoformat(), str(e), duration, log_id))
+                    conn.commit()
+    
+    def _get_site_data_count(self, site_key: str) -> int:
+        """사이트의 현재 데이터 개수 조회"""
+        try:
+            table_name = self._get_table_name(site_key)
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(f"SELECT COUNT(*) FROM [{table_name}]")
+                return cursor.fetchone()[0]
+        except Exception as e:
+            self.logger.error(f"데이터 개수 조회 실패 ({site_key}): {e}")
+            return 0
+    
+    def _get_recent_site_data_count(self, site_key: str, minutes: int = 10) -> int:
+        """사이트의 최근 생성된 데이터 개수 조회 (크롤링 시간 기준)"""
+        try:
+            table_name = self._get_table_name(site_key)
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # 테이블 존재 확인
+                cursor.execute(f"""
+                    SELECT name FROM sqlite_master 
+                    WHERE type='table' AND name='{table_name}'
+                """)
+                
+                if not cursor.fetchone():
+                    return 0
+                
+                # 컬럼 존재 확인
+                cursor.execute(f"PRAGMA table_info([{table_name}])")
+                existing_columns = {row[1] for row in cursor.fetchall()}
+                
+                # 시간 컬럼이 있는 경우만 최근 데이터 조회
+                if 'created_at' in existing_columns or 'updated_at' in existing_columns:
+                    time_column = 'created_at' if 'created_at' in existing_columns else 'updated_at'
+                    
+                    # 최근 N분 내 데이터 개수 조회
+                    query = f"""
+                        SELECT COUNT(*) FROM [{table_name}]
+                        WHERE {time_column} >= datetime('now', '-{minutes} minutes')
+                    """
+                    
+                    cursor.execute(query)
+                    count = cursor.fetchone()[0]
+                    return count
+                else:
+                    # 시간 컬럼이 없으면 0 반환 (신규 데이터 없음으로 간주)
+                    return 0
+                    
+        except Exception as e:
+            self.logger.error(f"최근 데이터 개수 조회 실패 ({site_key}): {e}")
+            return 0
+    
+    def _get_table_name(self, site_key: str) -> str:
+        """site_key에서 테이블 이름 반환"""
+        return f"{site_key}_data"
+    
+    def _create_crawl_summary(self, site_results: dict) -> str:
+        """크롤링 결과 요약 생성"""
+        summary_parts = []
+        for site_key, result in site_results.items():
+            if result["status"] == "success" and result["new_count"] > 0:
+                summary_parts.append(f"{result['site_name']} {result['new_count']}건")
+        
+        if summary_parts:
+            return "신규 발견: " + ", ".join(summary_parts)
+        else:
+            return "신규 데이터 없음"
+    
     def _handle_crawl_success(self, site_key: str, session_id: str, 
                              duration: int, is_manual: bool):
         """크롤링 성공 처리"""
@@ -371,22 +563,10 @@ class SchedulerService:
             self.logger.error(f"크롤링 실패 처리 실패: {e}")
     
     def _check_new_data_count(self, site_key: str, session_id: str) -> int:
-        """새로운 데이터 개수 확인"""
+        """새로운 데이터 개수 확인 (실제 생성된 데이터 기준)"""
         try:
-            # 최근 5분 내에 추가된 데이터 개수 확인
-            cutoff_time = datetime.now() - timedelta(minutes=5)
-            
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                
-                # new_data_log 테이블에서 확인
-                cursor.execute("""
-                    SELECT COUNT(*) FROM new_data_log 
-                    WHERE site_key = ? AND discovered_at >= ?
-                """, (site_key, cutoff_time.isoformat()))
-                
-                count = cursor.fetchone()[0]
-                return count
+            # 최근 5분 내에 실제로 생성된 데이터 개수 확인
+            return self._get_recent_site_data_count(site_key, minutes=5)
                 
         except Exception as e:
             self.logger.error(f"새로운 데이터 개수 확인 실패: {e}")
@@ -505,6 +685,17 @@ class SchedulerService:
                 id="cleanup_notifications",
                 name="알림 정리",
                 replace_existing=True
+            )
+            
+            # 전체 크롤링 스케줄 (매일 오전 2시와 오후 2시)
+            self.scheduler.add_job(
+                func=self._execute_all_sites_crawl,
+                trigger=CronTrigger(hour='2,14', minute=0, timezone=self.timezone),
+                id="crawl_all_sites",
+                name="전체 사이트 크롤링",
+                replace_existing=True,
+                max_instances=1,
+                misfire_grace_time=3600
             )
             
             self.logger.info("시스템 유지보수 작업 추가 완료")
