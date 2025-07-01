@@ -68,11 +68,21 @@ class ExpertDataTable {
     }
     
     init() {
+        this.parseUrlParams();
         this.updateTableHeaders();
         this.setupEventListeners();
         this.loadData();
         
         console.log(`Expert Data Table initialized for ${this.siteName}`);
+    }
+    
+    parseUrlParams() {
+        // URL 파라미터 파싱
+        const urlParams = new URLSearchParams(window.location.search);
+        this.filterType = urlParams.get('filter');
+        this.filterDays = urlParams.get('days');
+        this.filterStartDate = urlParams.get('start');
+        this.filterEndDate = urlParams.get('end');
     }
     
     setupEventListeners() {
@@ -144,7 +154,19 @@ class ExpertDataTable {
         try {
             this.showLoadingState();
             
-            const url = `/api/sites/${this.siteKey}/data?page=${this.currentPage}&limit=${this.itemsPerPage}&search=${encodeURIComponent(this.searchQuery)}`;
+            let url = `/api/sites/${this.siteKey}/data?page=${this.currentPage}&limit=${this.itemsPerPage}&search=${encodeURIComponent(this.searchQuery)}`;
+            
+            // 필터 파라미터 추가
+            if (this.filterType) {
+                url += `&filter=${this.filterType}`;
+                if (this.filterDays) {
+                    url += `&days=${this.filterDays}`;
+                }
+                if (this.filterStartDate && this.filterEndDate) {
+                    url += `&start=${this.filterStartDate}&end=${this.filterEndDate}`;
+                }
+            }
+            
             const response = await fetch(url);
             
             if (!response.ok) {
@@ -215,12 +237,47 @@ class ExpertDataTable {
         const descriptionElement = document.getElementById('filterDescription');
         
         if (titleElement && descriptionElement) {
-            if (this.searchQuery) {
-                titleElement.textContent = `${this.siteName} - 검색 결과`;
-                descriptionElement.textContent = `"${this.searchQuery}"와 일치하는 ${this.totalCount.toLocaleString()}개 항목을 찾았습니다`;
+            let title = this.siteName;
+            let description = '';
+            
+            // 시간 필터가 적용된 경우
+            if (this.filterType === 'recent' && this.filterDays) {
+                const dayText = this.filterDays == 1 ? '24시간' : `${this.filterDays}일`;
+                title += ` - 최근 ${dayText} 신규 데이터`;
+                description = `최근 ${dayText} 동안 수집된 `;
+            } else if (this.filterType === 'range' && this.filterStartDate && this.filterEndDate) {
+                title += ` - ${this.filterStartDate} ~ ${this.filterEndDate}`;
+                description = `${this.filterStartDate}부터 ${this.filterEndDate}까지 수집된 `;
             } else {
-                titleElement.textContent = `${this.siteName} - 전체 데이터`;
-                descriptionElement.textContent = `이 소스에서 수집된 ${this.totalCount.toLocaleString()}개 항목을 표시하고 있습니다`;
+                title += ' - 전체 데이터';
+                description = '이 소스에서 수집된 ';
+            }
+            
+            // 검색 조건 추가
+            if (this.searchQuery) {
+                title += ' (검색 결과)';
+                description += `"${this.searchQuery}"와 일치하는 `;
+            }
+            
+            description += `${this.totalCount.toLocaleString()}개 항목을 표시하고 있습니다`;
+            
+            titleElement.textContent = title;
+            descriptionElement.textContent = description;
+            
+            // 필터가 적용된 경우 "전체 데이터 보기" 링크 추가
+            if (this.filterType) {
+                const viewAllLink = document.createElement('a');
+                viewAllLink.href = `/data/${this.siteKey}`;
+                viewAllLink.textContent = ' 전체 데이터 보기 →';
+                viewAllLink.style.marginLeft = '10px';
+                viewAllLink.style.color = 'var(--color-primary)';
+                viewAllLink.style.textDecoration = 'none';
+                viewAllLink.onmouseover = () => viewAllLink.style.textDecoration = 'underline';
+                viewAllLink.onmouseout = () => viewAllLink.style.textDecoration = 'none';
+                
+                if (!descriptionElement.querySelector('a')) {
+                    descriptionElement.appendChild(viewAllLink);
+                }
             }
         }
     }

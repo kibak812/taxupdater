@@ -260,7 +260,7 @@ class ExpertDashboard {
             <div class="card-footer">
                 <span class="last-update">마지막 업데이트: ${lastUpdate}</span>
                 <div class="card-actions">
-                    <button class="btn btn-primary btn-sm" onclick="dashboard.viewSiteData('${site.site_key}')">
+                    <button class="btn btn-primary btn-sm" onclick="dashboard.viewSiteData('${site.site_key}', false)">
                         데이터 보기
                     </button>
                 </div>
@@ -270,7 +270,7 @@ class ExpertDashboard {
         // 전체 카드에 클릭 핸들러 추가
         card.addEventListener('click', (e) => {
             if (!e.target.closest('.card-actions')) {
-                this.viewSiteData(site.site_key);
+                this.viewSiteData(site.site_key, true); // 카드 클릭 시 필터링된 데이터
             }
         });
         
@@ -395,9 +395,36 @@ class ExpertDashboard {
         return date.toLocaleDateString('ko-KR');
     }
     
-    viewSiteData(siteKey) {
+    viewSiteData(siteKey, isFiltered = false) {
         // Navigate to data table view for this site
-        window.location.href = `/data/${siteKey}`;
+        if (isFiltered) {
+            // 카드 클릭 - 필터링된 데이터 보기
+            let url = `/data/${siteKey}?filter=recent`;
+            
+            if (this.currentTimeFilter === 24) {
+                url += '&days=1';
+            } else if (this.currentTimeFilter === 72) {
+                url += '&days=3';
+            } else if (this.currentTimeFilter === 168) {
+                url += '&days=7';
+            } else {
+                // 사용자 정의 날짜 범위
+                const startDate = document.getElementById('startDate')?.value;
+                const endDate = document.getElementById('endDate')?.value;
+                if (startDate && endDate) {
+                    url = `/data/${siteKey}?filter=range&start=${startDate}&end=${endDate}`;
+                } else {
+                    // 일수로 계산
+                    const days = Math.ceil(this.currentTimeFilter / 24);
+                    url += `&days=${days}`;
+                }
+            }
+            
+            window.location.href = url;
+        } else {
+            // 데이터 보기 버튼 클릭 - 전체 데이터 보기
+            window.location.href = `/data/${siteKey}`;
+        }
     }
     
     showToast(title, type, message) {

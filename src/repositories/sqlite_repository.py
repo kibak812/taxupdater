@@ -213,6 +213,58 @@ class SQLiteRepository(DataRepositoryInterface):
             self.logger.error(f"데이터 로드 실패 ({site_key}): {e}")
             return self._create_empty_dataframe(site_key)
     
+    def load_filtered_data(self, site_key: str, recent_days: int = None, start_date: str = None, end_date: str = None) -> pd.DataFrame:
+        """필터링된 데이터 로드 (시간 기반)"""
+        try:
+            table_name = f"{site_key}_data"
+            
+            with sqlite3.connect(self.db_path) as conn:
+                # 컬럼 존재 확인
+                cursor = conn.cursor()
+                cursor.execute(f"PRAGMA table_info([{table_name}])")
+                existing_columns = {row[1] for row in cursor.fetchall()}
+                
+                # 기본 쿼리
+                base_query = f"SELECT * FROM [{table_name}]"
+                where_conditions = []
+                
+                # 시간 필터 적용
+                if 'created_at' in existing_columns or 'updated_at' in existing_columns:
+                    time_column = 'created_at' if 'created_at' in existing_columns else 'updated_at'
+                    
+                    if recent_days:
+                        # 최근 N일 필터
+                        where_conditions.append(f"{time_column} >= datetime('now', '-{recent_days} days')")
+                    elif start_date and end_date:
+                        # 날짜 범위 필터
+                        where_conditions.append(f"{time_column} >= '{start_date}'")
+                        where_conditions.append(f"{time_column} <= '{end_date} 23:59:59'")
+                else:
+                    self.logger.warning(f"[SQLite] {site_key}: 시간 컬럼이 없어 전체 데이터 반환")
+                
+                # WHERE 절 구성
+                if where_conditions:
+                    query = base_query + " WHERE " + " AND ".join(where_conditions)
+                else:
+                    query = base_query
+                
+                # 정렬 추가
+                if 'created_at' in existing_columns:
+                    query += " ORDER BY created_at DESC"
+                elif 'updated_at' in existing_columns:
+                    query += " ORDER BY updated_at DESC"
+                
+                df = pd.read_sql_query(query, conn)
+                
+                # 메타데이터 포함 (필터링된 데이터는 항상 메타데이터 포함)
+                self.logger.info(f"[SQLite] {site_key} 필터링된 데이터 로드: {len(df)}개")
+                
+                return df
+                
+        except Exception as e:
+            self.logger.error(f"필터링된 데이터 로드 실패 ({site_key}): {e}")
+            return self._create_empty_dataframe(site_key)
+    
     def save_data(self, site_key: str, data: pd.DataFrame, is_incremental: bool = True) -> bool:
         """데이터 저장 (UNIQUE constraint 에러 방지)"""
         try:

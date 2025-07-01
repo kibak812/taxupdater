@@ -253,14 +253,31 @@ async def get_dashboard_data():
         raise HTTPException(status_code=500, detail=f"Dashboard data error: {str(e)}")
 
 @app.get("/api/sites/{site_key}/data")
-async def get_site_data(site_key: str, page: int = 1, limit: int = 50, search: str = ""):
-    """사이트별 데이터 조회 (페이지네이션)"""
+async def get_site_data(
+    site_key: str, 
+    page: int = 1, 
+    limit: int = 50, 
+    search: str = "",
+    filter: str = None,  # 'recent' or 'range'
+    days: int = None,    # for 'recent' filter
+    start: str = None,   # for 'range' filter (YYYY-MM-DD)
+    end: str = None      # for 'range' filter (YYYY-MM-DD)
+):
+    """사이트별 데이터 조회 (페이지네이션 + 시간 필터링)"""
     try:
         if site_key not in SITE_INFO:
             raise HTTPException(status_code=404, detail="Site not found")
         
-        # 전체 데이터 로드 (메타데이터 포함)
-        data = repository.load_existing_data(site_key, include_metadata=True)
+        # 필터 조건에 따라 데이터 로드
+        if filter == "recent" and days:
+            # 최근 N일 데이터만 로드
+            data = repository.load_filtered_data(site_key, recent_days=days)
+        elif filter == "range" and start and end:
+            # 날짜 범위 데이터 로드
+            data = repository.load_filtered_data(site_key, start_date=start, end_date=end)
+        else:
+            # 전체 데이터 로드 (메타데이터 포함)
+            data = repository.load_existing_data(site_key, include_metadata=True)
         
         # 검색 필터링
         if search:
@@ -280,6 +297,16 @@ async def get_site_data(site_key: str, page: int = 1, limit: int = 50, search: s
         # JSON 직렬화 가능한 형태로 변환
         records = page_data.to_dict('records')
         
+        # 필터 정보 포함
+        filter_info = None
+        if filter:
+            filter_info = {
+                "type": filter,
+                "days": days,
+                "start": start,
+                "end": end
+            }
+        
         return {
             "site_key": site_key,
             "site_name": SITE_INFO[site_key]["name"],
@@ -292,7 +319,8 @@ async def get_site_data(site_key: str, page: int = 1, limit: int = 50, search: s
                 "has_next": end_idx < total_count,
                 "has_prev": page > 1
             },
-            "search": search
+            "search": search,
+            "filter": filter_info
         }
     
     except Exception as e:
