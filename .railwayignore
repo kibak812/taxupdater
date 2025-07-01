@@ -1,0 +1,12 @@
+data/
+*.db
+*.xlsx
+__pycache__/
+*.pyc
+.git/
+node_modules/
+ngrok
+cloudflared-linux-amd64
+taxupdater_venv/
+.env
+*.log
