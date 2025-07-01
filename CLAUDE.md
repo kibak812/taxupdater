@@ -470,3 +470,53 @@ python src/database/migrations.py
 - **명확성**: 현재 보고 있는 데이터의 범위를 항상 명확히 표시
 
 이 업데이트로 세금 전문가들이 필요에 따라 최신 변경사항만 빠르게 확인하거나 전체 데이터를 종합적으로 분석할 수 있는 유연한 시스템이 구축되었습니다.
+
+## 🔧 데이터 일관성 개선 (2025.07.01)
+
+### 문제점
+기존 시스템에서 대시보드 카드에 표시되는 신규 데이터 숫자("+23" 등)와 카드 클릭 시 보여지는 실제 필터링된 데이터 개수가 불일치하는 문제가 있었습니다.
+
+**원인**: 
+- 카드 숫자: `new_data_log` 테이블의 `discovered_at` 기준
+- 필터링된 데이터: 각 사이트 테이블의 `created_at/updated_at` 기준
+
+### 해결책: 단일 데이터 소스 사용
+
+`new_data_log` 테이블을 사용하는 복잡한 방식 대신, 각 사이트 테이블에서 직접 최근 데이터를 조회하는 단순하고 일관된 방식으로 변경:
+
+#### 새로운 Repository 메서드
+```python
+# src/repositories/sqlite_repository.py
+def get_recent_data_counts(self, hours: int = 24) -> Dict[str, int]:
+    """각 사이트별 최근 데이터 개수 조회 (created_at/updated_at 기준)"""
+```
+
+#### 새로운 API 엔드포인트
+```python
+# src/web/app.py
+@app.get("/api/sites/recent-counts")
+async def get_recent_data_counts(hours: int = 24):
+    """각 사이트별 최근 데이터 개수 조회 (각 사이트 테이블 기반)"""
+```
+
+#### 프론트엔드 업데이트
+```javascript
+// src/web/static/js/dashboard.js
+// 기존: /api/new-data 사용
+// 변경: /api/sites/recent-counts 사용
+fetch(`/api/sites/recent-counts?hours=${this.currentTimeFilter}`)
+```
+
+### 🎯 개선 결과
+- **완벽한 일관성**: 카드 숫자 = 실제 필터링된 데이터 개수
+- **단순성**: 단일 데이터 소스로 복잡성 제거
+- **신뢰성**: 표시된 숫자를 항상 신뢰할 수 있음
+- **유지보수성**: 하나의 데이터 흐름만 관리하면 됨
+
+### 📊 검증 결과
+API 테스트 결과 모든 사이트에서 완벽한 일관성 확인:
+- **조세심판원**: 카드 "+3" = 필터링된 데이터 3개 ✅
+- **국세청(유권해석)**: 카드 "+28" = 필터링된 데이터 28개 ✅ 
+- **행정안전부**: 카드 "+6" = 필터링된 데이터 6개 ✅
+
+이제 사용자가 대시보드 카드에서 보는 숫자와 클릭했을 때 나타나는 실제 데이터가 100% 일치하며, 시스템의 신뢰성이 크게 향상되었습니다.

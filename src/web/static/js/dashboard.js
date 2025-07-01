@@ -191,45 +191,36 @@ class ExpertDashboard {
     
     async loadStatusCards() {
         try {
-            // 대시보드 데이터와 신규 데이터 수 로드
-            const [dashboardResponse, newDataResponse] = await Promise.all([
+            // 대시보드 데이터와 최근 데이터 개수 로드
+            const [dashboardResponse, recentCountsResponse] = await Promise.all([
                 fetch('/api/dashboard'),
-                fetch(`/api/new-data?hours=${this.currentTimeFilter}&limit=1000`)
+                fetch(`/api/sites/recent-counts?hours=${this.currentTimeFilter}`)
             ]);
             
             const dashboardData = await dashboardResponse.json();
-            const newDataData = await newDataResponse.json();
+            const recentCountsData = await recentCountsResponse.json();
             
-            this.renderStatusCards(dashboardData.sites || [], newDataData.new_data || []);
+            this.renderStatusCards(dashboardData.sites || [], recentCountsData.recent_counts || {});
         } catch (error) {
             console.error('상태 카드 로드 실패:', error);
             this.showToast('로드 오류', 'error', '사이트 상태 데이터를 불러오는데 실패했습니다');
         }
     }
     
-    renderStatusCards(sites, newDataItems) {
+    renderStatusCards(sites, recentCounts) {
         const container = document.getElementById('statusCardsGrid');
         if (!container) return;
         
         container.innerHTML = '';
         
-        // 사이트별로 신규 데이터 그룹화
-        const newDataBySite = {};
-        newDataItems.forEach(item => {
-            const siteKey = item.site_key;
-            if (!newDataBySite[siteKey]) {
-                newDataBySite[siteKey] = [];
-            }
-            newDataBySite[siteKey].push(item);
-        });
-        
         sites.forEach(site => {
-            const card = this.createStatusCard(site, newDataBySite[site.site_key] || []);
+            const recentCount = recentCounts[site.site_key]?.count || 0;
+            const card = this.createStatusCard(site, recentCount);
             container.appendChild(card);
         });
     }
     
-    createStatusCard(site, newDataItems) {
+    createStatusCard(site, recentCount) {
         const card = document.createElement('div');
         card.className = 'status-card';
         card.style.setProperty('--card-color', this.siteColors[site.site_key] || '#6B7280');
@@ -239,8 +230,8 @@ class ExpertDashboard {
         let statusText = '비활성';
         
         if (site.total_count > 0) {
-            status = newDataItems.length > 0 ? 'active' : 'inactive';
-            statusText = newDataItems.length > 0 ? '활성' : '새 데이터 없음';
+            status = recentCount > 0 ? 'active' : 'inactive';
+            statusText = recentCount > 0 ? '활성' : '새 데이터 없음';
         }
         
         // 마지막 업데이트 시간 포맷
@@ -254,7 +245,7 @@ class ExpertDashboard {
                 <span class="card-status ${status}">${statusText}</span>
             </div>
             <div class="card-metrics">
-                <div class="new-data-count">+${newDataItems.length}</div>
+                <div class="new-data-count">+${recentCount}</div>
                 <div class="new-data-label">${this.formatTimeFilter()} 신규 항목</div>
             </div>
             <div class="card-footer">

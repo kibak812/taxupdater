@@ -516,6 +516,57 @@ class SQLiteRepository(DataRepositoryInterface):
         except Exception as e:
             return {"error": str(e)}
     
+    def get_recent_data_counts(self, hours: int = 24) -> Dict[str, int]:
+        """각 사이트별 최근 데이터 개수 조회"""
+        try:
+            counts = {}
+            
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # 각 사이트별로 최근 데이터 개수 조회
+                for site_key in DATA_COLUMNS.keys():
+                    table_name = f"{site_key}_data"
+                    
+                    # 테이블 존재 확인
+                    cursor.execute(f"""
+                        SELECT name FROM sqlite_master 
+                        WHERE type='table' AND name='{table_name}'
+                    """)
+                    
+                    if not cursor.fetchone():
+                        counts[site_key] = 0
+                        continue
+                    
+                    # 컬럼 존재 확인
+                    cursor.execute(f"PRAGMA table_info([{table_name}])")
+                    existing_columns = {row[1] for row in cursor.fetchall()}
+                    
+                    # 시간 컬럼이 있는 경우만 필터링
+                    if 'created_at' in existing_columns or 'updated_at' in existing_columns:
+                        time_column = 'created_at' if 'created_at' in existing_columns else 'updated_at'
+                        
+                        # 최근 N시간 데이터 개수 조회
+                        query = f"""
+                            SELECT COUNT(*) FROM [{table_name}]
+                            WHERE {time_column} >= datetime('now', '-{hours} hours')
+                        """
+                        
+                        cursor.execute(query)
+                        count = cursor.fetchone()[0]
+                        counts[site_key] = count
+                    else:
+                        # 시간 컬럼이 없으면 0으로 처리
+                        counts[site_key] = 0
+                        self.logger.warning(f"[SQLite] {site_key}: 시간 컬럼이 없어 최근 데이터 조회 불가")
+            
+            self.logger.info(f"[SQLite] 최근 {hours}시간 데이터 개수 조회 완료: {counts}")
+            return counts
+                
+        except Exception as e:
+            self.logger.error(f"최근 데이터 개수 조회 실패: {e}")
+            return {}
+    
     def force_schema_update(self):
         """강제 스키마 업데이트 (수동 실행용)"""
         try:

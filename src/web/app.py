@@ -601,6 +601,30 @@ async def get_notification_stats(site_key: str = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"알림 통계 조회 실패: {str(e)}")
 
+@app.get("/api/sites/recent-counts")
+async def get_recent_data_counts(hours: int = 24):
+    """각 사이트별 최근 데이터 개수 조회 (각 사이트 테이블 기반)"""
+    try:
+        # Repository에서 최근 데이터 개수 조회
+        counts = repository.get_recent_data_counts(hours)
+        
+        # 사이트 정보와 함께 반환
+        result = {}
+        for site_key, count in counts.items():
+            result[site_key] = {
+                "count": count,
+                "site_name": SITE_INFO.get(site_key, {}).get("name", site_key)
+            }
+        
+        return {
+            "recent_counts": result,
+            "hours": hours,
+            "total_new_items": sum(counts.values())
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"최근 데이터 개수 조회 실패: {str(e)}")
+
 @app.get("/api/new-data")
 async def get_new_data(
     site_key: str = None, 
