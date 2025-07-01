@@ -9,6 +9,34 @@ class ExpertDataTable {
         this.siteName = window.siteConfig.siteName;
         this.siteColor = window.siteConfig.siteColor;
         
+        // 사이트별 컴럼명 매핑
+        this.siteColumnNames = {
+            'tax_tribunal': {
+                documentColumn: '청구번호',
+                dateColumn: '결정일'
+            },
+            'nts_authority': {
+                documentColumn: '문서번호',
+                dateColumn: '생산일자'
+            },
+            'nts_precedent': {
+                documentColumn: '문서번호',
+                dateColumn: '생산일자'
+            },
+            'moef': {
+                documentColumn: '문서번호',
+                dateColumn: '회신일자'
+            },
+            'mois': {
+                documentColumn: '문서번호',
+                dateColumn: '생산일자'
+            },
+            'bai': {
+                documentColumn: '문서번호',
+                dateColumn: '결정일자'
+            }
+        };
+        
         this.currentPage = 1;
         this.itemsPerPage = 50;
         this.searchQuery = '';
@@ -23,7 +51,24 @@ class ExpertDataTable {
         this.init();
     }
     
+    updateTableHeaders() {
+        // 사이트별 컴럼 헤더 업데이트
+        const siteColumns = this.siteColumnNames[this.siteKey];
+        if (siteColumns) {
+            const documentHeader = document.querySelector('th[data-column="document_number"]');
+            const dateHeader = document.querySelector('th[data-column="published_date"]');
+            
+            if (documentHeader) {
+                documentHeader.textContent = siteColumns.documentColumn;
+            }
+            if (dateHeader) {
+                dateHeader.textContent = siteColumns.dateColumn;
+            }
+        }
+    }
+    
     init() {
+        this.updateTableHeaders();
         this.setupEventListeners();
         this.loadData();
         
