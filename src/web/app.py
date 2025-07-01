@@ -235,12 +235,24 @@ async def get_dashboard_data():
         for site_key, site_info in SITE_INFO.items():
             stats = repository.get_statistics(site_key)
             
+            # last_updated 시간을 ISO 형식으로 변환 (시간대 정보 포함)
+            last_updated = stats.get("last_updated")
+            if last_updated:
+                try:
+                    # SQLite에서 온 시간 문자열을 datetime 객체로 변환
+                    dt = datetime.fromisoformat(last_updated)
+                    # ISO 형식으로 변환 (JavaScript가 올바르게 파싱할 수 있도록)
+                    last_updated = dt.isoformat()
+                except (ValueError, TypeError):
+                    # 파싱 실패 시 원본 그대로 사용
+                    pass
+            
             dashboard_data.append({
                 "site_key": site_key,
                 "site_name": site_info["name"],
                 "color": site_info["color"],
                 "total_count": stats.get("total_count", 0),
-                "last_updated": stats.get("last_updated"),
+                "last_updated": last_updated,
                 "status": "success" if stats.get("total_count", 0) > 0 else "empty"
             })
         

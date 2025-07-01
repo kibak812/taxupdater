@@ -399,9 +399,22 @@ class SQLiteRepository(DataRepositoryInterface):
                 
                 meta_result = cursor.fetchone()
                 
+                # 실제 데이터의 최신 업데이트 시간 조회
+                actual_last_updated = None
+                if total_count > 0:
+                    # 컬럼 존재 확인
+                    cursor.execute(f"PRAGMA table_info([{table_name}])")
+                    existing_columns = {row[1] for row in cursor.fetchall()}
+                    
+                    # created_at 또는 updated_at 컬럼에서 최신 시간 조회
+                    if 'created_at' in existing_columns or 'updated_at' in existing_columns:
+                        time_column = 'created_at' if 'created_at' in existing_columns else 'updated_at'
+                        cursor.execute(f"SELECT MAX({time_column}) FROM [{table_name}]")
+                        actual_last_updated = cursor.fetchone()[0]
+                
                 stats = {
                     "total_count": total_count,
-                    "last_updated": meta_result[3] if meta_result else None,
+                    "last_updated": actual_last_updated,  # 실제 데이터의 최신 시간 사용
                     "last_crawl": meta_result[0] if meta_result else None,
                     "last_backup": meta_result[1] if meta_result else None,
                     "database_size_mb": round(os.path.getsize(self.db_path) / 1024 / 1024, 2)
