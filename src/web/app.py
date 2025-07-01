@@ -259,8 +259,8 @@ async def get_site_data(site_key: str, page: int = 1, limit: int = 50, search: s
         if site_key not in SITE_INFO:
             raise HTTPException(status_code=404, detail="Site not found")
         
-        # 전체 데이터 로드
-        data = repository.load_existing_data(site_key)
+        # 전체 데이터 로드 (메타데이터 포함)
+        data = repository.load_existing_data(site_key, include_metadata=True)
         
         # 검색 필터링
         if search:

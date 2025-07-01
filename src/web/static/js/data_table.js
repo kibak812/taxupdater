@@ -153,11 +153,11 @@ class ExpertDataTable {
             case 'organization':
                 return this.siteName;
             case 'document_number':
-                return item['문서번호'] || item['판례번호'] || item['심판번호'] || '';
+                return item['문서번호'] || item['판례번호'] || item['청구번호'] || '';
             case 'title':
                 return item['제목'] || item['심판내용'] || '';
             case 'published_date':
-                return item['게시일'] || item['선고일'] || item['심판일'] || '';
+                return item['게시일'] || item['선고일'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자'] || '';
             case 'collected_date':
                 return item['updated_at'] || item['created_at'] || '';
             default:
@@ -207,9 +207,9 @@ class ExpertDataTable {
         const row = document.createElement('tr');
         
         // Extract common fields with fallbacks
-        const documentNumber = item['문서번호'] || item['판례번호'] || item['심판번호'] || '-';
+        const documentNumber = item['문서번호'] || item['판례번호'] || item['청구번호'] || '-';
         const title = item['제목'] || item['심판내용'] || '-';
-        const publishedDate = this.formatDate(item['게시일'] || item['선고일'] || item['심판일']);
+        const publishedDate = this.formatDate(item['게시일'] || item['선고일'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자']);
         const collectedDate = this.formatDate(item['updated_at'] || item['created_at']);
         const link = item['링크'] || item['원문링크'] || '#';
         

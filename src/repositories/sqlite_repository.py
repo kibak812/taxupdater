@@ -177,7 +177,7 @@ class SQLiteRepository(DataRepositoryInterface):
         except Exception as e:
             self.logger.error(f"인덱스 생성 오류 ({table_name}): {e}")
     
-    def load_existing_data(self, site_key: str) -> pd.DataFrame:
+    def load_existing_data(self, site_key: str, include_metadata: bool = False) -> pd.DataFrame:
         """기존 데이터 로드"""
         try:
             table_name = f"{site_key}_data"
@@ -201,9 +201,10 @@ class SQLiteRepository(DataRepositoryInterface):
                 
                 df = pd.read_sql_query(query, conn)
                 
-                # 메타데이터 컬럼 제거
-                meta_columns = ['created_at', 'updated_at']
-                df = df.drop(columns=[col for col in meta_columns if col in df.columns])
+                # 메타데이터 컬럼 제거 (선택적)
+                if not include_metadata:
+                    meta_columns = ['created_at', 'updated_at']
+                    df = df.drop(columns=[col for col in meta_columns if col in df.columns])
                 
                 self.logger.info(f"[SQLite] {site_key} 기존 데이터 로드: {len(df)}개")
                 return df
