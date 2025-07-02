@@ -312,7 +312,7 @@ class ExpertDataTable {
         const documentNumber = item['문서번호'] || item['판례번호'] || item['청구번호'] || '-';
         const title = item['제목'] || item['심판내용'] || '-';
         const publishedDate = this.formatDate(item['게시일'] || item['선고일'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자']);
-        const collectedDate = this.formatDate(item['updated_at'] || item['created_at']);
+        const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
         const link = item['링크'] || item['원문링크'] || '#';
         
         row.innerHTML = `
@@ -367,6 +367,45 @@ class ExpertDataTable {
             }
         } catch (error) {
             console.warn('Date parsing failed:', dateString, error);
+        }
+        
+        return dateString; // Return original if parsing fails
+    }
+    
+    formatDateTime(dateString) {
+        if (!dateString) return '-';
+        
+        try {
+            // Try to parse various date formats
+            let date;
+            
+            if (dateString.includes('.')) {
+                // Format: YYYY.MM.DD
+                const parts = dateString.split('.');
+                if (parts.length === 3) {
+                    date = new Date(parts[0], parts[1] - 1, parts[2]);
+                }
+            } else if (dateString.includes('-')) {
+                // ISO format
+                date = new Date(dateString);
+            } else {
+                // Try direct parsing
+                date = new Date(dateString);
+            }
+            
+            if (date && !isNaN(date.getTime())) {
+                return date.toLocaleString('ko-KR', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false  // 24시간 형식
+                });
+            }
+        } catch (error) {
+            console.warn('DateTime parsing failed:', dateString, error);
         }
         
         return dateString; // Return original if parsing fails
