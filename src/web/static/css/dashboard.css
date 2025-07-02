@@ -599,4 +599,41 @@
     .new-data-count {
         font-size: var(--font-size-3xl);
     }
+    
+    /* Mobile-optimized crawling status */
+    .timeline-item {
+        padding: var(--spacing-md);
+    }
+    
+    .timeline-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-xs);
+    }
+    
+    .timeline-title {
+        font-size: 0.7rem;
+        line-height: 1.3;
+    }
+    
+    .timeline-meta {
+        flex-wrap: wrap;
+        gap: var(--spacing-xs);
+        width: 100%;
+    }
+    
+    .timeline-description {
+        font-size: 0.7rem;
+        line-height: 1.3;
+        word-break: break-word;
+    }
+    
+    .organization-badge {
+        font-size: 0.7rem;
+        padding: 2px var(--spacing-xs);
+    }
+    
+    .job-status {
+        font-size: 0.7rem;
+    }
 }

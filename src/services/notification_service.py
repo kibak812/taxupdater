@@ -443,3 +443,49 @@ class NotificationService:
                 
         except Exception as e:
             self.logger.error(f"새로운 데이터 로그 업데이트 실패: {e}")
+    
+    def create_monitoring_status_report(self, repository_stats: Dict[str, Any]) -> str:
+        """
+        전체 모니터링 상태 보고서 생성
+        
+        Args:
+            repository_stats: 저장소 통계 정보
+            
+        Returns:
+            모니터링 상태 보고서
+        """
+        total_records = sum(stats.get('total_count', 0) for stats in repository_stats.values())
+        
+        site_status = []
+        for site_key, stats in repository_stats.items():
+            site_name = self.site_names.get(site_key, site_key)
+            count = stats.get('total_count', 0)
+            last_update = stats.get('last_updated', '없음')
+            
+            if isinstance(last_update, str) and last_update != '없음':
+                last_update = f"최근 업데이트: {last_update}"
+            elif last_update and last_update != '없음':
+                last_update = f"최근 업데이트: {last_update.strftime('%Y-%m-%d %H:%M')}"
+            else:
+                last_update = "업데이트 없음"
+            
+            site_status.append(f"  • {site_name}: {count:,}건 ({last_update})")
+        
+        report = f"""📊 데이터 모니터링 현황 보고서
+
+📈 전체 수집 현황:
+  • 총 수집 데이터: {total_records:,}건
+  • 모니터링 사이트: {len(repository_stats)}개
+  • 보고서 생성: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+📋 사이트별 현황:
+{chr(10).join(site_status)}
+
+🔍 모니터링 목적:
+  • 새로운 법령 해석 및 판례의 신속한 탐지
+  • 업로드 누락 방지를 위한 지속적 감시
+  • 데이터 무결성 보장
+
+✅ 시스템 상태: 정상 작동 중"""
+
+        return report

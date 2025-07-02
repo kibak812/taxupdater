@@ -360,10 +360,10 @@ async def start_all_crawling():
                 def run_all_sync():
                     try:
                         logger.info("전체 크롤링 시작 (동기)")
-                        # choice = "7"로 전체 크롤링 실행
-                        crawling_service.execute_crawling("7", None, None, is_periodic=False)
+                        # 스케줄러 서비스를 통해 전체 크롤링 실행 (proper job history 생성)
+                        result = scheduler_service._execute_all_sites_crawl()
                         logger.info("전체 크롤링 완료")
-                        return {"status": "success"}
+                        return {"status": "success", "result": result}
                     except Exception as e:
                         logger.error(f"전체 크롤링 오류: {e}")
                         return {"status": "error", "error": str(e)}
@@ -428,8 +428,14 @@ async def start_crawling(site_key: str):
         if not choice:
             raise HTTPException(status_code=400, detail=f"Invalid site_key: {site_key}")
         
-        # 비동기적으로 크롤링 실행
-        asyncio.create_task(run_crawling_task(choice))
+        # 스케줄러 서비스를 통한 수동 크롤링 실행 (로그 저장됨)
+        if scheduler_service:
+            success = scheduler_service.trigger_manual_crawl(site_key)
+            if not success:
+                raise HTTPException(status_code=500, detail="크롤링 실행 실패")
+        else:
+            # 스케줄러 서비스가 없으면 기존 방식 사용
+            asyncio.create_task(run_crawling_task(choice))
         
         return {
             "status": "started",

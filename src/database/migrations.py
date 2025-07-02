@@ -50,13 +50,16 @@ class DatabaseMigration:
                 # 4. 시스템 상태 테이블 생성
                 self._create_system_status_table(cursor)
                 
-                # 5. 기존 crawl_metadata 테이블 확장
+                # 5. 크롤링 실행 로그 테이블 생성
+                self._create_crawl_execution_log_table(cursor)
+                
+                # 6. 기존 crawl_metadata 테이블 확장
                 self._extend_crawl_metadata_table(cursor)
                 
-                # 6. 인덱스 생성
+                # 7. 인덱스 생성
                 self._create_performance_indexes(cursor)
                 
-                # 7. 기본 데이터 삽입
+                # 8. 기본 데이터 삽입
                 self._insert_default_data(cursor)
                 
                 conn.commit()
@@ -231,6 +234,40 @@ class DatabaseMigration:
         
         self.logger.info("  ✓ system_status 테이블 생성 완료")
     
+    def _create_crawl_execution_log_table(self, cursor: sqlite3.Cursor):
+        """크롤링 실행 로그 테이블 생성"""
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS crawl_execution_log (
+                log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                execution_type TEXT NOT NULL,  -- 'scheduled', 'manual', 'all_sites'
+                trigger_source TEXT,  -- 'scheduler', 'manual', 'api', 'startup'
+                start_time TIMESTAMP NOT NULL,
+                end_time TIMESTAMP,
+                status TEXT DEFAULT 'running',  -- 'running', 'success', 'partial_success', 'failed'
+                total_sites INTEGER DEFAULT 0,
+                success_sites INTEGER DEFAULT 0,
+                failed_sites INTEGER DEFAULT 0,
+                total_new_data_count INTEGER DEFAULT 0,
+                total_duration_seconds INTEGER,
+                site_results TEXT,  -- JSON: 각 사이트별 결과 상세
+                error_summary TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # 업데이트 트리거 생성
+        cursor.execute("""
+            CREATE TRIGGER IF NOT EXISTS update_crawl_execution_log_timestamp 
+            AFTER UPDATE ON crawl_execution_log
+            BEGIN
+                UPDATE crawl_execution_log SET updated_at = CURRENT_TIMESTAMP 
+                WHERE log_id = NEW.log_id;
+            END
+        """)
+        
+        self.logger.info("  ✓ crawl_execution_log 테이블 생성 완료")
+    
     def _extend_crawl_metadata_table(self, cursor: sqlite3.Cursor):
         """기존 crawl_metadata 테이블 확장"""
         try:
@@ -284,7 +321,12 @@ class DatabaseMigration:
             # 시스템 상태 관련
             "CREATE INDEX IF NOT EXISTS idx_system_status_site_key ON system_status(site_key, last_check DESC)",
             "CREATE INDEX IF NOT EXISTS idx_system_status_health ON system_status(status, health_score)",
-            "CREATE INDEX IF NOT EXISTS idx_system_status_errors ON system_status(consecutive_errors DESC)"
+            "CREATE INDEX IF NOT EXISTS idx_system_status_errors ON system_status(consecutive_errors DESC)",
+            
+            # 크롤링 실행 로그 관련
+            "CREATE INDEX IF NOT EXISTS idx_crawl_execution_log_start_time ON crawl_execution_log(start_time DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_crawl_execution_log_status ON crawl_execution_log(status, start_time DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_crawl_execution_log_type ON crawl_execution_log(execution_type, start_time DESC)"
         ]
         
         for index_sql in indexes:
@@ -357,7 +399,7 @@ class DatabaseMigration:
                 
                 required_tables = {
                     'crawl_schedules', 'notification_history', 
-                    'new_data_log', 'system_status'
+                    'new_data_log', 'system_status', 'crawl_execution_log'
                 }
                 
                 missing_tables = required_tables - existing_tables
