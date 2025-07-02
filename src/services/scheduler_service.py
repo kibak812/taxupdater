@@ -458,10 +458,10 @@ class SchedulerService:
                 if 'created_at' in existing_columns or 'updated_at' in existing_columns:
                     time_column = 'created_at' if 'created_at' in existing_columns else 'updated_at'
                     
-                    # 최근 N분 내 데이터 개수 조회
+                    # 최근 N분 내 데이터 개수 조회 (로컬 시간 기준)
                     query = f"""
                         SELECT COUNT(*) FROM [{table_name}]
-                        WHERE {time_column} >= datetime('now', '-{minutes} minutes')
+                        WHERE {time_column} >= datetime('now', 'localtime', '-{minutes} minutes')
                     """
                     
                     cursor.execute(query)
@@ -794,34 +794,94 @@ class SchedulerService:
             self.logger.error(f"작업 이벤트 처리 실패: {e}")
     
     def get_job_history(self, site_key: str = None, limit: int = 50) -> List[Dict[str, Any]]:
-        """작업 이력 조회"""
+        """작업 이력 조회 - crawl_execution_log에서 실제 실행 이력 가져오기"""
         try:
+            import json
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
+                # crawl_execution_log에서 실제 실행 이력 조회
                 if site_key:
+                    # 특정 사이트의 이력을 site_results JSON에서 필터링
                     cursor.execute("""
-                        SELECT cs.site_key, cs.site_name, cs.last_run, cs.last_success, cs.last_failure,
-                               cs.success_count, cs.failure_count, cs.avg_crawl_time
-                        FROM crawl_schedules cs 
-                        WHERE cs.site_key = ?
-                        ORDER BY cs.last_run DESC
+                        SELECT log_id, execution_type, trigger_source, start_time, end_time, 
+                               status, site_results, total_new_data_count, total_duration_seconds, 
+                               error_summary, created_at
+                        FROM crawl_execution_log 
+                        WHERE site_results LIKE ?
+                        ORDER BY start_time DESC
                         LIMIT ?
-                    """, (site_key, limit))
+                    """, (f'%"{site_key}"%', limit))
                 else:
+                    # 전체 실행 이력 조회
                     cursor.execute("""
-                        SELECT cs.site_key, cs.site_name, cs.last_run, cs.last_success, cs.last_failure,
-                               cs.success_count, cs.failure_count, cs.avg_crawl_time
-                        FROM crawl_schedules cs 
-                        ORDER BY cs.last_run DESC
+                        SELECT log_id, execution_type, trigger_source, start_time, end_time, 
+                               status, site_results, total_new_data_count, total_duration_seconds, 
+                               error_summary, created_at
+                        FROM crawl_execution_log 
+                        ORDER BY start_time DESC
                         LIMIT ?
                     """, (limit,))
                 
-                columns = [desc[0] for desc in cursor.description]
                 history = []
                 
                 for row in cursor.fetchall():
-                    history.append(dict(zip(columns, row)))
+                    log_id, execution_type, trigger_source, start_time, end_time, status, site_results_json, total_new_data, duration, error_summary, created_at = row
+                    
+                    # site_results JSON 파싱
+                    site_results = {}
+                    if site_results_json:
+                        try:
+                            site_results = json.loads(site_results_json)
+                        except json.JSONDecodeError:
+                            self.logger.warning(f"Invalid JSON in site_results for log_id {log_id}")
+                    
+                    if site_key:
+                        # 특정 사이트 필터링 - 해당 사이트의 결과만 반환
+                        if site_key in site_results:
+                            site_result = site_results[site_key]
+                            history.append({
+                                'job_id': log_id,
+                                'site_key': site_key,
+                                'site_name': site_result.get('site_name', site_key),
+                                'start_time': start_time,
+                                'end_time': end_time,
+                                'status': site_result.get('status', 'unknown'),
+                                'data_collected': site_result.get('new_count', 0),
+                                'execution_type': execution_type,
+                                'trigger_source': trigger_source,
+                                'error_message': error_summary if status == 'failed' else None
+                            })
+                    else:
+                        # 전체 실행 로그 - 각 사이트별로 개별 항목 생성
+                        if site_results:
+                            for sk, result in site_results.items():
+                                history.append({
+                                    'job_id': f"{log_id}_{sk}",
+                                    'site_key': sk,
+                                    'site_name': result.get('site_name', sk),
+                                    'start_time': start_time,
+                                    'end_time': end_time,
+                                    'status': result.get('status', 'unknown'),
+                                    'data_collected': result.get('new_count', 0),
+                                    'execution_type': execution_type,
+                                    'trigger_source': trigger_source,
+                                    'error_message': error_summary if result.get('status') == 'failed' else None
+                                })
+                        else:
+                            # site_results가 비어있는 경우 전체 로그 정보만 표시
+                            history.append({
+                                'job_id': log_id,
+                                'site_key': 'all',
+                                'site_name': '전체',
+                                'start_time': start_time,
+                                'end_time': end_time,
+                                'status': status,
+                                'data_collected': total_new_data or 0,
+                                'execution_type': execution_type,
+                                'trigger_source': trigger_source,
+                                'error_message': error_summary if status == 'failed' else None
+                            })
                 
                 return history
                 
