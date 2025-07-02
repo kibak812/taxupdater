@@ -632,3 +632,35 @@ if 'updated_at' not in data.columns:
 - **적용 시점**: 데이터 저장 시점의 현재 시간
 
 이 개선으로 향후 모든 크롤링 데이터가 일관된 타임스탬프를 가지게 되어, 시간 기반 분석 및 필터링 기능의 정확성이 크게 향상되었습니다.
+
+## 🔧 스케줄러 토글 버그 수정 (2025.07.02)
+
+### 문제점
+설정 페이지에서 "스케줄러 중지" 버튼 클릭 후 "스케줄러 시작" 버튼을 클릭하면 "스케줄러가 이미 중지되어 있습니다"라는 잘못된 메시지가 표시되는 문제가 있었습니다.
+
+**원인**: 
+- `toggleScheduler()` 함수가 버튼의 텍스트나 CSS 클래스로 현재 상태를 판단
+- 버튼 상태와 실제 스케줄러 상태가 일치하지 않을 수 있음
+
+### 해결책: 실제 스케줄러 상태 기반 판단
+
+#### settings.js 수정 사항
+```javascript
+async toggleScheduler() {
+    // 먼저 시스템 상태를 확인하여 실제 스케줄러 상태 가져오기
+    const statusResponse = await fetch('/api/system-status');
+    const statusData = await statusResponse.json();
+    const isCurrentlyRunning = statusData.scheduler_status?.scheduler_running || false;
+    
+    // 실제 상태에 따라 적절한 엔드포인트 호출
+    const endpoint = isCurrentlyRunning ? '/api/scheduler/stop' : '/api/scheduler/start';
+}
+```
+
+### 🎯 개선 효과
+- **정확한 상태 파악**: API 호출로 실제 스케줄러 상태 확인
+- **올바른 동작**: 실제 상태에 따라 적절한 엔드포인트 호출
+- **에러 방지**: 이미 실행/중지된 상태도 성공으로 처리
+- **UI 일관성**: 에러 발생 시에도 시스템 상태 재로드로 UI 동기화
+
+이제 스케줄러 토글 버튼이 항상 정확하게 동작하며, 사용자에게 혼란을 주지 않습니다.

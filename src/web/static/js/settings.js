@@ -254,29 +254,43 @@ class ExpertSettings {
             button.disabled = true;
             button.textContent = '처리 중...';
             
-            const isCurrentlyRunning = button.textContent === '처리 중...' || 
-                                     button.classList.contains('btn-warning');
+            // 먼저 시스템 상태를 확인하여 실제 스케줄러 상태 가져오기
+            const statusResponse = await fetch('/api/system-status');
+            if (!statusResponse.ok) {
+                throw new Error('시스템 상태 확인 실패');
+            }
             
+            const statusData = await statusResponse.json();
+            const isCurrentlyRunning = statusData.scheduler_status?.scheduler_running || false;
+            
+            console.log('현재 스케줄러 상태:', isCurrentlyRunning ? '실행 중' : '중지됨');
+            
+            // 실제 상태에 따라 적절한 엔드포인트 호출
             const endpoint = isCurrentlyRunning ? '/api/scheduler/stop' : '/api/scheduler/start';
             const response = await fetch(endpoint, { method: 'POST' });
             
             if (!response.ok) {
-                throw new Error('Failed to toggle scheduler');
+                throw new Error('스케줄러 상태 변경 실패');
             }
             
             const result = await response.json();
+            
+            // already_stopped나 already_running도 성공으로 처리
+            if (result.status === 'already_stopped' || result.status === 'already_running') {
+                console.log('스케줄러가 이미 해당 상태입니다:', result.message);
+            }
+            
             this.showToast('스케줄러 업데이트', 'success', result.message);
             
-            // Reload system status
+            // 시스템 상태 다시 로드하여 UI 업데이트
             await this.loadSystemStatus();
             
         } catch (error) {
             console.error('Failed to toggle scheduler:', error);
-            this.showToast('스케줄러 오류', 'error', '스케줄러 상태 업데이트에 실패했습니다');
+            this.showToast('스케줄러 오류', 'error', error.message || '스케줄러 상태 업데이트에 실패했습니다');
             
-            // Reset button state
-            button.disabled = false;
-            this.updateSchedulerStatus(!isCurrentlyRunning);
+            // 버튼 상태 복구를 위해 시스템 상태 다시 로드
+            await this.loadSystemStatus();
         }
     }
     
