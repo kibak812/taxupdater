@@ -151,6 +151,34 @@ class ExpertSettings {
         });
     }
     
+    generateCronExpression(hours) {
+        /**
+         * 시간 간격을 cron 표현식으로 변환
+         * @param {number} hours - 시간 간격 (1-168시간)
+         * @returns {string} cron 표현식
+         */
+        if (hours < 1 || hours > 168) {
+            throw new Error('시간 간격은 1시간과 168시간 사이여야 합니다');
+        }
+        
+        if (hours >= 24) {
+            // 24시간 이상인 경우 일 단위로 변환
+            const days = Math.floor(hours / 24);
+            const remainingHours = hours % 24;
+            
+            if (remainingHours === 0) {
+                // 정확히 일 단위인 경우 (24, 48, 72시간 등)
+                return `0 0 */${days} * *`;
+            } else {
+                // 일 단위가 아닌 경우 시간 단위로 처리
+                return `0 */${hours} * * *`;
+            }
+        } else {
+            // 24시간 미만인 경우 시간 단위
+            return `0 */${hours} * * *`;
+        }
+    }
+
     createSiteItem(siteKey, schedule) {
         const item = document.createElement('div');
         item.className = 'site-item';
@@ -159,7 +187,7 @@ class ExpertSettings {
         const siteColor = this.siteColors[siteKey] || '#6B7280';
         
         const isEnabled = schedule?.enabled || false;
-        const cronExpression = schedule?.cron_expression || '0 */6 * * *';
+        const cronExpression = schedule?.cron_expression || this.generateCronExpression(this.currentSettings.defaultInterval);
         const nextRun = schedule?.scheduler_status?.next_run;
         
         let statusText = '스케줄 없음';
@@ -195,10 +223,10 @@ class ExpertSettings {
     async handleSiteToggle(siteKey, enabled) {
         try {
             if (enabled) {
-                // Enable site with default schedule
+                // Enable site with current default schedule
                 const scheduleData = {
                     site_key: siteKey,
-                    cron_expression: '0 */6 * * *', // Every 6 hours
+                    cron_expression: this.generateCronExpression(this.currentSettings.defaultInterval),
                     enabled: true,
                     priority: 0,
                     notification_threshold: this.currentSettings.notificationThreshold
@@ -363,23 +391,29 @@ class ExpertSettings {
     }
     
     async updateExistingSchedules() {
-        // Update notification threshold for all enabled schedules
+        // Update cron expression and notification threshold for all enabled schedules
         const enabledSites = Object.keys(this.siteSchedules).filter(
             siteKey => this.siteSchedules[siteKey].enabled
         );
         
+        console.log(`Updating ${enabledSites.length} enabled schedules with new interval: ${this.currentSettings.defaultInterval} hours`);
+        
         for (const siteKey of enabledSites) {
             try {
                 const schedule = this.siteSchedules[siteKey];
+                const newCronExpression = this.generateCronExpression(this.currentSettings.defaultInterval);
+                
                 const scheduleData = {
                     site_key: siteKey,
-                    cron_expression: schedule.cron_expression,
+                    cron_expression: newCronExpression, // Use new cron expression based on current interval
                     enabled: true,
                     priority: schedule.priority || 0,
                     notification_threshold: this.currentSettings.notificationThreshold
                 };
                 
-                await fetch('/api/schedules', {
+                console.log(`Updating schedule for ${siteKey}: ${schedule.cron_expression} → ${newCronExpression}`);
+                
+                const response = await fetch('/api/schedules', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -387,10 +421,19 @@ class ExpertSettings {
                     body: JSON.stringify(scheduleData)
                 });
                 
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
             } catch (error) {
                 console.warn(`Failed to update schedule for ${siteKey}:`, error);
+                this.showToast('스케줄 업데이트 실패', 'warning', `${this.siteNames[siteKey]} 스케줄 업데이트에 실패했습니다`);
             }
         }
+        
+        // Reload schedules to reflect changes in UI
+        await this.loadSiteSchedules();
+        this.showToast('스케줄 업데이트', 'success', `${enabledSites.length}개 사이트의 스케줄이 업데이트되었습니다`);
     }
     
     resetToDefaults() {
