@@ -34,6 +34,7 @@ class ExpertDashboard {
         this.connectWebSocket();
         this.loadInitialData();
         this.startAutoRefresh();
+        this.restoreCollapseState();
         
         console.log('전문가 대시보드 초기화 완료');
     }
@@ -64,6 +65,16 @@ class ExpertDashboard {
         // Clear history button
         document.getElementById('clearHistoryBtn')?.addEventListener('click', () => {
             this.clearJobHistory();
+        });
+        
+        // Instant crawl button
+        document.getElementById('instantCrawlBtn')?.addEventListener('click', () => {
+            this.startInstantCrawling();
+        });
+        
+        // Collapse toggle button
+        document.getElementById('collapseToggle')?.addEventListener('click', () => {
+            this.toggleCollapseSection();
         });
     }
     
@@ -138,9 +149,11 @@ class ExpertDashboard {
                 this.showToast('크롤링 완료', 'success', '데이터 수집이 성공적으로 완료되었습니다');
                 this.loadStatusCards();
                 this.loadLatestUpdates();
+                this.restoreInstantCrawlButton(); // 크롤링 완료 시 버튼 복원
                 break;
             case 'crawl_error':
                 this.showToast('크롤링 오류', 'error', `오류: ${message.error}`);
+                this.restoreInstantCrawlButton(); // 크롤링 에러 시 버튼 복원
                 break;
         }
     }
@@ -306,6 +319,56 @@ class ExpertDashboard {
         } catch (error) {
             console.error('Failed to clear job history:', error);
             this.showToast('삭제 실패', 'error', '진행현황 삭제 중 오류가 발생했습니다');
+        }
+    }
+    
+    async startInstantCrawling() {
+        try {
+            console.log('즉시 탐색 시작');
+            
+            // 버튼 비활성화
+            const btn = document.getElementById('instantCrawlBtn');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                        <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    탐색 중...
+                `;
+            }
+            
+            const response = await fetch('/api/crawl/all', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) throw new Error('즉시 탐색 시작 실패');
+            
+            const result = await response.json();
+            this.showToast('즉시 탐색 시작', 'success', '전체 사이트 크롤링을 시작했습니다. 진행상황을 확인하세요.');
+            
+        } catch (error) {
+            console.error('즉시 탐색 오류:', error);
+            this.showToast('탐색 실패', 'error', '즉시 탐색 시작에 실패했습니다.');
+            // 에러 발생 시에만 즉시 복원
+            this.restoreInstantCrawlButton();
+        }
+    }
+    
+    restoreInstantCrawlButton() {
+        const btn = document.getElementById('instantCrawlBtn');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                즉시 탐색
+            `;
         }
     }
     
@@ -561,6 +624,42 @@ class ExpertDashboard {
                 }
             }, 300);
         }, 5000);
+    }
+    
+    toggleCollapseSection() {
+        const toggle = document.getElementById('collapseToggle');
+        const content = document.getElementById('updatesTimeline');
+        
+        if (!toggle || !content) return;
+        
+        const isCollapsed = content.classList.contains('collapsed');
+        
+        if (isCollapsed) {
+            // Expand
+            content.classList.remove('collapsed');
+            toggle.classList.remove('collapsed');
+        } else {
+            // Collapse
+            content.classList.add('collapsed');
+            toggle.classList.add('collapsed');
+        }
+        
+        // Save state to localStorage
+        localStorage.setItem('crawlingStatusCollapsed', !isCollapsed);
+    }
+    
+    restoreCollapseState() {
+        const isCollapsed = localStorage.getItem('crawlingStatusCollapsed') === 'true';
+        
+        if (isCollapsed) {
+            const toggle = document.getElementById('collapseToggle');
+            const content = document.getElementById('updatesTimeline');
+            
+            if (toggle && content) {
+                content.classList.add('collapsed');
+                toggle.classList.add('collapsed');
+            }
+        }
     }
     
     showLoading(show) {

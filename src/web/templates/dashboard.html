@@ -78,8 +78,21 @@
             <!-- Crawling Progress Section -->
             <section class="latest-updates-section">
                 <div class="section-header">
-                    <h3>크롤링 진행현황</h3>
+                    <div class="section-title-with-toggle">
+                        <h3>크롤링 진행현황</h3>
+                        <button class="collapse-toggle" id="collapseToggle" aria-label="섹션 접기/펼치기">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
                     <div class="section-actions">
+                        <button class="btn btn-success btn-sm" id="instantCrawlBtn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            즉시 탐색
+                        </button>
                         <button class="btn btn-primary btn-sm" id="clearHistoryBtn">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14zM10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -94,7 +107,7 @@
                         </button>
                     </div>
                 </div>
-                <div class="updates-timeline" id="updatesTimeline">
+                <div class="updates-timeline collapsible-content" id="updatesTimeline">
                     <!-- Timeline items will be dynamically generated -->
                 </div>
             </section>

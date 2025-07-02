@@ -1080,4 +1080,63 @@ if 'created_at' in existing_columns or 'updated_at' in existing_columns:
 3. **정확한 통계**: 수집/신규/중복 데이터 개수의 정확한 표시
 4. **효율적 관리**: 진행현황 삭제 등 직관적인 관리 도구
 
-이제 예규판례 모니터링 시스템이 **데스크톱과 모바일 모두에서 완벽하게 동작하는 전문가급 모니터링 플랫폼**으로 완성되었습니다.
+### 📂 접기/펼치기 기능 구현 (2025.07.02)
+크롤링 진행현황 섹션에 접기/펼치기 기능을 추가하여 화면 공간 활용도를 극대화:
+
+#### 새로운 UI 구성요소
+- **토글 버튼**: 제목 옆 시각적 셰브론 아이콘
+- **부드러운 애니메이션**: CSS `max-height` 전환으로 자연스러운 접기/펼치기 효과
+- **상태 지속성**: localStorage를 통한 사용자 설정 기억 기능
+- **시각적 피드백**: 접힌 상태에서 셰브론 아이콘 90도 회전
+
+#### 기술적 구현
+```html
+<!-- HTML 구조 -->
+<div class="section-title-with-toggle">
+    <h3>크롤링 진행현황</h3>
+    <button class="collapse-toggle" id="collapseToggle">
+        <svg><!-- 셰브론 아이콘 --></svg>
+    </button>
+</div>
+<div class="updates-timeline collapsible-content" id="updatesTimeline">
+    <!-- 접기 가능한 콘텐츠 -->
+</div>
+```
+
+```css
+/* CSS 애니메이션 */
+.collapsible-content {
+    transition: max-height var(--transition-normal) ease-out;
+    max-height: 1000px;
+}
+
+.collapsible-content.collapsed {
+    max-height: 0;
+    margin: 0;
+    padding: 0;
+}
+
+.collapse-toggle.collapsed svg {
+    transform: rotate(-90deg);
+}
+```
+
+```javascript
+// JavaScript 상태 관리
+toggleCollapseSection() {
+    // 접기/펼치기 토글 로직
+    localStorage.setItem('crawlingStatusCollapsed', !isCollapsed);
+}
+
+restoreCollapseState() {
+    // 페이지 로드 시 이전 상태 복원
+}
+```
+
+#### 사용자 경험 개선
+- **공간 효율성**: 불필요할 때 섹션을 접어 화면 공간 절약
+- **개인화**: 사용자 선호도에 따른 맞춤형 인터페이스
+- **직관적 조작**: 클릭 한 번으로 간편한 토글 기능
+- **상태 유지**: 페이지 새로고침 후에도 설정 유지
+
+이제 예규판례 모니터링 시스템이 **데스크톱과 모바일 모두에서 완벽하게 동작하며 개인화 가능한 전문가급 모니터링 플랫폼**으로 완성되었습니다.
