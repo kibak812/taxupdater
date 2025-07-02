@@ -69,7 +69,6 @@ class ExpertDataTable {
     
     init() {
         this.parseUrlParams();
-        this.updateTableHeaders();
         this.setupEventListeners();
         this.loadData();
         
@@ -104,12 +103,7 @@ class ExpertDataTable {
             this.exportData();
         });
         
-        // Table header sorting
-        document.querySelectorAll('.data-table th.sortable').forEach(th => {
-            th.addEventListener('click', () => {
-                this.handleSort(th.dataset.column);
-            });
-        });
+        // 테이블 헤더 정렬은 updateTableHeader에서 동적으로 설정됨
     }
     
     handleSearch(query) {
@@ -179,6 +173,7 @@ class ExpertDataTable {
             this.totalCount = result.pagination?.total_count || 0;
             this.totalPages = result.pagination?.total_pages || 0;
             
+            this.updateTableHeader();
             this.updateFilterStatus();
             this.sortData();
             this.renderTable();
@@ -227,9 +222,54 @@ class ExpertDataTable {
                 return item['게시일'] || item['선고일'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자'] || '';
             case 'collected_date':
                 return item['updated_at'] || item['created_at'] || '';
+            // 조세심판원 전용 컬럼
+            case 'tax_category':
+                return item['세목'] || '';
+            case 'claim_number':
+                return item['청구번호'] || '';
+            case 'decision_date':
+                return item['결정일'] || '';
             default:
                 return '';
         }
+    }
+    
+    updateTableHeader() {
+        const thead = document.querySelector('.data-table thead tr');
+        if (!thead) return;
+        
+        if (this.siteKey === 'tax_tribunal') {
+            // 조세심판원: 세목/유형, 청구번호, 제목, 결정일, 수집일
+            thead.innerHTML = `
+                <th class="sortable" data-column="organization">기관</th>
+                <th class="sortable" data-column="tax_category">세목/유형</th>
+                <th class="sortable" data-column="claim_number">청구번호</th>
+                <th class="sortable" data-column="title">제목</th>
+                <th class="sortable" data-column="decision_date">결정일</th>
+                <th class="sortable" data-column="collected_date">수집일</th>
+            `;
+        } else {
+            // 기타 사이트: 기존 헤더 유지
+            thead.innerHTML = `
+                <th class="sortable" data-column="organization">기관</th>
+                <th class="sortable" data-column="document_number">문서번호</th>
+                <th class="sortable" data-column="title">제목</th>
+                <th class="sortable" data-column="published_date">게시일</th>
+                <th class="sortable" data-column="collected_date">수집일</th>
+            `;
+        }
+        
+        // 정렬 이벤트 리스너 다시 연결
+        this.attachSortListeners();
+    }
+    
+    attachSortListeners() {
+        document.querySelectorAll('.data-table th.sortable').forEach(th => {
+            th.addEventListener('click', () => {
+                const column = th.dataset.column;
+                this.handleSort(column);
+            });
+        });
     }
     
     updateFilterStatus() {
@@ -308,31 +348,68 @@ class ExpertDataTable {
     createTableRow(item) {
         const row = document.createElement('tr');
         
-        // Extract common fields with fallbacks
-        const documentNumber = item['문서번호'] || item['판례번호'] || item['청구번호'] || '-';
-        const title = item['제목'] || item['심판내용'] || '-';
-        const publishedDate = this.formatDate(item['게시일'] || item['선고일'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자']);
-        const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
-        const link = item['링크'] || item['원문링크'] || '#';
-        
-        row.innerHTML = `
-            <td>
-                <span class="organization-badge" style="background: ${this.siteColor}; color: white;">
-                    ${this.siteName}
-                </span>
-            </td>
-            <td>
-                <span class="document-number">${documentNumber}</span>
-            </td>
-            <td class="document-title">
-                ${link !== '#' ? 
-                    `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
-                    `<span title="${title}">${title}</span>`
-                }
-            </td>
-            <td class="date-cell">${publishedDate}</td>
-            <td class="date-cell">${collectedDate}</td>
-        `;
+        // 사이트별 특화 컬럼 처리
+        if (this.siteKey === 'tax_tribunal') {
+            // 조세심판원: 세목, 유형, 청구번호, 제목, 결정일 표시
+            const taxCategory = item['세목'] || '-';
+            const decisionType = item['유형'] || '-';
+            const claimNumber = item['청구번호'] || '-';
+            const title = item['제목'] || '-';
+            const decisionDate = this.formatDate(item['결정일']);
+            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
+            const link = item['링크'] || '#';
+            
+            row.innerHTML = `
+                <td>
+                    <span class="organization-badge" style="background: ${this.siteColor}; color: white;">
+                        ${this.siteName}
+                    </span>
+                </td>
+                <td>
+                    <div class="tax-info">
+                        <span class="tax-category">${taxCategory}</span>
+                        <span class="decision-type" style="font-size: 0.85em; color: #666; margin-left: 4px;">${decisionType}</span>
+                    </div>
+                </td>
+                <td>
+                    <span class="document-number">${claimNumber}</span>
+                </td>
+                <td class="document-title">
+                    ${link !== '#' ? 
+                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
+                        `<span title="${title}">${title}</span>`
+                    }
+                </td>
+                <td class="date-cell">${decisionDate}</td>
+                <td class="date-cell">${collectedDate}</td>
+            `;
+        } else {
+            // 기타 사이트: 기존 공통 포맷
+            const documentNumber = item['문서번호'] || item['판례번호'] || item['청구번호'] || '-';
+            const title = item['제목'] || item['심판내용'] || '-';
+            const publishedDate = this.formatDate(item['게시일'] || item['선고일'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자']);
+            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
+            const link = item['링크'] || item['원문링크'] || '#';
+            
+            row.innerHTML = `
+                <td>
+                    <span class="organization-badge" style="background: ${this.siteColor}; color: white;">
+                        ${this.siteName}
+                    </span>
+                </td>
+                <td>
+                    <span class="document-number">${documentNumber}</span>
+                </td>
+                <td class="document-title">
+                    ${link !== '#' ? 
+                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
+                        `<span title="${title}">${title}</span>`
+                    }
+                </td>
+                <td class="date-cell">${publishedDate}</td>
+                <td class="date-cell">${collectedDate}</td>
+            `;
+        }
         
         return row;
     }
