@@ -274,11 +274,14 @@ class SchedulerService:
             
             # 크롤링 서비스 실행
             if self.crawling_service:
-                # execute_crawling은 void 함수이므로 예외가 발생하지 않으면 성공으로 간주
-                self.crawling_service.execute_crawling(
+                # 크롤링 실행하고 상세 결과 받기
+                crawl_result = self.crawling_service.execute_crawling(
                     choice, None, None, is_periodic=True
                 )
-                success = True
+                success = crawl_result.get('status') == 'success'
+                
+                # 상세 결과를 반환하여 상위에서 사용할 수 있도록 함
+                return crawl_result
             else:
                 self.logger.error("크롤링 서비스가 설정되지 않음")
                 raise ValueError("크롤링 서비스가 설정되지 않음")
@@ -341,19 +344,43 @@ class SchedulerService:
                     # 개별 사이트 크롤링 실행
                     self.logger.info(f"크롤링 중: {site_name} ({site_key})")
                     
-                    # 크롤링 실행
-                    self._execute_crawl_job(site_key, is_manual=False)
+                    # 크롤링 실행하고 상세 결과 받기
+                    crawl_result = self._execute_crawl_job(site_key, is_manual=False)
                     
-                    # 크롤링 후 최근 생성된 데이터 개수 확인 (실제 신규 데이터만)
-                    new_count = self._get_recent_site_data_count(site_key, minutes=10)
-                    
-                    site_results[site_key] = {
-                        "status": "success",
-                        "new_count": new_count,
-                        "site_name": site_name
-                    }
-                    total_new_count += new_count
-                    success_count += 1
+                    if crawl_result and crawl_result.get('results'):
+                        # 개별 사이트 결과에서 해당 사이트 정보 추출
+                        site_result = None
+                        for result in crawl_result['results']:
+                            if result.get('site_key') == site_key:
+                                site_result = result
+                                break
+                        
+                        if site_result and site_result.get('status') == 'success':
+                            site_results[site_key] = {
+                                "status": "success",
+                                "new_count": site_result.get('new_count', 0),
+                                "total_crawled": site_result.get('total_crawled', 0),
+                                "existing_count": site_result.get('existing_count', 0),
+                                "site_name": site_name
+                            }
+                            total_new_count += site_result.get('new_count', 0)
+                            success_count += 1
+                        else:
+                            # 결과는 있지만 실패한 경우
+                            site_results[site_key] = {
+                                "status": "failed",
+                                "error": site_result.get('error_message', '알 수 없는 오류') if site_result else '크롤링 결과 없음',
+                                "site_name": site_name
+                            }
+                            failed_count += 1
+                    else:
+                        # 크롤링 결과가 없는 경우
+                        site_results[site_key] = {
+                            "status": "failed", 
+                            "error": "크롤링 결과 없음",
+                            "site_name": site_name
+                        }
+                        failed_count += 1
                     
                 except Exception as e:
                     self.logger.error(f"{site_name} 크롤링 실패: {e}")
@@ -847,7 +874,10 @@ class SchedulerService:
                                 'start_time': start_time,
                                 'end_time': end_time,
                                 'status': site_result.get('status', 'unknown'),
-                                'data_collected': site_result.get('new_count', 0),
+                                'new_count': site_result.get('new_count', 0),
+                                'total_crawled': site_result.get('total_crawled', 0),
+                                'existing_count': site_result.get('existing_count', 0),
+                                'data_collected': site_result.get('new_count', 0),  # 하위 호환성
                                 'execution_type': execution_type,
                                 'trigger_source': trigger_source,
                                 'error_message': error_summary if status == 'failed' else None
@@ -863,7 +893,10 @@ class SchedulerService:
                                     'start_time': start_time,
                                     'end_time': end_time,
                                     'status': result.get('status', 'unknown'),
-                                    'data_collected': result.get('new_count', 0),
+                                    'new_count': result.get('new_count', 0),
+                                    'total_crawled': result.get('total_crawled', 0),
+                                    'existing_count': result.get('existing_count', 0),
+                                    'data_collected': result.get('new_count', 0),  # 하위 호환성
                                     'execution_type': execution_type,
                                     'trigger_source': trigger_source,
                                     'error_message': error_summary if result.get('status') == 'failed' else None
@@ -888,6 +921,24 @@ class SchedulerService:
         except Exception as e:
             self.logger.error(f"작업 이력 조회 실패: {e}")
             return []
+    
+    def clear_job_history(self) -> bool:
+        """크롤링 진행현황 모두 삭제"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # crawl_execution_log 테이블의 모든 레코드 삭제
+                cursor.execute("DELETE FROM crawl_execution_log")
+                deleted_count = cursor.rowcount
+                conn.commit()
+                
+                self.logger.info(f"크롤링 진행현황 삭제 완료: {deleted_count}개 항목 삭제")
+                return True
+                
+        except Exception as e:
+            self.logger.error(f"크롤링 진행현황 삭제 실패: {e}")
+            return False
     
     def __del__(self):
         """소멸자 - 리소스 정리"""

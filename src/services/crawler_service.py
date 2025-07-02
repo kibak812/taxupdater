@@ -52,7 +52,7 @@ class CrawlingService:
                 self._notification_service = self.legacy_notification_service
         return self._notification_service
     
-    def execute_crawling(self, choice: str, progress: Optional[Callable], status_message: Optional[Callable], is_periodic: bool = False) -> None:
+    def execute_crawling(self, choice: str, progress: Optional[Callable], status_message: Optional[Callable], is_periodic: bool = False) -> Dict[str, Any]:
         """
         example.py 기반 새로운 데이터 탐지에 특화된 크롤링 실행 로직
         
@@ -95,7 +95,7 @@ class CrawlingService:
         
         if not selected_crawlers:
             self._show_message("잘못된 선택입니다. 유효한 옵션을 선택해 주세요.")
-            return
+            return {"status": "error", "message": "잘못된 선택", "results": []}
         
         self.logger.info(f"크롤링 시작: {len(selected_crawlers)}개 사이트 대상")
         self.logger.info("=" * 60)
@@ -154,6 +154,15 @@ class CrawlingService:
         
         self.logger.info("전체 크롤링 완료!")
         self.logger.info("=" * 60)
+        
+        # 크롤링 결과 반환
+        return {
+            "status": "success",
+            "message": "크롤링 완료",
+            "results": summary_results,
+            "total_sites": len(selected_crawlers),
+            "total_new_count": sum(result.get('new_count', 0) for result in summary_results if result.get('status') == 'success')
+        }
     
     def _execute_single_crawler_with_detailed_logging(self, crawler_key: str, progress: Optional[Callable], status_message: Optional[Callable], 
                                                     prefix: str, current_index: int = 0, total_count: int = 1) -> Dict[str, Any]:

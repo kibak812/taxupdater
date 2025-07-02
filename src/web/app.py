@@ -764,6 +764,23 @@ async def get_job_history(site_key: str = None, limit: int = 50):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"작업 이력 조회 실패: {str(e)}")
 
+@app.delete("/api/job-history")
+async def clear_job_history():
+    """크롤링 진행현황 모두 삭제"""
+    try:
+        success = scheduler_service.clear_job_history()
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "크롤링 진행현황이 모두 삭제되었습니다"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="진행현황 삭제 실패")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"진행현황 삭제 실패: {str(e)}")
+
 @app.post("/api/scheduler/start")
 async def start_scheduler():
     """스케줄러 시작"""

@@ -60,6 +60,11 @@ class ExpertDashboard {
         document.getElementById('refreshUpdatesBtn')?.addEventListener('click', () => {
             this.loadLatestUpdates();
         });
+        
+        // Clear history button
+        document.getElementById('clearHistoryBtn')?.addEventListener('click', () => {
+            this.clearJobHistory();
+        });
     }
     
     async connectWebSocket() {
@@ -280,6 +285,30 @@ class ExpertDashboard {
         }
     }
     
+    async clearJobHistory() {
+        if (!confirm('크롤링 진행현황을 모두 삭제하시겠습니까?')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/job-history', {
+                method: 'DELETE'
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                this.showToast('삭제 완료', 'success', data.message);
+                this.loadLatestUpdates(); // 목록 새로고침
+            } else {
+                this.showToast('삭제 실패', 'error', data.detail || '진행현황 삭제에 실패했습니다');
+            }
+        } catch (error) {
+            console.error('Failed to clear job history:', error);
+            this.showToast('삭제 실패', 'error', '진행현황 삭제 중 오류가 발생했습니다');
+        }
+    }
+    
     renderLatestUpdates(jobHistory) {
         const container = document.getElementById('updatesTimeline');
         if (!container) return;
@@ -317,7 +346,7 @@ class ExpertDashboard {
         let statusClass = 'status-running';
         let statusText = '실행 중';
         
-        if (job.status === 'completed') {
+        if (job.status === 'completed' || job.status === 'success') {
             statusIcon = '●';
             statusClass = 'status-success';
             statusText = '완료';
@@ -329,6 +358,10 @@ class ExpertDashboard {
             statusIcon = '!';
             statusClass = 'status-warning';
             statusText = '부분 성공';
+        } else if (job.status === 'running') {
+            statusIcon = '◯';
+            statusClass = 'status-running';
+            statusText = '실행 중';
         }
         
         // 실행 시간 계산
@@ -340,10 +373,25 @@ class ExpertDashboard {
             duration = `${seconds}초`;
         }
         
-        // 결과 정보
+        // 결과 정보 - 상세 크롤링 통계 표시
         let resultInfo = '';
-        if (job.data_collected !== undefined) {
-            resultInfo = `${job.data_collected}개 항목 수집`;
+        if (job.total_crawled !== undefined || job.new_count !== undefined) {
+            const parts = [];
+            if (job.total_crawled !== undefined) {
+                parts.push(`${job.total_crawled}개 수집`);
+            }
+            if (job.new_count !== undefined) {
+                parts.push(`${job.new_count}개 신규`);
+            }
+            if (job.existing_count !== undefined && job.total_crawled !== undefined) {
+                const duplicates = job.total_crawled - job.new_count;
+                if (duplicates > 0) {
+                    parts.push(`${duplicates}개 중복`);
+                }
+            }
+            if (parts.length > 0) {
+                resultInfo = parts.join(', ');
+            }
         }
         
         item.innerHTML = `
