@@ -225,6 +225,8 @@ class ExpertDataTable {
             // 조세심판원 전용 컬럼
             case 'tax_category':
                 return item['세목'] || '';
+            case 'decision_type':
+                return item['유형'] || '';
             case 'claim_number':
                 return item['청구번호'] || '';
             case 'decision_date':
@@ -239,10 +241,11 @@ class ExpertDataTable {
         if (!thead) return;
         
         if (this.siteKey === 'tax_tribunal') {
-            // 조세심판원: 세목/유형, 청구번호, 제목, 결정일, 수집일
+            // 조세심판원: 세목, 유형, 청구번호, 제목, 결정일, 수집일
             thead.innerHTML = `
                 <th class="sortable" data-column="organization">기관</th>
-                <th class="sortable" data-column="tax_category">세목/유형</th>
+                <th class="sortable" data-column="tax_category">세목</th>
+                <th class="sortable" data-column="decision_type">유형</th>
                 <th class="sortable" data-column="claim_number">청구번호</th>
                 <th class="sortable" data-column="title">제목</th>
                 <th class="sortable" data-column="decision_date">결정일</th>
@@ -366,10 +369,10 @@ class ExpertDataTable {
                     </span>
                 </td>
                 <td>
-                    <div class="tax-info">
-                        <span class="tax-category">${taxCategory}</span>
-                        <span class="decision-type" style="font-size: 0.85em; color: #666; margin-left: 4px;">${decisionType}</span>
-                    </div>
+                    <span class="tax-category">${taxCategory}</span>
+                </td>
+                <td>
+                    <span class="decision-type">${decisionType}</span>
                 </td>
                 <td>
                     <span class="document-number">${claimNumber}</span>
