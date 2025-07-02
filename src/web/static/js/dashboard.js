@@ -270,37 +270,104 @@ class ExpertDashboard {
     
     async loadLatestUpdates() {
         try {
-            const response = await fetch('/api/notifications?limit=10');
+            const response = await fetch('/api/job-history?limit=10');
             const data = await response.json();
             
-            this.renderLatestUpdates(data.notifications || []);
+            this.renderLatestUpdates(data.job_history || []);
         } catch (error) {
-            console.error('Failed to load latest updates:', error);
-            this.showToast('로드 오류', 'error', '최신 업데이트 로드에 실패했습니다');
+            console.error('Failed to load crawling progress:', error);
+            this.showToast('로드 오류', 'error', '크롤링 현황 로드에 실패했습니다');
         }
     }
     
-    renderLatestUpdates(notifications) {
+    renderLatestUpdates(jobHistory) {
         const container = document.getElementById('updatesTimeline');
         if (!container) return;
         
         container.innerHTML = '';
         
-        if (notifications.length === 0) {
+        if (jobHistory.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
-                    <div class="empty-state-icon">📭</div>
-                    <div class="empty-state-title">최근 업데이트 없음</div>
-                    <div class="empty-state-description">표시할 최근 활동이 없습니다.</div>
+                    <div class="empty-state-icon">-</div>
+                    <div class="empty-state-title">크롤링 이력 없음</div>
+                    <div class="empty-state-description">최근 실행된 크롤링 작업이 없습니다.</div>
                 </div>
             `;
             return;
         }
         
-        notifications.forEach(notification => {
-            const item = this.createTimelineItem(notification);
+        jobHistory.forEach(job => {
+            const item = this.createJobTimelineItem(job);
             container.appendChild(item);
         });
+    }
+    
+    createJobTimelineItem(job) {
+        const item = document.createElement('div');
+        item.className = 'timeline-item';
+        
+        const startTime = new Date(job.start_time);
+        const relativeTime = this.formatRelativeTime(startTime);
+        const siteKey = job.site_key;
+        const badgeColor = this.siteColors[siteKey] || '#6B7280';
+        
+        // 상태에 따른 아이콘과 색상
+        let statusIcon = '◯';
+        let statusClass = 'status-running';
+        let statusText = '실행 중';
+        
+        if (job.status === 'completed') {
+            statusIcon = '●';
+            statusClass = 'status-success';
+            statusText = '완료';
+        } else if (job.status === 'failed') {
+            statusIcon = '×';
+            statusClass = 'status-error';
+            statusText = '실패';
+        } else if (job.status === 'partial_success') {
+            statusIcon = '!';
+            statusClass = 'status-warning';
+            statusText = '부분 성공';
+        }
+        
+        // 실행 시간 계산
+        let duration = '';
+        if (job.end_time) {
+            const endTime = new Date(job.end_time);
+            const durationMs = endTime - startTime;
+            const seconds = Math.round(durationMs / 1000);
+            duration = `${seconds}초`;
+        }
+        
+        // 결과 정보
+        let resultInfo = '';
+        if (job.data_collected !== undefined) {
+            resultInfo = `${job.data_collected}개 항목 수집`;
+        }
+        
+        item.innerHTML = `
+            <div class="timeline-header">
+                <h4 class="timeline-title">
+                    ${statusIcon} ${this.getSiteName(siteKey)} 크롤링 ${statusText}
+                </h4>
+                <div class="timeline-meta">
+                    <span class="organization-badge" style="--badge-color: ${badgeColor}; --badge-text-color: white; background: ${badgeColor};">
+                        ${this.getSiteName(siteKey)}
+                    </span>
+                    <span class="job-status ${statusClass}">${statusText}</span>
+                    <span>${relativeTime}</span>
+                </div>
+            </div>
+            <div class="timeline-description">
+                실행 시간: ${startTime.toLocaleString('ko-KR')}
+                ${duration ? ` (소요시간: ${duration})` : ''}
+                ${resultInfo ? ` | ${resultInfo}` : ''}
+                ${job.error_message ? `<br><span class="error-message">오류: ${job.error_message}</span>` : ''}
+            </div>
+        `;
+        
+        return item;
     }
     
     createTimelineItem(notification) {
