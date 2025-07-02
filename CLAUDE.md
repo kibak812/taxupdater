@@ -588,3 +588,47 @@ if last_updated:
 - **시간대 처리**: ISO 형식으로 JavaScript 호환성 향상
 
 이제 대시보드에서 각 사이트의 "마지막 업데이트" 시간이 실제 크롤링된 데이터의 최신 시간을 정확히 반영하여 표시됩니다.
+
+## 🔧 타임스탬프 표준화 시스템 개선 (2025.07.02)
+
+### 배경
+데이터 저장 시 타임스탬프 컬럼(`created_at`, `updated_at`)이 누락되거나 일관되지 않는 문제가 발생했습니다. 이로 인해 시간 기반 필터링 및 통계 기능에서 정확도가 떨어지는 현상이 있었습니다.
+
+### 해결책: 자동 타임스탬프 주입 시스템
+
+#### Repository 레벨 개선 (`src/repositories/sqlite_repository.py`)
+모든 데이터 저장 시점에서 표준화된 타임스탬프를 자동으로 주입하도록 개선:
+
+```python
+# 증분 저장 시 타임스탬프 자동 추가
+if not new_entries.empty:
+    # 표준화된 타임스탬프 형식 적용
+    from datetime import datetime
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    if 'created_at' not in new_entries.columns:
+        new_entries['created_at'] = timestamp
+    if 'updated_at' not in new_entries.columns:
+        new_entries['updated_at'] = timestamp
+
+# 전체 교체 시에도 동일한 로직 적용
+# 표준화된 타임스탬프 형식 적용
+from datetime import datetime
+timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+if 'created_at' not in data.columns:
+    data['created_at'] = timestamp
+if 'updated_at' not in data.columns:
+    data['updated_at'] = timestamp
+```
+
+### 🎯 개선 효과
+- **일관성**: 모든 데이터에 표준화된 타임스탬프 보장
+- **정확성**: 시간 기반 필터링 및 통계의 정확도 향상
+- **자동화**: 수동 타임스탬프 관리 없이 자동 주입
+- **호환성**: 기존 데이터는 그대로 유지하면서 새 데이터만 표준화
+
+### 📅 표준 타임스탬프 형식
+- **형식**: `YYYY-MM-DD HH:MM:SS` (예: `2025-07-02 14:30:15`)
+- **시간대**: 시스템 로컬 시간 기준
+- **적용 시점**: 데이터 저장 시점의 현재 시간
+
+이 개선으로 향후 모든 크롤링 데이터가 일관된 타임스탬프를 가지게 되어, 시간 기반 분석 및 필터링 기능의 정확성이 크게 향상되었습니다.

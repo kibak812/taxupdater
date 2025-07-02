@@ -281,6 +281,14 @@ class SQLiteRepository(DataRepositoryInterface):
                     new_entries = self.compare_and_get_new_entries(site_key, data, key_column)
                     
                     if not new_entries.empty:
+                        # 표준화된 타임스탬프 형식 적용
+                        from datetime import datetime
+                        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        if 'created_at' not in new_entries.columns:
+                            new_entries['created_at'] = timestamp
+                        if 'updated_at' not in new_entries.columns:
+                            new_entries['updated_at'] = timestamp
+                        
                         # INSERT OR IGNORE 방식으로 중복 키 에러 방지
                         try:
                             new_entries.to_sql(table_name, conn, if_exists='append', index=False, method='multi')
@@ -297,6 +305,14 @@ class SQLiteRepository(DataRepositoryInterface):
                         self.logger.info(f"[SQLite] {site_key}: 새로운 데이터 없음")
                 else:
                     # 전체 교체
+                    # 표준화된 타임스탬프 형식 적용
+                    from datetime import datetime
+                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    if 'created_at' not in data.columns:
+                        data['created_at'] = timestamp
+                    if 'updated_at' not in data.columns:
+                        data['updated_at'] = timestamp
+                    
                     data.to_sql(table_name, conn, if_exists='replace', index=False, method='multi')
                     self._update_metadata(conn, site_key, len(data), replace=True)
                     self.logger.info(f"[SQLite] {site_key}: {len(data)}개 항목 전체 저장 완료")
