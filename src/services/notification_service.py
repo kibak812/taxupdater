@@ -490,6 +490,38 @@ class NotificationService:
 
         return report
     
+    async def send_all_sites_notification(self, total_new_count: int, summary: str, session_id: str = None) -> bool:
+        """전체 사이트 크롤링 결과 알림 발송"""
+        try:
+            notification = NotificationData(
+                site_key='all_sites',
+                notification_type='crawl_complete',
+                title=f"전체 사이트 크롤링 완료",
+                message=f"전체 크롤링이 완료되었습니다. {summary}",
+                urgency_level='normal' if total_new_count < 10 else 'high',
+                new_data_count=total_new_count,
+                delivery_channels=['websocket'],
+                metadata={
+                    'session_id': session_id,
+                    'summary': summary,
+                    'total_new_count': total_new_count
+                },
+                expires_at=datetime.now() + timedelta(hours=12)
+            )
+            
+            notification_id = await self._save_notification(notification)
+            
+            if notification_id:
+                await self._send_notification(notification, notification_id)
+                self.logger.info(f"전체 사이트 크롤링 알림 발송: {total_new_count}개")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"전체 사이트 크롤링 알림 발송 실패: {e}")
+            return False
+    
     def create_error_alert(self, site_key: str, error_message: str) -> str:
         """
         에러 알림 메시지 생성
@@ -515,3 +547,56 @@ class NotificationService:
 - 로그 파일 검토
 
 시스템이 자동으로 재시도를 수행합니다."""
+    
+    async def get_notification_stats(self, site_key: str = None) -> Dict[str, Any]:
+        """알림 통계 조회"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # 기본 쿼리 조건
+                where_conditions = []
+                params = []
+                
+                if site_key:
+                    where_conditions.append("site_key = ?")
+                    params.append(site_key)
+                
+                where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
+                
+                # 전체 알림 수
+                cursor.execute(f"SELECT COUNT(*) FROM notification_history {where_clause}", params)
+                total_notifications = cursor.fetchone()[0]
+                
+                # 읽지 않은 알림 수
+                unread_conditions = where_conditions + ["read_at IS NULL"]
+                unread_where = "WHERE " + " AND ".join(unread_conditions)
+                cursor.execute(f"SELECT COUNT(*) FROM notification_history {unread_where}", params)
+                unread_notifications = cursor.fetchone()[0]
+                
+                # 알림 타입별 통계
+                cursor.execute(f"""
+                    SELECT notification_type, COUNT(*) 
+                    FROM notification_history {where_clause}
+                    GROUP BY notification_type
+                """, params)
+                
+                type_stats = dict(cursor.fetchall())
+                
+                return {
+                    "total_notifications": total_notifications,
+                    "unread_notifications": unread_notifications,
+                    "read_notifications": total_notifications - unread_notifications,
+                    "type_breakdown": type_stats,
+                    "site_key": site_key
+                }
+                
+        except Exception as e:
+            self.logger.error(f"알림 통계 조회 실패: {e}")
+            return {
+                "total_notifications": 0,
+                "unread_notifications": 0,
+                "read_notifications": 0,
+                "type_breakdown": {},
+                "error": str(e)
+            }

@@ -157,9 +157,27 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# 새로운 모니터링 시스템 서비스 초기화 (WebSocket 매니저 전달)
-scheduler_service = SchedulerService(crawling_service=crawling_service)
-notification_service = NotificationService(websocket_manager=manager)
+# 새로운 모니터링 시스템 서비스 초기화 (안전한 초기화)
+try:
+    # 데이터베이스 마이그레이션 확인 및 실행
+    from src.database.migrations import DatabaseMigration
+    migration = DatabaseMigration(repository.db_path)
+    migration_status = migration.get_migration_status()
+    
+    if migration_status['migration_needed']:
+        logger.warning("모니터링 시스템 테이블 누락 감지 - 자동 마이그레이션 실행")
+        migration.migrate_to_monitoring_system()
+    
+    # 서비스 초기화 (WebSocket 매니저 전달)
+    scheduler_service = SchedulerService(db_path=repository.db_path, crawling_service=crawling_service)
+    notification_service = NotificationService(db_path=repository.db_path, websocket_manager=manager)
+    logger.info("모니터링 시스템 서비스 초기화 완료")
+    
+except Exception as e:
+    logger.error(f"모니터링 시스템 초기화 실패: {e}")
+    # 안전한 더미 서비스로 대체
+    scheduler_service = None
+    notification_service = None
 
 # 사이트 정보 매핑 (동적으로 생성)
 BASE_SITE_INFO = {
@@ -480,6 +498,9 @@ async def get_statistics():
 async def get_schedules():
     """크롤링 스케줄 목록 조회"""
     try:
+        if not scheduler_service:
+            raise HTTPException(status_code=503, detail="스케줄러 서비스를 사용할 수 없습니다")
+        
         status = scheduler_service.get_schedule_status()
         return status
     except Exception as e:
@@ -501,6 +522,9 @@ async def get_site_schedule(site_key: str):
 async def create_or_update_schedule(request: Request):
     """크롤링 스케줄 생성/수정"""
     try:
+        if not scheduler_service:
+            raise HTTPException(status_code=503, detail="스케줄러 서비스를 사용할 수 없습니다")
+            
         data = await request.json()
         site_key = data.get("site_key")
         cron_expression = data.get("cron_expression")
@@ -716,37 +740,58 @@ async def get_system_status():
     try:
         import sqlite3
         
-        with sqlite3.connect(repository.db_path) as conn:
-            cursor = conn.cursor()
-            
-            # 시스템 상태 조회
-            cursor.execute("""
-                SELECT site_key, component_type, status, last_check, last_success,
-                       last_error, error_message, consecutive_errors, health_score,
-                       uptime_seconds, response_time_ms
-                FROM system_status
-                ORDER BY site_key, component_type
-            """)
-            
-            columns = [desc[0] for desc in cursor.description]
-            system_status = []
-            
-            for row in cursor.fetchall():
-                status_row = dict(zip(columns, row))
-                # 사이트 이름 추가
-                status_row['site_name'] = SITE_INFO.get(status_row['site_key'], {}).get('name', status_row['site_key'])
-                system_status.append(status_row)
-        
-        # 스케줄러 상태 추가
+        # 스케줄러 상태 확인
         scheduler_status = {
-            "scheduler_running": scheduler_service.is_running(),
-            "active_jobs": len(scheduler_service.scheduler.get_jobs()) if scheduler_service.is_running() else 0
+            "scheduler_running": scheduler_service.is_running() if scheduler_service else False,
+            "active_jobs": len(scheduler_service.scheduler.get_jobs()) if scheduler_service and scheduler_service.is_running() else 0,
+            "service_available": scheduler_service is not None
         }
+        
+        # 시스템 상태 테이블 확인
+        system_status = []
+        try:
+            with sqlite3.connect(repository.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # 테이블 존재 확인
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='system_status'")
+                if cursor.fetchone():
+                    # 시스템 상태 조회
+                    cursor.execute("""
+                        SELECT site_key, component_type, status, last_check, last_success,
+                               last_error, error_message, consecutive_errors, health_score,
+                               uptime_seconds, response_time_ms
+                        FROM system_status
+                        ORDER BY site_key, component_type
+                    """)
+                    
+                    columns = [desc[0] for desc in cursor.description]
+                    
+                    for row in cursor.fetchall():
+                        status_row = dict(zip(columns, row))
+                        # 사이트 이름 추가
+                        status_row['site_name'] = SITE_INFO.get(status_row['site_key'], {}).get('name', status_row['site_key'])
+                        system_status.append(status_row)
+                else:
+                    # system_status 테이블이 없으면 기본 상태 반환
+                    for site_key, site_info in SITE_INFO.items():
+                        system_status.append({
+                            'site_key': site_key,
+                            'site_name': site_info['name'],
+                            'component_type': 'crawler',
+                            'status': 'unknown',
+                            'health_score': 50,
+                            'last_check': None,
+                            'error_message': 'system_status 테이블 없음'
+                        })
+        except sqlite3.Error as db_error:
+            logger.warning(f"시스템 상태 DB 조회 실패: {db_error}")
         
         return {
             "system_status": system_status,
             "scheduler_status": scheduler_status,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "monitoring_available": scheduler_service is not None
         }
         
     except Exception as e:
