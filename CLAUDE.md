@@ -1178,3 +1178,83 @@ restoreCollapseState() {
 - **클라우드 배포**: Fly.io (향후 고려사항)
 
 이제 예규판례 모니터링 시스템의 배포 전략이 명확해지고 프로젝트 구조가 더욱 깔끔해졌습니다.
+
+## 🛠️ Fly.io 배포 문제 해결 (2025.07.05)
+
+### 📋 문제 상황
+Fly.io 배포 환경에서 모니터링 기능 관련 API가 500 에러 발생:
+- `GET /api/system-status` - Internal Server Error
+- `POST /api/schedules` - Internal Server Error
+- 레거시 크롤링은 정상 작동
+
+### 🔍 원인 분석
+1. **데이터베이스 테이블 누락**: Fly.io에 모니터링 시스템용 테이블 부재
+2. **서비스 초기화 실패**: 테이블 부재로 SchedulerService, NotificationService 초기화 불가
+3. **API 에러**: 서비스 객체가 None 상태에서 메서드 호출 시도
+
+### ✅ 해결 방안 구현
+
+#### 1. 안전한 서비스 초기화 (`src/web/app.py`)
+```python
+# 새로운 모니터링 시스템 서비스 초기화 (안전한 초기화)
+try:
+    # 데이터베이스 마이그레이션 확인 및 실행
+    from src.database.migrations import DatabaseMigration
+    migration = DatabaseMigration(repository.db_path)
+    migration_status = migration.get_migration_status()
+    
+    if migration_status['migration_needed']:
+        logger.warning("모니터링 시스템 테이블 누락 감지 - 자동 마이그레이션 실행")
+        migration.migrate_to_monitoring_system()
+    
+    # 서비스 초기화 (WebSocket 매니저 전달)
+    scheduler_service = SchedulerService(db_path=repository.db_path, crawling_service=crawling_service)
+    notification_service = NotificationService(db_path=repository.db_path, websocket_manager=manager)
+    logger.info("모니터링 시스템 서비스 초기화 완료")
+    
+except Exception as e:
+    logger.error(f"모니터링 시스템 초기화 실패: {e}")
+    # 안전한 더미 서비스로 대체
+    scheduler_service = None
+    notification_service = None
+```
+
+#### 2. API 엔드포인트 안전성 보장
+모든 모니터링 관련 API에서 서비스 가용성 확인:
+```python
+@app.post("/api/schedules")
+async def create_or_update_schedule(request: Request):
+    try:
+        if not scheduler_service:
+            raise HTTPException(status_code=503, detail="스케줄러 서비스를 사용할 수 없습니다")
+        # ... 실제 로직
+```
+
+#### 3. 자동 마이그레이션 시스템
+서버 시작 시 필요한 테이블 자동 생성:
+- `crawl_schedules`: 크롤링 스케줄 정보
+- `notification_history`: 알림 이력
+- `new_data_log`: 새로운 데이터 로그
+- `system_status`: 시스템 상태 모니터링
+- `crawl_execution_log`: 크롤링 실행 이력
+
+#### 4. 배포용 마이그레이션 스크립트 (`migration_check.py`)
+Fly.io 배포 후 수동 실행 가능한 확인/수정 도구:
+```bash
+# Fly.io 콘솔에서 실행
+fly ssh console
+python migration_check.py
+```
+
+### 🎯 기대 효과
+1. **500 에러 해결**: 모니터링 API 정상 동작
+2. **자동 복구**: 데이터베이스 문제 자동 감지 및 해결
+3. **서비스 연속성**: 일부 기능 실패 시에도 기본 크롤링 유지
+4. **배포 안정성**: Fly.io 환경에서 완전한 모니터링 시스템 작동
+
+### 📝 Fly.io 배포 시 권장 사항
+1. **배포 후 확인**: `migration_check.py` 실행으로 시스템 상태 검증
+2. **로그 모니터링**: Fly.io 로그에서 자동 마이그레이션 실행 결과 확인
+3. **단계적 테스트**: 기본 크롤링 → 모니터링 설정 → 전체 기능 순서로 검증
+
+이제 Fly.io에서도 완전한 예규판례 모니터링 시스템을 안정적으로 사용할 수 있습니다.
