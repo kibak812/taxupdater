@@ -20,6 +20,13 @@ class TaxCrawlerApp {
             // 30초마다 대시보드 새로고침
             setInterval(() => this.loadDashboardData(), 30000);
         }
+
+        // 크롤링 진행현황 로드
+        if (document.getElementById('crawlProgress')) {
+            await this.loadCrawlProgress();
+            // 30초마다 진행현황 새로고침
+            setInterval(() => this.loadCrawlProgress(), 30000);
+        }
         
         // 사이트별 데이터 로드
         if (document.getElementById('siteData')) {
@@ -88,6 +95,7 @@ class TaxCrawlerApp {
             case 'crawl_complete':
                 this.showNotification(`크롤링 완료: ${this.getCrawlChoiceName(data.choice)}`, 'success');
                 this.updateCrawlStatus('완료', 100);
+                this.loadCrawlProgress(); // 진행현황 새로고침
                 this.showCrawlStatusContainer(false, 3000); // 3초 후 숨김
                 // 대시보드 새로고침
                 setTimeout(() => this.loadDashboardData(), 2000);
@@ -371,6 +379,132 @@ class TaxCrawlerApp {
         }
     }
 
+    async startInstantCrawling() {
+        try {
+            console.log('즉시 탐색 시작');
+            
+            // 버튼 비활성화
+            const btn = document.getElementById('instantCrawlBtn');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '⏳ 탐색 중...';
+            }
+            
+            const response = await fetch('/api/crawl/all', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) throw new Error('즉시 탐색 시작 실패');
+            
+            const result = await response.json();
+            this.showNotification('즉시 탐색을 시작했습니다. 진행상황을 확인하세요.', 'success');
+            
+        } catch (error) {
+            console.error('즉시 탐색 오류:', error);
+            this.showNotification('즉시 탐색 시작 실패', 'error');
+        } finally {
+            // 버튼 복원
+            const btn = document.getElementById('instantCrawlBtn');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '🚀 즉시 탐색';
+            }
+        }
+    }
+
+    async loadCrawlProgress() {
+        try {
+            console.log('크롤링 진행현황 로드 중...');
+            
+            const response = await fetch('/api/job-history?limit=10');
+            if (!response.ok) throw new Error('진행현황 로드 실패');
+            
+            const data = await response.json();
+            this.renderCrawlProgress(data.job_history || []);
+            
+        } catch (error) {
+            console.error('진행현황 로드 오류:', error);
+            this.showNotification('진행현황 로드 실패', 'error');
+        }
+    }
+
+    renderCrawlProgress(history) {
+        const container = document.getElementById('crawlProgress');
+        if (!container) return;
+
+        if (history.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📊</div>
+                    <div class="empty-state-title">진행현황 없음</div>
+                    <div class="empty-state-description">아직 크롤링 실행 기록이 없습니다.</div>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = history.map(job => {
+            const startTime = new Date(job.start_time);
+            const timeStr = startTime.toLocaleDateString('ko-KR') + ' ' + 
+                           startTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+            
+            let statusIcon = '●';
+            let statusClass = 'status-success';
+            if (job.status === 'failed') {
+                statusIcon = '×';
+                statusClass = 'status-error';
+            } else if (job.status === 'running') {
+                statusIcon = '◯';
+                statusClass = 'status-running';
+            }
+
+            let resultInfo = '';
+            if (job.total_crawled !== undefined && job.new_count !== undefined) {
+                const duplicates = job.total_crawled - job.new_count;
+                resultInfo = `${job.total_crawled}개 수집, ${job.new_count}개 신규, ${duplicates}개 중복`;
+            }
+
+            return `
+                <div class="timeline-item">
+                    <div class="timeline-icon ${statusClass}">${statusIcon}</div>
+                    <div class="timeline-content">
+                        <div class="timeline-title">${job.site_name} 크롤링 ${job.status === 'success' ? '완료' : job.status === 'failed' ? '실패' : '실행 중'}</div>
+                        ${resultInfo ? `<div class="timeline-description">${resultInfo}</div>` : ''}
+                        <div class="timeline-meta">
+                            <span>실행 시간: ${timeStr}</span>
+                            ${job.error_message ? `<span style="color: #EF4444;">오류: ${job.error_message}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async clearCrawlProgress() {
+        if (!confirm('크롤링 진행현황을 모두 삭제하시겠습니까?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/job-history', {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) throw new Error('진행현황 삭제 실패');
+
+            const result = await response.json();
+            this.showNotification('진행현황이 삭제되었습니다.', 'success');
+            this.loadCrawlProgress(); // 목록 새로고침
+
+        } catch (error) {
+            console.error('진행현황 삭제 오류:', error);
+            this.showNotification('진행현황 삭제 실패', 'error');
+        }
+    }
+
     handleSearchKeypress(event) {
         if (event.key === 'Enter') {
             const searchValue = event.target.value;
@@ -393,10 +527,28 @@ class TaxCrawlerApp {
             allCrawlBtn.addEventListener('click', () => this.startAllCrawling());
         }
         
+        // 즉시 탐색 버튼
+        const instantCrawlBtn = document.getElementById('instantCrawlBtn');
+        if (instantCrawlBtn) {
+            instantCrawlBtn.addEventListener('click', () => this.startInstantCrawling());
+        }
+        
         // 새로고침 버튼
         const refreshBtn = document.getElementById('refreshBtn');
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => this.loadDashboardData());
+        }
+
+        // 진행현황 새로고침 버튼
+        const refreshProgressBtn = document.getElementById('refreshProgressBtn');
+        if (refreshProgressBtn) {
+            refreshProgressBtn.addEventListener('click', () => this.loadCrawlProgress());
+        }
+
+        // 진행현황 삭제 버튼
+        const clearProgressBtn = document.getElementById('clearProgressBtn');
+        if (clearProgressBtn) {
+            clearProgressBtn.addEventListener('click', () => this.clearCrawlProgress());
         }
     }
 

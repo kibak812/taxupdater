@@ -44,6 +44,9 @@
                     <span class="btn-text">🎯 전체 사이트 크롤링</span>
                     <span class="loading" style="display: none;"></span>
                 </button>
+                <button id="instantCrawlBtn" class="btn btn-success">
+                    🚀 즉시 탐색
+                </button>
                 <button id="refreshBtn" class="btn btn-secondary">
                     🔄 대시보드 새로고침
                 </button>
@@ -61,6 +64,27 @@
             </div>
             <div class="progress-container">
                 <div class="progress-bar" id="crawlProgress"></div>
+            </div>
+        </div>
+
+        <!-- 크롤링 진행현황 -->
+        <div class="global-actions">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3>📊 크롤링 진행현황</h3>
+                <div>
+                    <button id="refreshProgressBtn" class="btn btn-primary btn-sm">
+                        🔄 현황 새로고침
+                    </button>
+                    <button id="clearProgressBtn" class="btn btn-outline btn-sm">
+                        🗑️ 전체 삭제
+                    </button>
+                </div>
+            </div>
+            <div id="crawlProgress" class="timeline-container">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📊</div>
+                    <div class="empty-state-title">진행현황 로딩 중...</div>
+                </div>
             </div>
         </div>
 

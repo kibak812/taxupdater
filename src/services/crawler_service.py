@@ -139,8 +139,14 @@ class CrawlingService:
         
         # 전체 크롤링 종합 요약 (choice == "7"인 경우)
         if choice == "7":
-            summary_message = self.notification_service.create_batch_crawling_summary(summary_results)
-            self._show_message(summary_message)
+            # TODO: create_batch_crawling_summary 함수 구현 필요
+            # summary_message = self.notification_service.create_batch_crawling_summary(summary_results)
+            # self._show_message(summary_message)
+            
+            # 임시로 간단한 요약 메시지 생성
+            total_sites = len(summary_results)
+            success_sites = len([r for r in summary_results if r.get('status') == 'success'])
+            self._show_message(f"전체 크롤링 완료: {success_sites}/{total_sites} 사이트 성공")
             
             # 모니터링 상태 보고서도 생성
             repository_stats = {}

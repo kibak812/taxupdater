@@ -280,17 +280,21 @@ class SchedulerService:
                 )
                 success = crawl_result.get('status') == 'success'
                 
-                # 상세 결과를 반환하여 상위에서 사용할 수 있도록 함
+                end_time = datetime.now()
+                duration = int((end_time - start_time).total_seconds())
+                
+                if success:
+                    # 성공 처리
+                    self._handle_crawl_success(site_key, session_id, duration, is_manual, crawl_result)
+                else:
+                    # 실패 처리
+                    error_msg = crawl_result.get('error', '알 수 없는 오류')
+                    self._handle_crawl_failure(site_key, session_id, duration, error_msg)
+                
                 return crawl_result
             else:
                 self.logger.error("크롤링 서비스가 설정되지 않음")
                 raise ValueError("크롤링 서비스가 설정되지 않음")
-            
-            end_time = datetime.now()
-            duration = int((end_time - start_time).total_seconds())
-            
-            # 성공 처리 (예외가 발생하지 않았다면 성공)
-            self._handle_crawl_success(site_key, session_id, duration, is_manual)
             
         except Exception as e:
             # 예외 처리
@@ -519,11 +523,15 @@ class SchedulerService:
             return "신규 데이터 없음"
     
     def _handle_crawl_success(self, site_key: str, session_id: str, 
-                             duration: int, is_manual: bool):
+                             duration: int, is_manual: bool, crawl_result: dict = None):
         """크롤링 성공 처리"""
         try:
             # 새로운 데이터 확인
             new_data_count = self._check_new_data_count(site_key, session_id)
+            
+            # 크롤링 실행 로그 저장
+            self._save_crawl_execution_log(site_key, session_id, duration, 'success', 
+                                         is_manual, crawl_result, new_data_count)
             
             # 스케줄 정보 업데이트
             with sqlite3.connect(self.db_path) as conn:
@@ -559,6 +567,9 @@ class SchedulerService:
                             duration: int, error_message: str):
         """크롤링 실패 처리"""
         try:
+            # 크롤링 실행 로그 저장
+            self._save_crawl_execution_log(site_key, session_id, duration, 'failed', 
+                                         False, None, 0, error_message)
             # 스케줄 정보 업데이트
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute("""
@@ -922,6 +933,69 @@ class SchedulerService:
             self.logger.error(f"작업 이력 조회 실패: {e}")
             return []
     
+    def _save_crawl_execution_log(self, site_key: str, session_id: str, duration: int, 
+                                 status: str, is_manual: bool, crawl_result: dict = None, 
+                                 new_count: int = 0, error_message: str = None):
+        """개별 크롤링 실행 로그 저장"""
+        try:
+            start_time = datetime.now() - timedelta(seconds=duration)
+            end_time = datetime.now()
+            
+            # 사이트 이름 매핑
+            site_names = {
+                "tax_tribunal": "조세심판원",
+                "nts_authority": "국세청(유권해석)",
+                "nts_precedent": "국세청(판례)",
+                "moef": "기획재정부",
+                "mois": "행정안전부", 
+                "bai": "감사원"
+            }
+            
+            # crawl_result에서 상세 정보 추출
+            total_crawled = 0
+            existing_count = 0
+            if crawl_result and 'results' in crawl_result:
+                for result in crawl_result['results']:
+                    if result.get('site_key') == site_key:
+                        total_crawled = result.get('total_crawled', 0)
+                        existing_count = result.get('existing_count', 0)
+                        break
+            
+            # site_results JSON 구성
+            site_results = {
+                site_key: {
+                    'status': status,
+                    'total_crawled': total_crawled,
+                    'new_count': new_count,
+                    'existing_count': existing_count,
+                    'site_name': site_names.get(site_key, site_key)
+                }
+            }
+            
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO crawl_execution_log 
+                    (execution_type, trigger_source, start_time, end_time, 
+                     status, total_sites, total_new_data_count, site_results, error_summary)
+                    VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
+                """, (
+                    'manual' if is_manual else 'scheduled',
+                    'manual' if is_manual else 'scheduler',
+                    start_time.isoformat(),
+                    end_time.isoformat(),
+                    status,
+                    new_count,
+                    json.dumps(site_results),
+                    error_message
+                ))
+                
+                log_id = cursor.lastrowid
+                self.logger.info(f"크롤링 실행 로그 저장됨: {site_key} (ID: {log_id})")
+                
+        except Exception as e:
+            self.logger.error(f"크롤링 실행 로그 저장 실패: {e}")
+
     def clear_job_history(self) -> bool:
         """크롤링 진행현황 모두 삭제"""
         try:

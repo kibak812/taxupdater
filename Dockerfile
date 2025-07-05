@@ -34,10 +34,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # 데이터 디렉토리 생성
-RUN mkdir -p data/backups
+RUN mkdir -p /data/backups
+# 심볼릭 링크 생성 (기존 경로 호환성)
+RUN ln -s /data data
 
 # 포트 노출
-EXPOSE $PORT
+EXPOSE 8080
 
 # 애플리케이션 실행
-CMD python -m uvicorn src.web.app:app --host 0.0.0.0 --port $PORT
+CMD python -m uvicorn src.web.app:app --host 0.0.0.0 --port 8080

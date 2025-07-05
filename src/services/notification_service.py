@@ -489,3 +489,29 @@ class NotificationService:
 ✅ 시스템 상태: 정상 작동 중"""
 
         return report
+    
+    def create_error_alert(self, site_key: str, error_message: str) -> str:
+        """
+        에러 알림 메시지 생성
+        
+        Args:
+            site_key: 사이트 키
+            error_message: 에러 메시지
+            
+        Returns:
+            포맷팅된 에러 알림 메시지
+        """
+        site_name = self.site_names.get(site_key, site_key)
+        
+        return f"""⚠️ 크롤링 오류 발생
+
+🌐 사이트: {site_name}
+❌ 오류 내용: {error_message}
+🕒 발생 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+📝 조치 사항:
+- 사이트 접속 가능 여부 확인
+- 네트워크 연결 상태 점검
+- 로그 파일 검토
+
+시스템이 자동으로 재시도를 수행합니다."""

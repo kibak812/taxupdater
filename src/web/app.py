@@ -995,7 +995,7 @@ async def shutdown_event():
         logger.error(f"스케줄러 종료 실패: {e}")
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8001))
+    port = int(os.environ.get("PORT", 8080))
     uvicorn.run(
         "app:app",
         host="0.0.0.0",
