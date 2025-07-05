@@ -125,3 +125,6 @@ updated_cases/
 # OS
 .DS_Store
 Thumbs.db
+
+# Deployment binaries
+ngrok
