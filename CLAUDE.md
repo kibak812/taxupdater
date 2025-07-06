@@ -1414,3 +1414,103 @@ https://taxupdater-monitor.loca.lt
 - 회사, 집, 외부 어디서든 사용
 
 이제 예규판례 모니터링 시스템이 **진정한 의미의 완전 자동화 플랫폼**으로 완성되었습니다. 복잡한 기술적 장벽 없이 누구나 쉽게 사용할 수 있는 전문가급 도구가 되었습니다.
+
+## 📁 프로젝트 구조 정리 (2025.07.06)
+
+### 🧹 **체계적인 파일 분류 및 정리**
+프로젝트의 유지보수성과 가독성 향상을 위해 루트 디렉토리에 어지럽게 흩어져 있던 파일들을 성격별로 체계적으로 분류하여 정리했습니다.
+
+#### 📂 **새로운 디렉토리 구조**
+```
+taxupdater/
+├── main.py                    # 메인 실행 파일
+├── start_web.py              # 웹서버 시작 파일  
+├── requirements.txt          # 패키지 의존성
+├── run.sh                    # 기본 실행 스크립트
+├── CLAUDE.md                 # 프로젝트 가이드
+├── README.md                 # 프로젝트 설명
+├── docs/                     # 📋 개발 문서들
+│   ├── REFACTORING_PLAN.md
+│   ├── TESTING_GUIDE.md
+│   └── WEB_GUIDE.md
+├── scripts/                  # 🔧 스크립트 파일들
+│   ├── management/           # 시스템 관리 스크립트
+│   │   ├── check_scheduler_status.py
+│   │   ├── check_schedules.py
+│   │   └── fix_db_schema.py
+│   ├── examples/            # 예제/데모 스크립트  
+│   │   ├── example.py
+│   │   └── functional_comparison.py
+│   └── setup/               # 환경 설정 스크립트
+│       ├── setup_local_service.sh
+│       └── setup_localtunnel.sh
+├── tests/                   # 🧪 테스트 파일들
+│   ├── test_functionality.py
+│   ├── test_notification.py
+│   └── test_websocket_notification.py
+├── config/                  # ⚙️ 설정 파일들
+│   └── localtunnel.service
+├── deploy/                  # 🚀 배포 관련 파일들
+│   └── fly.io/             # Fly.io 배포 설정
+│       ├── fly.toml
+│       ├── Dockerfile.fly
+│       ├── migration_check.py
+│       └── README.md
+└── (기존 디렉토리들)
+    ├── src/                # 소스 코드
+    ├── data/               # 데이터베이스 및 백업
+    ├── logs/               # 로그 파일들 (server.log 추가)
+    └── taxupdater_venv/    # 가상환경
+```
+
+### 🎯 **정리 원칙**
+1. **핵심 파일 루트 유지**: 프로젝트 실행과 관리에 필수적인 파일들만 루트에 배치
+2. **기능별 분류**: 관련 기능을 하는 파일들을 논리적으로 그룹화
+3. **직관적 명명**: 디렉토리명만 보고도 내용을 쉽게 파악 가능
+4. **접근성 우선**: 자주 사용하는 파일일수록 접근하기 쉬운 위치에 배치
+
+### 🗑️ **불필요한 파일 정리**
+**삭제된 ngrok 관련 잔재 파일들** (총 11개):
+- `get_ngrok_url.sh`, `ngrok_monitor.sh`, `run_with_ngrok.sh`
+- `ngrok.service`, `ngrok` (바이너리)
+- `install_service.sh`, `taxupdater.service`, `quick_start.sh`
+- `install_service_fixed.sh`, `taxupdater_fixed.service`, `run_in_tmux.sh`
+
+### 📋 **분류별 파일 정리**
+- **📋 문서 파일들**: `docs/` 디렉토리로 이동 (CLAUDE.md, README.md는 루트 유지)
+- **🔧 스크립트 파일들**: `scripts/` 하위에 기능별 세분화
+  - `management/`: 시스템 관리 및 디버깅 스크립트
+  - `examples/`: 예제 및 기능 비교 스크립트  
+  - `setup/`: 환경 설정 및 배포 스크립트
+- **🧪 테스트 파일들**: `tests/` 디렉토리로 통합
+- **⚙️ 설정 파일들**: `config/` 디렉토리로 정리
+- **🚀 배포 파일들**: `deploy/fly.io/` 하위에 체계적으로 정리
+
+### 🎉 **정리 효과**
+1. **가독성 향상**: 루트 디렉토리가 깔끔해져 프로젝트 개요 파악 용이
+2. **유지보수성 개선**: 관련 파일들의 논리적 그룹화로 관리 효율성 증대
+3. **개발 효율성**: 필요한 파일을 빠르게 찾을 수 있는 직관적 구조
+4. **전문성 향상**: 표준적인 프로젝트 구조로 개발 품질 제고
+5. **협업 개선**: 새로운 개발자도 쉽게 프로젝트 구조 파악 가능
+
+### 💡 **주요 명령어 업데이트**
+프로젝트 구조 변경에 따른 주요 명령어들:
+
+```bash
+# 예제 실행 (변경됨)
+python scripts/examples/example.py
+
+# 테스트 실행 (변경됨)  
+python tests/test_functionality.py
+
+# 스케줄러 상태 확인 (변경됨)
+python scripts/management/check_scheduler_status.py
+
+# 환경 설정 (변경됨)
+./scripts/setup/setup_localtunnel.sh
+
+# Fly.io 배포 (변경됨)
+deploy/fly.io/README.md 참조
+```
+
+이제 예규판례 모니터링 시스템이 **체계적이고 전문적인 프로젝트 구조**를 갖추게 되어 개발 효율성과 유지보수성이 크게 향상되었습니다.

@@ -1,0 +1,22 @@
+[Unit]
+Description=LocalTunnel 서비스 (고정 URL)
+After=taxupdater.service
+Wants=taxupdater.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/kibaek/claude-dev/taxupdater
+
+# localtunnel 실행 (고정 서브도메인)
+ExecStart=/usr/local/bin/lt --port 8001 --subdomain taxupdater-monitor
+
+# 자동 재시작
+Restart=always
+RestartSec=5
+
+# 로그
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
