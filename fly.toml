@@ -7,8 +7,7 @@ app = 'taxupdater'
 primary_region = 'sin'
 
 [build]
-  dockerfile = "./Dockerfile"
-  context = "."
+  dockerfile = "Dockerfile.fly"
 
 [http_service]
   internal_port = 8080
