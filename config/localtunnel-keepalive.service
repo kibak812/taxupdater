@@ -1,0 +1,36 @@
+[Unit]
+Description=LocalTunnel 서비스 with Keep-Alive (고정 URL)
+After=network-online.target taxupdater.service
+Wants=network-online.target taxupdater.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/kibaek/claude-dev/taxupdater
+
+# Environment variables for stability
+Environment="NODE_ENV=production"
+Environment="LT_SUBDOMAIN=taxupdater-monitor"
+
+# LocalTunnel with keep-alive wrapper
+ExecStart=/bin/bash -c 'while true; do /home/kibaek/.npm-global/bin/lt --port 8001 --subdomain taxupdater-monitor --print-requests; sleep 2; done'
+
+# Aggressive restart policy
+Restart=always
+RestartSec=3
+StartLimitInterval=0
+StartLimitBurst=0
+
+# Resource limits
+CPUQuota=50%
+MemoryLimit=512M
+
+# Kill timeout
+TimeoutStopSec=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=localtunnel
+
+[Install]
+WantedBy=default.target

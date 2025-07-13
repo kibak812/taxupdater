@@ -1,0 +1,19 @@
+[Unit]
+Description=LocalTunnel Connection Monitor
+After=localtunnel.service
+Wants=localtunnel.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/kibaek/claude-dev/taxupdater
+ExecStart=/usr/bin/python3 /home/kibaek/claude-dev/taxupdater/scripts/management/localtunnel_monitor.py
+
+Restart=always
+RestartSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=localtunnel-monitor
+
+[Install]
+WantedBy=default.target
