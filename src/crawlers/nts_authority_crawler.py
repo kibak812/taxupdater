@@ -11,6 +11,7 @@ from typing import Optional
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.crawlers.base_crawler import BaseCrawler
 from src.config.settings import URLS, DATA_COLUMNS, KEY_COLUMNS
+from src.utils.link_generator import generate_nts_search_link
 
 
 class NTSAuthorityCrawler(BaseCrawler):
@@ -112,20 +113,9 @@ class NTSAuthorityCrawler(BaseCrawler):
         return total_cases
     
     def _extract_data(self, driver, progress_callback) -> list:
-        """JavaScript를 사용하여 데이터 추출"""
+        """간소화된 JavaScript를 사용하여 기본 데이터 추출"""
         js_script = """
         const items = document.querySelectorAll("#bdltCtl > li");
-        
-        // nav 요소들로부터 ntstDcmId 매핑 구성
-        const navElements = document.querySelectorAll("nav [data-ntstdcmid]");
-        const navMap = new Map();
-        navElements.forEach((navEl) => {
-            const navTitle = navEl.textContent.trim();
-            const ntstDcmId = navEl.getAttribute("data-ntstdcmid");
-            if (navTitle && ntstDcmId) {
-                navMap.set(navTitle, ntstDcmId);
-            }
-        });
         
         const result = Array.from(items).map((item, index) => {
             try {
@@ -134,33 +124,7 @@ class NTSAuthorityCrawler(BaseCrawler):
                 const docNumber = item.querySelector("ul.subs_detail li strong").textContent.trim();
                 const title = item.querySelector("a.subs_title strong").textContent.trim();
                 
-                // ntstDcmId 추출
-                let ntstDcmId = "";
-                let link = "";
-                
-                // onclick 속성에서 추출 시도
-                const clickableElement = item.querySelector("a.subs_title");
-                if (clickableElement) {
-                    const onclickAttr = clickableElement.getAttribute("onclick");
-                    if (onclickAttr && onclickAttr.includes("ntstDcmId")) {
-                        const match = onclickAttr.match(/ntstDcmId['"]\s*:\s*['"]([^'"]+)['"]/);
-                        if (match) {
-                            ntstDcmId = match[1];
-                        }
-                    }
-                }
-                
-                // navMap에서 제목으로 매칭
-                if (!ntstDcmId && navMap.has(title)) {
-                    ntstDcmId = navMap.get(title);
-                }
-                
-                // 링크 생성
-                if (ntstDcmId) {
-                    link = `https://taxlaw.nts.go.kr/qt/USEQTA002P.do?ntstDcmId=${ntstDcmId}&wnkey=94b6d019-af7d-4f9c-9863-8b183e27c1ff`;
-                }
-                
-                return {taxLabel, productionDate, docNumber, title, link};
+                return {taxLabel, productionDate, docNumber, title};
             } catch (e) {
                 return {error: e.toString()};
             }
@@ -184,12 +148,16 @@ class NTSAuthorityCrawler(BaseCrawler):
             doc_number = item.get('docNumber', '')
             if doc_number and doc_number not in doc_numbers_set:
                 doc_numbers_set.add(doc_number)
+                
+                # 문서번호를 사용하여 검색 링크 생성
+                search_link = generate_nts_search_link(doc_number, "authority")
+                
                 data.append({
                     "세목": item.get('taxLabel', ''),
                     "생산일자": item.get('productionDate', ''),
                     "문서번호": doc_number,
                     "제목": item.get('title', ''),
-                    "링크": item.get('link', '')
+                    "링크": search_link or ''
                 })
         
         df = pd.DataFrame(data, columns=DATA_COLUMNS[self.site_key])
