@@ -47,6 +47,20 @@ class ExpertDataTable {
         
         this.searchTimeout = null;
         this.data = [];
+        this.rawData = [];
+        this.allData = [];  // 전체 데이터 저장
+        this.filteredData = [];  // 필터링된 데이터
+        
+        // 필터 상태
+        this.filters = {
+            taxCategory: '',
+            decisionType: ''
+        };
+        this.availableFilters = {
+            taxCategory: new Set(),
+            decisionType: new Set()
+        };
+        this.isFiltered = false;
         
         this.init();
     }
@@ -103,6 +117,27 @@ class ExpertDataTable {
             this.exportData();
         });
         
+        // Filter toggle
+        document.getElementById('filterToggle')?.addEventListener('click', () => {
+            this.toggleFilterPanel();
+        });
+        
+        // Filter controls
+        document.getElementById('taxCategorySelect')?.addEventListener('change', (e) => {
+            this.filters.taxCategory = e.target.value;
+            this.applyFilters();
+        });
+        
+        document.getElementById('decisionTypeSelect')?.addEventListener('change', (e) => {
+            this.filters.decisionType = e.target.value;
+            this.applyFilters();
+        });
+        
+        // Clear filters
+        document.getElementById('clearFiltersBtn')?.addEventListener('click', () => {
+            this.clearFilters();
+        });
+        
         // 테이블 헤더 정렬은 updateTableHeader에서 동적으로 설정됨
     }
     
@@ -148,42 +183,80 @@ class ExpertDataTable {
         try {
             this.showLoadingState();
             
-            let url = `/api/sites/${this.siteKey}/data?page=${this.currentPage}&limit=${this.itemsPerPage}&search=${encodeURIComponent(this.searchQuery)}`;
-            
-            // 필터 파라미터 추가
-            if (this.filterType) {
-                url += `&filter=${this.filterType}`;
-                if (this.filterDays) {
-                    url += `&days=${this.filterDays}`;
-                }
-                if (this.filterStartDate && this.filterEndDate) {
-                    url += `&start=${this.filterStartDate}&end=${this.filterEndDate}`;
-                }
+            // 필터가 적용된 경우 전체 데이터 로드, 그렇지 않으면 페이지별 로드
+            if (this.isFiltered) {
+                await this.loadAllDataForFiltering();
+            } else {
+                await this.loadPagedData();
             }
-            
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            const result = await response.json();
-            
-            this.data = result.data || [];
-            this.totalCount = result.pagination?.total_count || 0;
-            this.totalPages = result.pagination?.total_pages || 0;
-            
-            this.updateTableHeader();
-            this.updateFilterStatus();
-            this.sortData();
-            this.renderTable();
-            this.renderPagination();
             
         } catch (error) {
             console.error('Failed to load data:', error);
             this.showErrorState();
             this.showToast('로드 오류', 'error', '데이터 로드에 실패했습니다. 다시 시도해주세요.');
         }
+    }
+    
+    async loadPagedData() {
+        let url = `/api/sites/${this.siteKey}/data?page=${this.currentPage}&limit=${this.itemsPerPage}&search=${encodeURIComponent(this.searchQuery)}`;
+        
+        // 필터 파라미터 추가
+        if (this.filterType) {
+            url += `&filter=${this.filterType}`;
+            if (this.filterDays) {
+                url += `&days=${this.filterDays}`;
+            }
+            if (this.filterStartDate && this.filterEndDate) {
+                url += `&start=${this.filterStartDate}&end=${this.filterEndDate}`;
+            }
+        }
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        this.rawData = result.data || [];
+        this.data = this.rawData;
+        this.totalCount = result.pagination?.total_count || 0;
+        this.totalPages = result.pagination?.total_pages || 0;
+        
+        this.updateTableHeader();
+        this.updateFilterStatus();
+        this.setupFilters();
+        this.renderTable();
+        this.renderPagination();
+    }
+    
+    async loadAllDataForFiltering() {
+        let url = `/api/sites/${this.siteKey}/data?page=1&limit=10000&search=${encodeURIComponent(this.searchQuery)}`;
+        
+        // 필터 파라미터 추가
+        if (this.filterType) {
+            url += `&filter=${this.filterType}`;
+            if (this.filterDays) {
+                url += `&days=${this.filterDays}`;
+            }
+            if (this.filterStartDate && this.filterEndDate) {
+                url += `&start=${this.filterStartDate}&end=${this.filterEndDate}`;
+            }
+        }
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        this.allData = result.data || [];
+        this.updateTableHeader();
+        this.setupFilters();
+        this.applyFilters();
     }
     
     sortData() {
@@ -316,6 +389,20 @@ class ExpertDataTable {
                 description = '이 소스에서 수집된 ';
             }
             
+            // 필터 조건 추가
+            const activeFilters = [];
+            if (this.filters.taxCategory) {
+                activeFilters.push(`세목: ${this.filters.taxCategory}`);
+            }
+            if (this.filters.decisionType) {
+                activeFilters.push(`유형: ${this.filters.decisionType}`);
+            }
+            
+            if (activeFilters.length > 0) {
+                title += ` (${activeFilters.join(', ')})`;
+                description += `${activeFilters.join(', ')} 조건으로 필터링된 `;
+            }
+            
             // 검색 조건 추가
             if (this.searchQuery) {
                 title += ' (검색 결과)';
@@ -328,7 +415,7 @@ class ExpertDataTable {
             descriptionElement.textContent = description;
             
             // 필터가 적용된 경우 "전체 데이터 보기" 링크 추가
-            if (this.filterType) {
+            if (this.filterType || this.isFiltered) {
                 const viewAllLink = document.createElement('a');
                 viewAllLink.href = `/data/${this.siteKey}`;
                 viewAllLink.textContent = ' 전체 데이터 보기 →';
@@ -644,12 +731,7 @@ class ExpertDataTable {
         container.appendChild(pageInfo);
     }
     
-    goToPage(page) {
-        if (page < 1 || page > this.totalPages || page === this.currentPage) return;
-        
-        this.currentPage = page;
-        this.loadData();
-    }
+    // goToPage 메서드는 위에서 이미 수정됨
     
     showLoadingState() {
         this.hideAllStates();
@@ -740,6 +822,176 @@ class ExpertDataTable {
         });
         
         return csvRows.join('\n');
+    }
+    
+    toggleFilterPanel() {
+        const panel = document.getElementById('filterPanel');
+        const toggle = document.getElementById('filterToggle');
+        
+        if (panel.style.display === 'none' || !panel.style.display) {
+            panel.style.display = 'block';
+            toggle.classList.add('active');
+        } else {
+            panel.style.display = 'none';
+            toggle.classList.remove('active');
+        }
+    }
+    
+    setupFilters() {
+        // 필터 패널 표시 여부 결정
+        const panel = document.getElementById('filterPanel');
+        const taxCategoryFilter = document.getElementById('taxCategoryFilter');
+        const decisionTypeFilter = document.getElementById('decisionTypeFilter');
+        const filterToggle = document.getElementById('filterToggle');
+        
+        if (this.siteKey === 'tax_tribunal') {
+            // 조세심판원: 세목, 유형 필터 모두 표시
+            this.populateFilterOptions();
+            taxCategoryFilter.style.display = 'block';
+            decisionTypeFilter.style.display = 'block';
+            filterToggle.style.display = 'flex';
+        } else if (this.siteKey === 'nts_authority') {
+            // 국세청 유권해석: 세목 필터만 표시
+            this.populateFilterOptions();
+            taxCategoryFilter.style.display = 'block';
+            decisionTypeFilter.style.display = 'none';
+            filterToggle.style.display = 'flex';
+        } else {
+            // 기타 사이트: 필터 숨김
+            if (filterToggle) filterToggle.style.display = 'none';
+            return;
+        }
+    }
+    
+    populateFilterOptions() {
+        const taxCategorySelect = document.getElementById('taxCategorySelect');
+        const decisionTypeSelect = document.getElementById('decisionTypeSelect');
+        
+        if (!taxCategorySelect || !decisionTypeSelect) return;
+        
+        // 기존 옵션 제거 (첫 번째 옵션 제외)
+        while (taxCategorySelect.options.length > 1) {
+            taxCategorySelect.remove(1);
+        }
+        while (decisionTypeSelect.options.length > 1) {
+            decisionTypeSelect.remove(1);
+        }
+        
+        // 사용 가능한 필터 값 수집
+        this.availableFilters.taxCategory.clear();
+        this.availableFilters.decisionType.clear();
+        
+        const sourceData = this.isFiltered ? this.allData : this.rawData;
+        sourceData.forEach(item => {
+            if (item['세목']) {
+                this.availableFilters.taxCategory.add(item['세목']);
+            }
+            if (item['유형']) {
+                this.availableFilters.decisionType.add(item['유형']);
+            }
+        });
+        
+        // 세목 옵션 추가
+        Array.from(this.availableFilters.taxCategory).sort().forEach(category => {
+            const option = document.createElement('option');
+            option.value = category;
+            option.textContent = category;
+            taxCategorySelect.appendChild(option);
+        });
+        
+        // 유형 옵션 추가
+        Array.from(this.availableFilters.decisionType).sort().forEach(type => {
+            const option = document.createElement('option');
+            option.value = type;
+            option.textContent = type;
+            decisionTypeSelect.appendChild(option);
+        });
+    }
+    
+    applyFilters() {
+        // 필터 적용 여부 확인
+        const hasFilters = this.filters.taxCategory || this.filters.decisionType;
+        
+        if (!hasFilters) {
+            // 필터가 없으면 일반 페이지 모드로 전환
+            this.isFiltered = false;
+            this.currentPage = 1;
+            this.loadData();
+            return;
+        }
+        
+        // 필터가 있으면 필터 모드로 전환
+        if (!this.isFiltered) {
+            this.isFiltered = true;
+            this.currentPage = 1;
+            this.loadData();
+            return;
+        }
+        
+        // 이미 필터 모드인 경우 클라이언트 사이드에서 필터링
+        let filteredData = [...this.allData];
+        
+        // 세목 필터 적용
+        if (this.filters.taxCategory) {
+            filteredData = filteredData.filter(item => 
+                item['세목'] === this.filters.taxCategory
+            );
+        }
+        
+        // 유형 필터 적용
+        if (this.filters.decisionType) {
+            filteredData = filteredData.filter(item => 
+                item['유형'] === this.filters.decisionType
+            );
+        }
+        
+        this.filteredData = filteredData;
+        this.updatePaginationForFiltered();
+        this.renderCurrentPage();
+        this.updateFilterStatus();
+    }
+    
+    updatePaginationForFiltered() {
+        this.totalCount = this.filteredData.length;
+        this.totalPages = Math.ceil(this.totalCount / this.itemsPerPage);
+        if (this.currentPage > this.totalPages) {
+            this.currentPage = 1;
+        }
+    }
+    
+    renderCurrentPage() {
+        const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+        const endIndex = startIndex + this.itemsPerPage;
+        this.data = this.filteredData.slice(startIndex, endIndex);
+        
+        this.sortData();
+        this.renderTable();
+        this.renderPagination();
+    }
+    
+    goToPage(page) {
+        if (page < 1 || page > this.totalPages || page === this.currentPage) return;
+        
+        this.currentPage = page;
+        
+        if (this.isFiltered) {
+            this.renderCurrentPage();
+        } else {
+            this.loadData();
+        }
+    }
+    
+    clearFilters() {
+        this.filters.taxCategory = '';
+        this.filters.decisionType = '';
+        
+        const taxCategorySelect = document.getElementById('taxCategorySelect');
+        const decisionTypeSelect = document.getElementById('decisionTypeSelect');
+        
+        if (taxCategorySelect) taxCategorySelect.value = '';
+        if (decisionTypeSelect) decisionTypeSelect.value = '';
+        
+        this.applyFilters();
     }
     
     showToast(title, type, message) {

@@ -318,6 +318,11 @@ class NotificationService:
                 if await self._send_websocket_notification(notification, notification_id):
                     success_channels.append('websocket')
             
+            # Push 알림 (브라우저에서 처리하므로 성공으로 간주)
+            if 'push' in channels:
+                success_channels.append('push')
+                self.logger.info(f"Push 알림 채널 활성화: {notification_id}")
+            
             # 상태 업데이트
             status = 'sent' if success_channels else 'failed'
             

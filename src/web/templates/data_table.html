@@ -231,6 +231,128 @@
             color: var(--color-danger);
         }
         
+        .filter-panel {
+            background: white;
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--color-gray-200);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .filter-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .filter-header h3 {
+            margin: 0;
+            font-size: var(--font-size-lg);
+            font-weight: 600;
+            color: var(--color-gray-900);
+        }
+        
+        .filter-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--spacing-md);
+        }
+        
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-xs);
+        }
+        
+        .filter-group label {
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+            color: var(--color-gray-700);
+        }
+        
+        .filter-select {
+            padding: var(--spacing-sm);
+            border: 1px solid var(--color-gray-300);
+            border-radius: var(--radius-md);
+            font-size: var(--font-size-sm);
+            background: white;
+            cursor: pointer;
+        }
+        
+        .filter-select:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+        
+        .filter-toggle {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            color: var(--color-primary);
+            cursor: pointer;
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .filter-toggle:hover {
+            color: var(--color-primary-dark);
+        }
+        
+        .filter-toggle svg {
+            transition: transform 0.2s;
+        }
+        
+        .filter-toggle.active svg {
+            transform: rotate(180deg);
+        }
+        
+        .tax-category, .decision-type {
+            display: inline-block;
+            padding: var(--spacing-xs) var(--spacing-sm);
+            background: var(--color-gray-100);
+            color: var(--color-gray-700);
+            border-radius: var(--radius-sm);
+            font-size: var(--font-size-xs);
+            font-weight: 500;
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .active-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-xs);
+            margin-top: var(--spacing-sm);
+        }
+        
+        .active-filter {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+            padding: var(--spacing-xs) var(--spacing-sm);
+            background: var(--color-primary);
+            color: white;
+            border-radius: var(--radius-sm);
+            font-size: var(--font-size-xs);
+            font-weight: 500;
+        }
+        
+        .active-filter button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: var(--font-size-xs);
+            padding: 0;
+            margin-left: var(--spacing-xs);
+        }
+        
         @media (max-width: 768px) {
             .data-controls {
                 flex-direction: column;
@@ -243,6 +365,10 @@
             
             .data-table {
                 min-width: 800px;
+            }
+            
+            .filter-content {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -298,6 +424,15 @@
                     <input type="text" class="search-input" id="searchInput" placeholder="문서번호, 제목, 내용으로 검색...">
                 </div>
                 <div class="section-actions">
+                    <div class="filter-toggle" id="filterToggle">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M19 14l-3 3-3-3m0 0V4m6 6H10m4 10l-3-3-3 3m0 0V10m6 6H4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        필터
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
                     <button class="btn btn-outline btn-sm" id="exportBtn">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -310,6 +445,28 @@
                         </svg>
                         새로고침
                     </button>
+                </div>
+            </div>
+
+            <!-- Filter Panel -->
+            <div class="filter-panel" id="filterPanel" style="display: none;">
+                <div class="filter-header">
+                    <h3>필터</h3>
+                    <button class="btn btn-ghost btn-sm" id="clearFiltersBtn">모두 지우기</button>
+                </div>
+                <div class="filter-content">
+                    <div class="filter-group" id="taxCategoryFilter" style="display: none;">
+                        <label for="taxCategorySelect">세목</label>
+                        <select id="taxCategorySelect" class="filter-select">
+                            <option value="">전체</option>
+                        </select>
+                    </div>
+                    <div class="filter-group" id="decisionTypeFilter" style="display: none;">
+                        <label for="decisionTypeSelect">유형</label>
+                        <select id="decisionTypeSelect" class="filter-select">
+                            <option value="">전체</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 

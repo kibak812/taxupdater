@@ -160,6 +160,51 @@
 
         <!-- 시스템 상태 탭 -->
         <div id="system-tab" class="tab-content">
+            <!-- 알림 설정 섹션 -->
+            <div class="dashboard-section">
+                <h2>🔔 알림 설정</h2>
+                <div class="notification-settings-container">
+                    <div class="notification-setting-card">
+                        <div class="notification-setting-header">
+                            <h3>브라우저 푸시 알림</h3>
+                            <div class="notification-setting-toggle">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="notificationToggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="notification-setting-body">
+                            <p>새로운 데이터가 발견될 때 브라우저 알림을 받습니다. 브라우저가 백그라운드에 있을 때도 알림을 받을 수 있습니다.</p>
+                            <div class="notification-permission-status">
+                                <span class="permission-label">권한 상태:</span>
+                                <span id="notificationPermissionStatus" class="notification-status">확인 중...</span>
+                                <button id="requestNotificationPermissionBtn" class="btn btn-sm btn-primary" style="display: none;">
+                                    권한 요청
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="notification-setting-card">
+                        <div class="notification-setting-header">
+                            <h3>WebSocket 실시간 알림</h3>
+                            <div class="notification-setting-status">
+                                <span class="status-indicator active"></span>
+                                <span>활성화됨</span>
+                            </div>
+                        </div>
+                        <div class="notification-setting-body">
+                            <p>웹페이지가 열려있을 때 실시간으로 토스트 알림을 표시합니다. 이 기능은 항상 활성화되어 있습니다.</p>
+                            <div class="websocket-status">
+                                <span class="connection-indicator" id="notificationWebSocketStatus"></span>
+                                <span id="notificationWebSocketText">연결 상태 확인 중...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <div class="dashboard-section">
                 <h2>⚙️ 시스템 상태</h2>
                 <div class="system-status-grid" id="systemStatusGrid">
