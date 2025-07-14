@@ -206,6 +206,45 @@
             animation: none;
         }
         
+        /* 브라우저 알림 권한 설정 스타일 */
+        .notification-permission-info {
+            padding: var(--spacing-md);
+            background: var(--color-gray-50);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--color-gray-200);
+        }
+        
+        .permission-status-row {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+            margin-top: var(--spacing-sm);
+        }
+        
+        .notification-status {
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+            padding: var(--spacing-xs) var(--spacing-sm);
+            border-radius: var(--radius-sm);
+            background: var(--color-gray-100);
+            color: var(--color-gray-700);
+        }
+        
+        .notification-status.granted {
+            background: rgba(5, 150, 105, 0.1);
+            color: var(--color-success);
+        }
+        
+        .notification-status.denied {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--color-error);
+        }
+        
+        .notification-status.default {
+            background: rgba(251, 191, 36, 0.1);
+            color: var(--color-warning);
+        }
+        
         @media (max-width: 768px) {
             .settings-section {
                 padding: var(--spacing-lg);
@@ -322,11 +361,39 @@
                 <h3>알림 설정</h3>
                 <p>새로운 데이터에 대한 알림을 언제 어떻게 받을지 설정합니다.</p>
                 
+                <!-- 브라우저 푸시 알림 -->
                 <div class="form-group">
                     <div class="site-item">
                         <div class="site-info">
-                            <div class="site-name">실시간 알림</div>
-                            <div class="site-status">새로운 데이터에 대한 브라우저 알림 표시</div>
+                            <div class="site-name">브라우저 푸시 알림</div>
+                            <div class="site-status">브라우저가 백그라운드에 있을 때도 새로운 데이터 알림을 받습니다</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" class="toggle-input" id="browserNotificationToggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- 브라우저 알림 권한 상태 -->
+                <div class="form-group" id="notificationPermissionGroup">
+                    <div class="notification-permission-info">
+                        <span class="form-label">브라우저 알림 권한 상태</span>
+                        <div class="permission-status-row">
+                            <span id="browserNotificationStatus" class="notification-status">확인 중...</span>
+                            <button id="requestBrowserNotificationBtn" class="btn btn-primary btn-sm" style="display: none;">
+                                권한 요청
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- WebSocket 실시간 알림 -->
+                <div class="form-group">
+                    <div class="site-item">
+                        <div class="site-info">
+                            <div class="site-name">WebSocket 실시간 알림</div>
+                            <div class="site-status">웹페이지가 열려있을 때 실시간으로 토스트 알림을 표시합니다</div>
                         </div>
                         <label class="toggle-switch">
                             <input type="checkbox" class="toggle-input" id="realtimeNotifications" checked>

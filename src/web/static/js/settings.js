@@ -34,11 +34,16 @@ class ExpertSettings {
         this.currentSettings = { ...this.defaultSettings };
         this.siteSchedules = {};
         
+        // 브라우저 알림 관련 설정
+        this.browserNotificationEnabled = this.loadNotificationSetting();
+        this.notificationPermission = 'default';
+        
         this.init();
     }
     
     init() {
         this.setupEventListeners();
+        this.initBrowserNotifications();
         this.loadInitialData();
         
         console.log('전문가 설정 초기화 완료');
@@ -58,6 +63,16 @@ class ExpertSettings {
         // Scheduler toggle
         document.getElementById('toggleSchedulerBtn')?.addEventListener('click', () => {
             this.toggleScheduler();
+        });
+        
+        // 브라우저 알림 토글
+        document.getElementById('browserNotificationToggle')?.addEventListener('change', (e) => {
+            this.toggleBrowserNotifications(e.target.checked);
+        });
+        
+        // 브라우저 알림 권한 요청
+        document.getElementById('requestBrowserNotificationBtn')?.addEventListener('click', () => {
+            this.requestNotificationPermission();
         });
         
         // Form inputs change detection
@@ -471,6 +486,125 @@ class ExpertSettings {
             saveBtn.textContent = '설정 저장';
             saveBtn.classList.remove('btn-warning');
             saveBtn.classList.add('btn-primary');
+        }
+    }
+    
+    // 브라우저 알림 관련 메서드들
+    async initBrowserNotifications() {
+        // 브라우저 알림 지원 여부 확인
+        if (!('Notification' in window)) {
+            console.warn('브라우저에서 알림을 지원하지 않습니다');
+            this.updateNotificationUI('unsupported');
+            return;
+        }
+        
+        // 현재 권한 상태 확인
+        this.notificationPermission = Notification.permission;
+        console.log('브라우저 알림 권한 상태:', this.notificationPermission);
+        
+        // UI 업데이트
+        this.updateNotificationUI(this.notificationPermission);
+        
+        // 권한이 있고 설정이 활성화되어 있으면 알림 준비
+        if (this.notificationPermission === 'granted' && this.browserNotificationEnabled) {
+            console.log('브라우저 알림 활성화됨');
+        }
+    }
+    
+    async requestNotificationPermission() {
+        if (!('Notification' in window)) {
+            this.showToast('알림 지원 안됨', 'error', '브라우저에서 알림을 지원하지 않습니다');
+            return;
+        }
+        
+        try {
+            const permission = await Notification.requestPermission();
+            this.notificationPermission = permission;
+            this.updateNotificationUI(permission);
+            
+            if (permission === 'granted') {
+                this.showToast('알림 권한 허용', 'success', '브라우저 알림이 활성화되었습니다');
+                // 권한을 받으면 자동으로 알림 활성화
+                this.browserNotificationEnabled = true;
+                this.saveNotificationSetting(true);
+            } else {
+                this.showToast('알림 권한 거부', 'warning', '브라우저 알림을 사용할 수 없습니다');
+                this.browserNotificationEnabled = false;
+                this.saveNotificationSetting(false);
+            }
+        } catch (error) {
+            console.error('알림 권한 요청 실패:', error);
+            this.showToast('권한 요청 실패', 'error', '알림 권한 요청 중 오류가 발생했습니다');
+        }
+    }
+    
+    toggleBrowserNotifications(enabled) {
+        this.browserNotificationEnabled = enabled;
+        this.saveNotificationSetting(enabled);
+        
+        if (enabled && this.notificationPermission !== 'granted') {
+            // 권한이 없으면 요청
+            this.requestNotificationPermission();
+        } else {
+            this.showToast(
+                enabled ? '브라우저 알림 활성화' : '브라우저 알림 비활성화',
+                'info',
+                enabled ? '새로운 데이터 발견 시 브라우저 알림을 받습니다' : '브라우저 알림이 비활성화되었습니다'
+            );
+        }
+    }
+    
+    updateNotificationUI(permission) {
+        const toggle = document.getElementById('browserNotificationToggle');
+        const permissionBtn = document.getElementById('requestBrowserNotificationBtn');
+        const statusElement = document.getElementById('browserNotificationStatus');
+        
+        if (toggle) {
+            toggle.checked = this.browserNotificationEnabled;
+            toggle.disabled = permission === 'denied' || permission === 'unsupported';
+        }
+        
+        if (permissionBtn) {
+            permissionBtn.style.display = permission === 'default' ? 'inline-block' : 'none';
+        }
+        
+        if (statusElement) {
+            statusElement.className = `notification-status ${permission}`;
+            
+            switch (permission) {
+                case 'granted':
+                    statusElement.textContent = '허용됨';
+                    break;
+                case 'denied':
+                    statusElement.textContent = '거부됨';
+                    break;
+                case 'default':
+                    statusElement.textContent = '미설정';
+                    break;
+                case 'unsupported':
+                    statusElement.textContent = '지원 안됨';
+                    break;
+                default:
+                    statusElement.textContent = '확인 중...';
+            }
+        }
+    }
+    
+    loadNotificationSetting() {
+        try {
+            const saved = localStorage.getItem('taxupdater_browser_notifications');
+            return saved ? JSON.parse(saved) : false;
+        } catch (error) {
+            console.error('알림 설정 로드 실패:', error);
+            return false;
+        }
+    }
+    
+    saveNotificationSetting(enabled) {
+        try {
+            localStorage.setItem('taxupdater_browser_notifications', JSON.stringify(enabled));
+        } catch (error) {
+            console.error('알림 설정 저장 실패:', error);
         }
     }
     
