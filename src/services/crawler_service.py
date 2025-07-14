@@ -277,6 +277,15 @@ class CrawlingService:
                 )
                 
                 self.logger.info(f"    최종 새 항목: {len(new_entries)}개")
+                
+                # NTS 크롤러의 경우 새로운 데이터에만 링크 생성
+                if not new_entries.empty and crawler_key in ['nts_authority', 'nts_precedent']:
+                    self.logger.info(f"    {crawler_key}: 새로운 데이터에 대해 링크 생성 중...")
+                    if hasattr(crawler, 'generate_links_for_new_data'):
+                        new_entries = crawler.generate_links_for_new_data(new_entries)
+                        self.logger.info(f"    {crawler_key}: 링크 생성 완료")
+                    else:
+                        self.logger.warning(f"    {crawler_key}: generate_links_for_new_data 메소드가 없음")
             
             # 4단계: 데이터 저장 및 백업
             self.logger.info("[4/4] 데이터 저장 및 백업...")

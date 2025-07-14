@@ -148,6 +148,12 @@ class BaseCrawler(CrawlerInterface):
         
         return data
     
+    def generate_links_for_new_data(self, new_data: pd.DataFrame) -> pd.DataFrame:
+        """새로운 데이터에 대해 링크 생성 (기본 구현은 비어있음)"""
+        # 기본적으로는 아무것도 하지 않음
+        # 각 크롤러에서 필요에 따라 오버라이드
+        return new_data
+    
     def log_crawler_start(self) -> None:
         """크롤러 시작 로깅"""
         self.logger.info(f"[{self.site_name}] 크롤링 시작")
