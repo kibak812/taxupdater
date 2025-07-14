@@ -251,6 +251,26 @@ class ExpertDataTable {
                 <th class="sortable" data-column="decision_date">결정일</th>
                 <th class="sortable" data-column="collected_date">수집일</th>
             `;
+        } else if (this.siteKey === 'nts_authority') {
+            // 국세청 유권해석: 세목 컬럼 추가
+            thead.innerHTML = `
+                <th class="sortable" data-column="organization">기관</th>
+                <th class="sortable" data-column="tax_category">세목</th>
+                <th class="sortable" data-column="document_number">문서번호</th>
+                <th class="sortable" data-column="title">제목</th>
+                <th class="sortable" data-column="published_date">게시일</th>
+                <th class="sortable" data-column="collected_date">수집일</th>
+            `;
+        } else if (this.siteKey === 'mois') {
+            // 행정안전부: 세목 컬럼 추가
+            thead.innerHTML = `
+                <th class="sortable" data-column="organization">기관</th>
+                <th class="sortable" data-column="tax_category">세목</th>
+                <th class="sortable" data-column="document_number">문서번호</th>
+                <th class="sortable" data-column="title">제목</th>
+                <th class="sortable" data-column="published_date">게시일</th>
+                <th class="sortable" data-column="collected_date">수집일</th>
+            `;
         } else {
             // 기타 사이트: 기존 헤더 유지
             thead.innerHTML = `
@@ -384,6 +404,66 @@ class ExpertDataTable {
                     }
                 </td>
                 <td class="date-cell">${decisionDate}</td>
+                <td class="date-cell">${collectedDate}</td>
+            `;
+        } else if (this.siteKey === 'nts_authority') {
+            // 국세청 유권해석: 세목 컬럼 포함
+            const taxCategory = item['세목'] || '-';
+            const documentNumber = item['문서번호'] || '-';
+            const title = item['제목'] || '-';
+            const publishedDate = this.formatDate(item['생산일자']);
+            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
+            const link = item['링크'] || '#';
+            
+            row.innerHTML = `
+                <td>
+                    <span class="organization-badge" style="background: ${this.siteColor}; color: white;">
+                        ${this.siteName}
+                    </span>
+                </td>
+                <td>
+                    <span class="tax-category">${taxCategory}</span>
+                </td>
+                <td>
+                    <span class="document-number">${documentNumber}</span>
+                </td>
+                <td class="document-title">
+                    ${link !== '#' ? 
+                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
+                        `<span title="${title}">${title}</span>`
+                    }
+                </td>
+                <td class="date-cell">${publishedDate}</td>
+                <td class="date-cell">${collectedDate}</td>
+            `;
+        } else if (this.siteKey === 'mois') {
+            // 행정안전부: 세목 컬럼 포함
+            const taxCategory = item['세목'] || '-';
+            const documentNumber = item['문서번호'] || '-';
+            const title = item['제목'] || '-';
+            const publishedDate = this.formatDate(item['생산일자']);
+            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
+            const link = item['링크'] || '#';
+            
+            row.innerHTML = `
+                <td>
+                    <span class="organization-badge" style="background: ${this.siteColor}; color: white;">
+                        ${this.siteName}
+                    </span>
+                </td>
+                <td>
+                    <span class="tax-category">${taxCategory}</span>
+                </td>
+                <td>
+                    <span class="document-number">${documentNumber}</span>
+                </td>
+                <td class="document-title">
+                    ${link !== '#' ? 
+                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
+                        `<span title="${title}">${title}</span>`
+                    }
+                </td>
+                <td class="date-cell">${publishedDate}</td>
                 <td class="date-cell">${collectedDate}</td>
             `;
         } else {
