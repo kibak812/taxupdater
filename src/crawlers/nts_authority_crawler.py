@@ -149,13 +149,13 @@ class NTSAuthorityCrawler(BaseCrawler):
             if doc_number and doc_number not in doc_numbers_set:
                 doc_numbers_set.add(doc_number)
                 
-                # 링크 생성은 새로운 데이터에 대해서만 나중에 수행
+                # 바로 링크 생성
                 data.append({
                     "세목": item.get('taxLabel', ''),
                     "생산일자": item.get('productionDate', ''),
                     "문서번호": doc_number,
                     "제목": item.get('title', ''),
-                    "링크": ''  # 빈 링크로 초기화
+                    "링크": generate_nts_search_link(doc_number, "authority") or ''
                 })
         
         df = pd.DataFrame(data, columns=DATA_COLUMNS[self.site_key])
@@ -168,36 +168,6 @@ class NTSAuthorityCrawler(BaseCrawler):
         
         return df
     
-    def generate_links_for_new_data(self, new_data: pd.DataFrame) -> pd.DataFrame:
-        """새로운 데이터에 대해서만 링크 생성"""
-        if new_data.empty:
-            return new_data
-        
-        print(f"{self.site_name}: {len(new_data)}개 새로운 데이터에 대해 링크 생성 중...")
-        
-        for idx in new_data.index:
-            doc_number = new_data.at[idx, '문서번호']
-            
-            # 문서번호를 사용하여 검색 링크 생성 (defensive coding)
-            search_link = None
-            try:
-                search_link = generate_nts_search_link(doc_number, "authority")
-                if not search_link:
-                    print(f"경고: {self.site_name} 링크 생성 실패 - 문서번호: {doc_number}")
-                    # 재시도
-                    search_link = generate_nts_search_link(doc_number, "authority")
-                    if search_link:
-                        print(f"재시도 성공: {doc_number}")
-                    else:
-                        print(f"재시도 실패: {doc_number}")
-            except Exception as e:
-                print(f"오류: {self.site_name} 링크 생성 중 예외 발생 - 문서번호: {doc_number}, 오류: {e}")
-            
-            # 링크 업데이트
-            new_data.at[idx, '링크'] = search_link or ''
-        
-        print(f"{self.site_name}: 링크 생성 완료")
-        return new_data
     
     def validate_data(self, data: pd.DataFrame) -> bool:
         """국세청 유권해석 데이터 특화 검증"""

@@ -279,13 +279,27 @@ class CrawlingService:
                 self.logger.info(f"    최종 새 항목: {len(new_entries)}개")
                 
                 # NTS 크롤러의 경우 새로운 데이터에만 링크 생성
-                if not new_entries.empty and crawler_key in ['nts_authority', 'nts_precedent']:
-                    self.logger.info(f"    {crawler_key}: 새로운 데이터에 대해 링크 생성 중...")
-                    if hasattr(crawler, 'generate_links_for_new_data'):
-                        new_entries = crawler.generate_links_for_new_data(new_entries)
-                        self.logger.info(f"    {crawler_key}: 링크 생성 완료")
+                if crawler_key in ['nts_authority', 'nts_precedent']:
+                    self.logger.info(f"    {crawler_key}: 링크 생성 조건 확인 - new_entries 크기: {len(new_entries)}")
+                    if not new_entries.empty:
+                        self.logger.info(f"    {crawler_key}: 새로운 데이터에 대해 링크 생성 중...")
+                        if hasattr(crawler, 'generate_links_for_new_data'):
+                            # 링크 생성 전 상태 확인
+                            before_links = new_entries['링크'].fillna('').astype(str)
+                            empty_links_before = sum(1 for link in before_links if link == '')
+                            self.logger.info(f"    {crawler_key}: 링크 생성 전 빈 링크 수: {empty_links_before}")
+                            
+                            new_entries = crawler.generate_links_for_new_data(new_entries)
+                            
+                            # 링크 생성 후 상태 확인
+                            after_links = new_entries['링크'].fillna('').astype(str)
+                            empty_links_after = sum(1 for link in after_links if link == '')
+                            self.logger.info(f"    {crawler_key}: 링크 생성 후 빈 링크 수: {empty_links_after}")
+                            self.logger.info(f"    {crawler_key}: 링크 생성 완료")
+                        else:
+                            self.logger.warning(f"    {crawler_key}: generate_links_for_new_data 메소드가 없음")
                     else:
-                        self.logger.warning(f"    {crawler_key}: generate_links_for_new_data 메소드가 없음")
+                        self.logger.info(f"    {crawler_key}: 새로운 데이터가 없어 링크 생성 건너뜀")
             
             # 4단계: 데이터 저장 및 백업
             self.logger.info("[4/4] 데이터 저장 및 백업...")
@@ -301,6 +315,12 @@ class CrawlingService:
                 if status_message:
                     status_message.config(text=f"{site_name} 새로운 데이터 {len(new_entries)}개 저장 중...")
                     status_message.update()
+                
+                # 백업 생성 전 링크 상태 확인
+                if crawler_key in ['nts_authority', 'nts_precedent']:
+                    links_in_backup = new_entries['링크'].fillna('').astype(str)
+                    empty_links_backup = sum(1 for link in links_in_backup if link == '')
+                    self.logger.info(f"  백업 전 링크 상태: 전체 {len(new_entries)}개 중 빈 링크 {empty_links_backup}개")
                 
                 # 백업 생성
                 backup_path = self.repository.backup_data(crawler_key, new_entries)
