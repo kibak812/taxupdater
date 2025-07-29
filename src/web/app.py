@@ -18,8 +18,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, JSONResponse
 from typing import Dict, Any, List
-import asyncio
 import json
+import re
+import asyncio
+import sqlite3
 from datetime import datetime
 import uvicorn
 
@@ -881,6 +883,151 @@ async def stop_scheduler():
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"스케줄러 중지 실패: {str(e)}")
+
+@app.get("/api/email-settings")
+async def get_email_settings():
+    """이메일 설정 조회"""
+    try:
+        with sqlite3.connect(repository.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM email_settings 
+                ORDER BY is_primary DESC, created_at
+            """)
+            
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+            
+            settings = []
+            for row in rows:
+                setting = dict(zip(columns, row))
+                # 비밀번호 관련 필드는 클라이언트에 전송하지 않음
+                setting.pop('encrypted_password', None)
+                
+                # JSON 필드 파싱
+                if setting.get('notification_types'):
+                    setting['notification_types'] = json.loads(setting['notification_types'])
+                
+                settings.append(setting)
+            
+            return settings
+            
+    except Exception as e:
+        logger.error(f"이메일 설정 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"이메일 설정 조회 실패: {str(e)}")
+
+@app.post("/api/email-settings")
+async def save_email_settings(request: Request):
+    """이메일 설정 저장"""
+    try:
+        data = await request.json()
+        
+        # 필수 필드 검증
+        required_fields = ['email_address', 'smtp_server', 'smtp_port']
+        for field in required_fields:
+            if not data.get(field):
+                raise HTTPException(status_code=400, detail=f"{field} 필드가 필요합니다")
+        
+        # 이메일 주소 유효성 검증
+        import re
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, data['email_address']):
+            raise HTTPException(status_code=400, detail="올바른 이메일 주소를 입력해주세요")
+        
+        # 포트 번호 검증
+        try:
+            port = int(data['smtp_port'])
+            if port < 1 or port > 65535:
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="올바른 포트 번호를 입력해주세요 (1-65535)")
+        
+        with sqlite3.connect(repository.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # 기존 설정 확인
+            cursor.execute("SELECT setting_id FROM email_settings WHERE email_address = ?", 
+                         (data['email_address'],))
+            existing = cursor.fetchone()
+            
+            if existing:
+                # 기존 설정 업데이트
+                cursor.execute("""
+                    UPDATE email_settings 
+                    SET smtp_server = ?, smtp_port = ?, smtp_username = ?, use_tls = ?,
+                        is_active = ?, notification_types = ?, min_data_threshold = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE email_address = ?
+                """, (
+                    data['smtp_server'],
+                    port,
+                    data.get('smtp_username', ''),
+                    data.get('use_tls', True),
+                    data.get('is_active', True),
+                    data.get('notification_types', '["new_data"]'),
+                    data.get('min_data_threshold', 1),
+                    data['email_address']
+                ))
+                setting_id = existing[0]
+            else:
+                # 새 설정 생성
+                cursor.execute("""
+                    INSERT INTO email_settings 
+                    (email_address, smtp_server, smtp_port, smtp_username, use_tls,
+                     is_active, notification_types, min_data_threshold)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    data['email_address'],
+                    data['smtp_server'],
+                    port,
+                    data.get('smtp_username', ''),
+                    data.get('use_tls', True),
+                    data.get('is_active', True),
+                    data.get('notification_types', '["new_data"]'),
+                    data.get('min_data_threshold', 1)
+                ))
+                setting_id = cursor.lastrowid
+            
+            conn.commit()
+        
+        return {
+            "status": "success",
+            "message": "이메일 설정이 저장되었습니다",
+            "setting_id": setting_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"이메일 설정 저장 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"이메일 설정 저장 실패: {str(e)}")
+
+@app.post("/api/email-settings/test")
+async def send_test_email(request: Request):
+    """테스트 이메일 발송"""
+    try:
+        data = await request.json()
+        email_address = data.get('email_address')
+        
+        if not email_address:
+            raise HTTPException(status_code=400, detail="이메일 주소가 필요합니다")
+        
+        # 테스트 이메일 발송
+        success = await notification_service.send_test_email(email_address)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "테스트 이메일이 발송되었습니다"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="테스트 이메일 발송에 실패했습니다")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"테스트 이메일 발송 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"테스트 이메일 발송 실패: {str(e)}")
 
 async def run_crawling_task(choice: str):
     """크롤링 작업 실행 (비동기)"""

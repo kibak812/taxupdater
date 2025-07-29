@@ -75,6 +75,26 @@ class ExpertSettings {
             this.requestNotificationPermission();
         });
         
+        // 이메일 알림 토글
+        document.getElementById('emailNotificationToggle')?.addEventListener('change', (e) => {
+            this.toggleEmailSettings(e.target.checked);
+        });
+        
+        // SMTP 서버 드롭다운 변경
+        document.getElementById('smtp_server')?.addEventListener('change', (e) => {
+            this.handleSmtpServerChange(e.target.value);
+        });
+        
+        // 이메일 설정 저장
+        document.getElementById('saveEmailSettingsBtn')?.addEventListener('click', () => {
+            this.saveEmailSettings();
+        });
+        
+        // 테스트 이메일 발송
+        document.getElementById('testEmailBtn')?.addEventListener('click', () => {
+            this.sendTestEmail();
+        });
+        
         // Form inputs change detection
         document.querySelectorAll('.form-input, .toggle-input').forEach(input => {
             input.addEventListener('change', () => {
@@ -606,6 +626,195 @@ class ExpertSettings {
         } catch (error) {
             console.error('알림 설정 저장 실패:', error);
         }
+    }
+    
+    // 이메일 설정 관련 메서드들
+    toggleEmailSettings(enabled) {
+        const detailsElement = document.getElementById('emailSettingsDetails');
+        if (detailsElement) {
+            detailsElement.style.display = enabled ? 'block' : 'none';
+        }
+        
+        if (enabled) {
+            this.loadEmailSettings();
+        }
+    }
+    
+    handleSmtpServerChange(serverValue) {
+        const customInput = document.getElementById('smtp_server_custom');
+        const portInput = document.getElementById('smtp_port');
+        
+        if (serverValue) {
+            customInput.value = serverValue;
+            
+            // 서버별 기본 포트 설정
+            switch (serverValue) {
+                case 'smtp.gmail.com':
+                    portInput.value = '587';
+                    break;
+                case 'smtp.naver.com':
+                    portInput.value = '587';
+                    break;
+                case 'smtp-mail.outlook.com':
+                    portInput.value = '587';
+                    break;
+                default:
+                    portInput.value = '587';
+            }
+        }
+    }
+    
+    async loadEmailSettings() {
+        try {
+            const response = await fetch('/api/email-settings');
+            if (response.ok) {
+                const settings = await response.json();
+                if (settings.length > 0) {
+                    const setting = settings[0]; // 첫 번째 설정 사용
+                    
+                    // 폼 필드 채우기
+                    document.getElementById('email_address').value = setting.email_address || '';
+                    document.getElementById('smtp_server_custom').value = setting.smtp_server || '';
+                    document.getElementById('smtp_port').value = setting.smtp_port || 587;
+                    document.getElementById('smtp_username').value = setting.smtp_username || '';
+                    document.getElementById('use_tls').checked = setting.use_tls !== false;
+                    document.getElementById('min_data_threshold').value = setting.min_data_threshold || 1;
+                    
+                    // SMTP 서버 드롭다운 설정
+                    const smtpSelect = document.getElementById('smtp_server');
+                    const server = setting.smtp_server;
+                    if (['smtp.gmail.com', 'smtp.naver.com', 'smtp-mail.outlook.com'].includes(server)) {
+                        smtpSelect.value = server;
+                    } else {
+                        smtpSelect.value = '';
+                    }
+                    
+                    // 이메일 토글 활성화
+                    document.getElementById('emailNotificationToggle').checked = setting.is_active;
+                }
+            }
+        } catch (error) {
+            console.error('이메일 설정 로드 실패:', error);
+        }
+    }
+    
+    async saveEmailSettings() {
+        const statusElement = document.getElementById('emailSettingsStatus');
+        const saveBtn = document.getElementById('saveEmailSettingsBtn');
+        
+        try {
+            // 버튼 비활성화
+            saveBtn.disabled = true;
+            saveBtn.textContent = '저장 중...';
+            
+            // 폼 데이터 수집
+            const formData = {
+                email_address: document.getElementById('email_address').value.trim(),
+                smtp_server: document.getElementById('smtp_server_custom').value.trim(),
+                smtp_port: parseInt(document.getElementById('smtp_port').value),
+                smtp_username: document.getElementById('smtp_username').value.trim(),
+                use_tls: document.getElementById('use_tls').checked,
+                min_data_threshold: parseInt(document.getElementById('min_data_threshold').value),
+                is_active: document.getElementById('emailNotificationToggle').checked,
+                notification_types: JSON.stringify(['new_data', 'error'])
+            };
+            
+            // 필수 필드 검증
+            if (!formData.email_address) {
+                throw new Error('이메일 주소를 입력해주세요.');
+            }
+            
+            if (!formData.smtp_server) {
+                throw new Error('SMTP 서버를 입력해주세요.');
+            }
+            
+            if (!formData.smtp_port || formData.smtp_port < 1 || formData.smtp_port > 65535) {
+                throw new Error('올바른 포트 번호를 입력해주세요 (1-65535).');
+            }
+            
+            // API 호출
+            const response = await fetch('/api/email-settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                this.showStatusMessage(statusElement, 'success', '이메일 설정이 저장되었습니다.');
+                this.showToast('설정 저장', 'success', '이메일 알림 설정이 저장되었습니다.');
+            } else {
+                const error = await response.json();
+                throw new Error(error.detail || '설정 저장에 실패했습니다.');
+            }
+            
+        } catch (error) {
+            console.error('이메일 설정 저장 실패:', error);
+            this.showStatusMessage(statusElement, 'error', error.message);
+            this.showToast('저장 실패', 'error', error.message);
+        } finally {
+            // 버튼 활성화
+            saveBtn.disabled = false;
+            saveBtn.textContent = '설정 저장';
+        }
+    }
+    
+    async sendTestEmail() {
+        const statusElement = document.getElementById('emailSettingsStatus');
+        const testBtn = document.getElementById('testEmailBtn');
+        
+        try {
+            // 버튼 비활성화
+            testBtn.disabled = true;
+            testBtn.textContent = '발송 중...';
+            
+            const emailAddress = document.getElementById('email_address').value.trim();
+            
+            if (!emailAddress) {
+                throw new Error('이메일 주소를 먼저 입력하고 설정을 저장해주세요.');
+            }
+            
+            // API 호출
+            const response = await fetch('/api/email-settings/test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email_address: emailAddress })
+            });
+            
+            if (response.ok) {
+                this.showStatusMessage(statusElement, 'success', '테스트 이메일이 발송되었습니다. 받은편지함을 확인해주세요.');
+                this.showToast('테스트 이메일', 'success', '테스트 이메일이 발송되었습니다.');
+            } else {
+                const error = await response.json();
+                throw new Error(error.detail || '테스트 이메일 발송에 실패했습니다.');
+            }
+            
+        } catch (error) {
+            console.error('테스트 이메일 발송 실패:', error);
+            this.showStatusMessage(statusElement, 'error', error.message);
+            this.showToast('발송 실패', 'error', error.message);
+        } finally {
+            // 버튼 활성화
+            testBtn.disabled = false;
+            testBtn.textContent = '테스트 이메일 발송';
+        }
+    }
+    
+    showStatusMessage(element, type, message) {
+        if (!element) return;
+        
+        element.className = `status-message ${type}`;
+        element.textContent = message;
+        element.style.display = 'block';
+        
+        // 5초 후 자동 숨김
+        setTimeout(() => {
+            element.style.display = 'none';
+        }, 5000);
     }
     
     showToast(title, type, message) {

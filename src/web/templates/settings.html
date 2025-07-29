@@ -245,6 +245,56 @@
             color: var(--color-warning);
         }
         
+        /* 이메일 설정 스타일 */
+        .form-row {
+            display: flex;
+            align-items: end;
+            gap: var(--spacing-md);
+        }
+        
+        .input-group {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+        }
+        
+        .input-unit {
+            font-size: var(--font-size-sm);
+            color: var(--color-gray-600);
+            white-space: nowrap;
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: var(--spacing-sm);
+            margin-top: var(--spacing-lg);
+        }
+        
+        .status-message {
+            padding: var(--spacing-sm);
+            border-radius: var(--radius-md);
+            font-size: var(--font-size-sm);
+            display: none;
+        }
+        
+        .status-message.success {
+            background: rgba(5, 150, 105, 0.1);
+            color: var(--color-success);
+            border: 1px solid rgba(5, 150, 105, 0.2);
+        }
+        
+        .status-message.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--color-error);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+        
+        .status-message.warning {
+            background: rgba(251, 191, 36, 0.1);
+            color: var(--color-warning);
+            border: 1px solid rgba(251, 191, 36, 0.2);
+        }
+        
         @media (max-width: 768px) {
             .settings-section {
                 padding: var(--spacing-lg);
@@ -385,6 +435,86 @@
                                 권한 요청
                             </button>
                         </div>
+                    </div>
+                </div>
+                
+                <!-- 이메일 알림 설정 -->
+                <div class="form-group">
+                    <div class="site-item">
+                        <div class="site-info">
+                            <div class="site-name">이메일 알림</div>
+                            <div class="site-status">새로운 데이터 발견 시 이메일로 알림을 받습니다</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" class="toggle-input" id="emailNotificationToggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- 이메일 설정 상세 -->
+                <div id="emailSettingsDetails" class="form-group" style="display: none;">
+                    <div style="background: #f9fafb; border-radius: 8px; padding: 16px; border: 1px solid #e5e7eb;">
+                        <h4 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600;">이메일 설정</h4>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="email_address">이메일 주소</label>
+                            <input type="email" id="email_address" class="form-input" placeholder="your-email@example.com" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="smtp_server">SMTP 서버</label>
+                            <select id="smtp_server" class="form-input">
+                                <option value="">직접 입력</option>
+                                <option value="smtp.gmail.com">Gmail (smtp.gmail.com)</option>
+                                <option value="smtp.naver.com">Naver (smtp.naver.com)</option>
+                                <option value="smtp-mail.outlook.com">Outlook (smtp-mail.outlook.com)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group" style="flex: 1;">
+                                <label class="form-label" for="smtp_server_custom">SMTP 서버 (직접 입력)</label>
+                                <input type="text" id="smtp_server_custom" class="form-input" placeholder="smtp.example.com">
+                            </div>
+                            <div class="form-group" style="flex: 0 0 120px; margin-left: 12px;">
+                                <label class="form-label" for="smtp_port">포트</label>
+                                <input type="number" id="smtp_port" class="form-input" value="587" min="1" max="65535">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="smtp_username">SMTP 사용자명 (선택사항)</label>
+                            <input type="text" id="smtp_username" class="form-input" placeholder="비워두면 이메일 주소 사용">
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="site-item">
+                                <div class="site-info">
+                                    <div class="site-name">TLS 사용</div>
+                                    <div class="site-status">안전한 연결을 위해 TLS를 사용합니다 (권장)</div>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" class="toggle-input" id="use_tls" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="min_data_threshold">알림 임계값</label>
+                            <div class="input-group">
+                                <input type="number" id="min_data_threshold" class="form-input" value="1" min="1" max="100">
+                                <span class="input-unit">신규 항목 이상</span>
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions" style="margin-top: 16px;">
+                            <button id="saveEmailSettingsBtn" class="btn btn-primary">설정 저장</button>
+                            <button id="testEmailBtn" class="btn btn-outline" style="margin-left: 8px;">테스트 이메일 발송</button>
+                        </div>
+                        
+                        <div id="emailSettingsStatus" class="status-message" style="margin-top: 12px;"></div>
                     </div>
                 </div>
                 

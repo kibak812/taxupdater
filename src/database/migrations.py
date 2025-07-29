@@ -53,13 +53,16 @@ class DatabaseMigration:
                 # 5. 크롤링 실행 로그 테이블 생성
                 self._create_crawl_execution_log_table(cursor)
                 
-                # 6. 기존 crawl_metadata 테이블 확장
+                # 6. 이메일 설정 테이블 생성
+                self._create_email_settings_table(cursor)
+                
+                # 7. 기존 crawl_metadata 테이블 확장
                 self._extend_crawl_metadata_table(cursor)
                 
-                # 7. 인덱스 생성
+                # 8. 인덱스 생성
                 self._create_performance_indexes(cursor)
                 
-                # 8. 기본 데이터 삽입
+                # 9. 기본 데이터 삽입
                 self._insert_default_data(cursor)
                 
                 conn.commit()
@@ -267,6 +270,45 @@ class DatabaseMigration:
         """)
         
         self.logger.info("  ✓ crawl_execution_log 테이블 생성 완료")
+    
+    def _create_email_settings_table(self, cursor: sqlite3.Cursor):
+        """이메일 설정 테이블 생성"""
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS email_settings (
+                setting_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email_address TEXT NOT NULL,
+                smtp_server TEXT NOT NULL,
+                smtp_port INTEGER NOT NULL,
+                smtp_username TEXT,
+                use_tls BOOLEAN DEFAULT 1,
+                is_active BOOLEAN DEFAULT 1,
+                is_primary BOOLEAN DEFAULT 0,  -- 주 이메일 여부
+                notification_types TEXT,  -- JSON: 알림받을 타입들 ['new_data', 'error', 'summary']
+                min_data_threshold INTEGER DEFAULT 1,  -- 최소 신규 데이터 개수
+                daily_summary_enabled BOOLEAN DEFAULT 1,
+                summary_time TEXT DEFAULT '09:00',  -- 일일 요약 발송 시간
+                last_sent_at TIMESTAMP,
+                send_count INTEGER DEFAULT 0,
+                failure_count INTEGER DEFAULT 0,
+                test_email_sent BOOLEAN DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                
+                UNIQUE(email_address)
+            )
+        """)
+        
+        # 업데이트 트리거 생성
+        cursor.execute("""
+            CREATE TRIGGER IF NOT EXISTS update_email_settings_timestamp 
+            AFTER UPDATE ON email_settings
+            BEGIN
+                UPDATE email_settings SET updated_at = CURRENT_TIMESTAMP 
+                WHERE setting_id = NEW.setting_id;
+            END
+        """)
+        
+        self.logger.info("  ✓ email_settings 테이블 생성 완료")
     
     def _extend_crawl_metadata_table(self, cursor: sqlite3.Cursor):
         """기존 crawl_metadata 테이블 확장"""

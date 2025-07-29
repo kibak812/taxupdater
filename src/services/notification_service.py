@@ -11,11 +11,18 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass
 import sys
+import yagmail
+from dotenv import load_dotenv
+from concurrent.futures import ThreadPoolExecutor
+import time
 
 # 프로젝트 루트 경로 추가
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from src.config.logging_config import get_logger
+
+# 환경 변수 로드
+load_dotenv()
 
 
 @dataclass
@@ -52,7 +59,7 @@ class NotificationService:
         
         # 알림 설정
         self.notification_settings = {
-            'email_enabled': False,  # 이메일 알림 (추후 구현)
+            'email_enabled': True,  # 이메일 알림
             'websocket_enabled': True,  # WebSocket 알림
             'push_enabled': True,  # 브라우저 푸시 알림
             'min_interval': 300,  # 최소 알림 간격 (초)
@@ -61,6 +68,9 @@ class NotificationService:
         
         # 최근 알림 캐시 (스팸 방지)
         self.recent_notifications = {}
+        
+        # ThreadPoolExecutor for blocking email operations
+        self.email_executor = ThreadPoolExecutor(max_workers=3)
         
         self.logger.info("알림 서비스 초기화 완료")
     
@@ -89,7 +99,7 @@ class NotificationService:
                 message=f"{site_name}에서 {new_data_count}개의 새로운 데이터가 발견되었습니다.",
                 urgency_level='normal' if new_data_count < 10 else 'high',
                 new_data_count=new_data_count,
-                delivery_channels=['websocket', 'push'],
+                delivery_channels=['websocket', 'push', 'email'],
                 metadata={
                     'session_id': session_id,
                     'site_name': site_name
@@ -323,6 +333,11 @@ class NotificationService:
                 success_channels.append('push')
                 self.logger.info(f"Push 알림 채널 활성화: {notification_id}")
             
+            # 이메일 알림
+            if 'email' in channels and self.notification_settings['email_enabled']:
+                if await self._send_email_notification(notification, notification_id):
+                    success_channels.append('email')
+            
             # 상태 업데이트
             status = 'sent' if success_channels else 'failed'
             
@@ -367,6 +382,429 @@ class NotificationService:
             
         except Exception as e:
             self.logger.error(f"WebSocket 알림 발송 실패: {e}")
+            return False
+    
+    async def _send_email_notification(self, notification: NotificationData, 
+                                     notification_id: int) -> bool:
+        """이메일 알림 발송"""
+        try:
+            # 활성화된 이메일 설정 조회
+            email_settings = await self._get_active_email_settings()
+            if not email_settings:
+                self.logger.warning("활성화된 이메일 설정이 없음")
+                return False
+            
+            # 각 이메일 주소로 발송
+            success_count = 0
+            for setting in email_settings:
+                # 임계값 확인
+                if notification.new_data_count < setting['min_data_threshold']:
+                    continue
+                
+                # 알림 타입 확인
+                notification_types = json.loads(setting['notification_types'] or '["new_data"]')
+                if notification.notification_type not in notification_types:
+                    continue
+                
+                # 이메일 발송
+                if await self._send_single_email(setting, notification):
+                    success_count += 1
+                    # 발송 통계 업데이트
+                    await self._update_email_send_stats(setting['setting_id'], success=True)
+                else:
+                    await self._update_email_send_stats(setting['setting_id'], success=False)
+            
+            return success_count > 0
+            
+        except Exception as e:
+            self.logger.error(f"이메일 알림 발송 실패: {e}")
+            return False
+    
+    async def _send_single_email(self, email_setting: dict, 
+                                notification: NotificationData) -> bool:
+        """단일 이메일 발송 (재시도 로직 포함)"""
+        # ThreadPoolExecutor를 사용하여 블로킹 이메일 작업을 비동기로 실행
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self.email_executor,
+            self._sync_send_email_with_retry,
+            email_setting,
+            notification
+        )
+    
+    def _sync_send_email_with_retry(self, email_setting: dict, 
+                                   notification: NotificationData,
+                                   max_retries: int = 3) -> bool:
+        """동기 이메일 발송 (재시도 로직 포함)"""
+        for attempt in range(max_retries):
+            try:
+                # 환경 변수에서 이메일 비밀번호 가져오기
+                email_password = os.getenv('EMAIL_PASSWORD')
+                if not email_password:
+                    self.logger.error("EMAIL_PASSWORD 환경 변수가 설정되지 않음")
+                    return False
+                
+                # yagmail 인스턴스 생성
+                yag = yagmail.SMTP(
+                    user=email_setting['smtp_username'] or email_setting['email_address'],
+                    password=email_password,
+                    host=email_setting['smtp_server'],
+                    port=email_setting['smtp_port'],
+                    smtp_starttls=email_setting['use_tls'],
+                    smtp_ssl=not email_setting['use_tls']
+                )
+                
+                # 이메일 내용 구성
+                subject = f"[예규판례 모니터링] {notification.title}"
+                
+                # HTML 본문 생성 (동기 버전 필요)
+                html_content = self._create_email_html_content_sync(notification)
+                
+                # 이메일 발송
+                yag.send(
+                    to=email_setting['email_address'],
+                    subject=subject,
+                    contents=html_content
+                )
+                
+                self.logger.info(f"이메일 발송 성공: {email_setting['email_address']}")
+                return True
+                
+            except Exception as e:
+                self.logger.warning(f"이메일 발송 시도 {attempt + 1}/{max_retries} 실패: {e}")
+                
+                if attempt < max_retries - 1:
+                    # 지수 백오프로 재시도 대기
+                    wait_time = 2 ** attempt
+                    self.logger.info(f"{wait_time}초 후 재시도...")
+                    time.sleep(wait_time)
+                else:
+                    self.logger.error(f"이메일 발송 최종 실패 ({email_setting['email_address']}): {e}")
+                    return False
+        
+        return False
+    
+    async def _create_email_html_content(self, notification: NotificationData) -> str:
+        """이메일 HTML 내용 생성"""
+        site_name = self.site_names.get(notification.site_key, notification.site_key)
+        
+        # 새로운 데이터 상세 정보 조회
+        new_data_items = await self._get_recent_new_data(notification.site_key, 
+                                                        notification.new_data_count)
+        
+        # HTML 템플릿
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: 'Inter', -apple-system, sans-serif; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: #f3f4f6; border-radius: 8px; padding: 20px; margin-bottom: 20px; }}
+                .header h2 {{ margin: 0; color: #1f2937; }}
+                .content {{ background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; }}
+                .data-item {{ border-bottom: 1px solid #e5e7eb; padding: 12px 0; }}
+                .data-item:last-child {{ border-bottom: none; }}
+                .title {{ font-weight: 600; color: #1f2937; margin-bottom: 4px; }}
+                .metadata {{ font-size: 14px; color: #6b7280; }}
+                .link {{ color: #3b82f6; text-decoration: none; }}
+                .link:hover {{ text-decoration: underline; }}
+                .footer {{ margin-top: 20px; text-align: center; color: #6b7280; font-size: 14px; }}
+                .button {{ display: inline-block; background: #3b82f6; color: white; padding: 10px 20px; 
+                          border-radius: 6px; text-decoration: none; margin-top: 16px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>{notification.title}</h2>
+                    <p style="margin: 8px 0 0 0; color: #6b7280;">{notification.message}</p>
+                </div>
+                
+                <div class="content">
+                    <h3>새로운 데이터 목록</h3>
+        """
+        
+        # 데이터 항목 추가
+        for item in new_data_items:
+            doc_number = item.get('문서번호', '')
+            title = item.get('제목', '')
+            date = item.get('생산일자') or item.get('결정일', '')
+            link = item.get('링크', '')
+            
+            html_content += f"""
+                    <div class="data-item">
+                        <div class="title">{title}</div>
+                        <div class="metadata">
+                            문서번호: {doc_number} | 날짜: {date}
+                        </div>
+                        {f'<a href="{link}" class="link">문서 보기 →</a>' if link else ''}
+                    </div>
+            """
+        
+        # 웹 대시보드 링크 추가
+        dashboard_url = os.getenv('DASHBOARD_URL', 'http://localhost:8001')
+        html_content += f"""
+                    <div style="text-align: center; margin-top: 20px;">
+                        <a href="{dashboard_url}/data/{notification.site_key}" class="button">
+                            전체 데이터 보기
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    <p>이 이메일은 예규판례 모니터링 시스템에서 자동으로 발송되었습니다.</p>
+                    <p><a href="{dashboard_url}/settings" class="link">알림 설정 변경</a></p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return html_content
+    
+    def _create_email_html_content_sync(self, notification: NotificationData) -> str:
+        """이메일 HTML 내용 생성 (동기 버전)"""
+        site_name = self.site_names.get(notification.site_key, notification.site_key)
+        
+        # 새로운 데이터 상세 정보 조회 (동기 버전)
+        new_data_items = self._get_recent_new_data_sync(notification.site_key, 
+                                                       notification.new_data_count)
+        
+        # HTML 템플릿 (동일한 내용)
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: 'Inter', -apple-system, sans-serif; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: #f3f4f6; border-radius: 8px; padding: 20px; margin-bottom: 20px; }}
+                .header h2 {{ margin: 0; color: #1f2937; }}
+                .content {{ background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; }}
+                .data-item {{ border-bottom: 1px solid #e5e7eb; padding: 12px 0; }}
+                .data-item:last-child {{ border-bottom: none; }}
+                .title {{ font-weight: 600; color: #1f2937; margin-bottom: 4px; }}
+                .metadata {{ font-size: 14px; color: #6b7280; }}
+                .link {{ color: #3b82f6; text-decoration: none; }}
+                .link:hover {{ text-decoration: underline; }}
+                .footer {{ margin-top: 20px; text-align: center; color: #6b7280; font-size: 14px; }}
+                .button {{ display: inline-block; background: #3b82f6; color: white; padding: 10px 20px; 
+                          border-radius: 6px; text-decoration: none; margin-top: 16px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>{notification.title}</h2>
+                    <p style="margin: 8px 0 0 0; color: #6b7280;">{notification.message}</p>
+                </div>
+                
+                <div class="content">
+                    <h3>새로운 데이터 목록</h3>
+        """
+        
+        # 데이터 항목 추가
+        for item in new_data_items:
+            doc_number = item.get('문서번호', '')
+            title = item.get('제목', '')
+            date = item.get('생산일자') or item.get('결정일', '')
+            link = item.get('링크', '')
+            
+            html_content += f"""
+                    <div class="data-item">
+                        <div class="title">{title}</div>
+                        <div class="metadata">
+                            문서번호: {doc_number} | 날짜: {date}
+                        </div>
+                        {f'<a href="{link}" class="link">문서 보기 →</a>' if link else ''}
+                    </div>
+            """
+        
+        # 웹 대시보드 링크 추가
+        dashboard_url = os.getenv('DASHBOARD_URL', 'http://localhost:8001')
+        html_content += f"""
+                    <div style="text-align: center; margin-top: 20px;">
+                        <a href="{dashboard_url}/data/{notification.site_key}" class="button">
+                            전체 데이터 보기
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    <p>이 이메일은 예규판례 모니터링 시스템에서 자동으로 발송되었습니다.</p>
+                    <p><a href="{dashboard_url}/settings" class="link">알림 설정 변경</a></p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return html_content
+    
+    async def _get_recent_new_data(self, site_key: str, limit: int) -> List[Dict[str, Any]]:
+        """최근 새로운 데이터 조회"""
+        try:
+            # 사이트별 테이블명 매핑
+            table_mapping = {
+                "tax_tribunal": "tax_tribunal_cases",
+                "nts_authority": "nts_authority_interpretations",
+                "nts_precedent": "nts_precedent_cases",
+                "moef": "moef_tax_interpretations",
+                "mois": "mois_interpretations",
+                "bai": "bai_audit_claims"
+            }
+            
+            table_name = table_mapping.get(site_key)
+            if not table_name:
+                return []
+            
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # 최근 추가된 데이터 조회 (created_at 기준)
+                cursor.execute(f"""
+                    SELECT * FROM {table_name}
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                """, (limit,))
+                
+                columns = [desc[0] for desc in cursor.description]
+                rows = cursor.fetchall()
+                
+                return [dict(zip(columns, row)) for row in rows]
+                
+        except Exception as e:
+            self.logger.error(f"새로운 데이터 조회 실패: {e}")
+            return []
+    
+    def _get_recent_new_data_sync(self, site_key: str, limit: int) -> List[Dict[str, Any]]:
+        """최근 새로운 데이터 조회 (동기 버전)"""
+        try:
+            # 사이트별 테이블명 매핑
+            table_mapping = {
+                "tax_tribunal": "tax_tribunal_cases",
+                "nts_authority": "nts_authority_interpretations",
+                "nts_precedent": "nts_precedent_cases",
+                "moef": "moef_tax_interpretations",
+                "mois": "mois_interpretations",
+                "bai": "bai_audit_claims"
+            }
+            
+            table_name = table_mapping.get(site_key)
+            if not table_name:
+                return []
+            
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # 최근 추가된 데이터 조회 (created_at 기준)
+                cursor.execute(f"""
+                    SELECT * FROM {table_name}
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                """, (limit,))
+                
+                columns = [desc[0] for desc in cursor.description]
+                rows = cursor.fetchall()
+                
+                return [dict(zip(columns, row)) for row in rows]
+                
+        except Exception as e:
+            self.logger.error(f"새로운 데이터 조회 실패: {e}")
+            return []
+    
+    async def _get_active_email_settings(self) -> List[Dict[str, Any]]:
+        """활성화된 이메일 설정 조회"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT * FROM email_settings 
+                    WHERE is_active = 1
+                    ORDER BY is_primary DESC, created_at
+                """)
+                
+                columns = [desc[0] for desc in cursor.description]
+                rows = cursor.fetchall()
+                
+                return [dict(zip(columns, row)) for row in rows]
+                
+        except Exception as e:
+            self.logger.error(f"이메일 설정 조회 실패: {e}")
+            return []
+    
+    async def _update_email_send_stats(self, setting_id: int, success: bool):
+        """이메일 발송 통계 업데이트"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                if success:
+                    conn.execute("""
+                        UPDATE email_settings 
+                        SET send_count = send_count + 1,
+                            last_sent_at = CURRENT_TIMESTAMP
+                        WHERE setting_id = ?
+                    """, (setting_id,))
+                else:
+                    conn.execute("""
+                        UPDATE email_settings 
+                        SET failure_count = failure_count + 1
+                        WHERE setting_id = ?
+                    """, (setting_id,))
+                    
+        except Exception as e:
+            self.logger.error(f"이메일 발송 통계 업데이트 실패: {e}")
+    
+    async def send_test_email(self, email_address: str) -> bool:
+        """테스트 이메일 발송"""
+        try:
+            # 테스트용 알림 데이터 생성
+            test_notification = NotificationData(
+                site_key='system',
+                notification_type='test',
+                title='테스트 이메일',
+                message='이메일 설정이 올바르게 구성되었습니다.',
+                urgency_level='normal',
+                new_data_count=0,
+                delivery_channels=['email'],
+                metadata={'test': True}
+            )
+            
+            # 이메일 설정 조회
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT * FROM email_settings 
+                    WHERE email_address = ?
+                """, (email_address,))
+                
+                columns = [desc[0] for desc in cursor.description]
+                row = cursor.fetchone()
+                
+                if not row:
+                    self.logger.error(f"이메일 설정을 찾을 수 없음: {email_address}")
+                    return False
+                
+                email_setting = dict(zip(columns, row))
+            
+            # 테스트 이메일 발송
+            success = await self._send_single_email(email_setting, test_notification)
+            
+            if success:
+                # 테스트 발송 성공 기록
+                with sqlite3.connect(self.db_path) as conn:
+                    conn.execute("""
+                        UPDATE email_settings 
+                        SET test_email_sent = 1
+                        WHERE email_address = ?
+                    """, (email_address,))
+            
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"테스트 이메일 발송 실패: {e}")
             return False
     
     async def _get_notification_threshold(self, site_key: str) -> int:
