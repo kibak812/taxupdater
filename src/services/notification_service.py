@@ -444,28 +444,34 @@ class NotificationService:
                     self.logger.error("EMAIL_PASSWORD 환경 변수가 설정되지 않음")
                     return False
                 
-                # yagmail 인스턴스 생성
-                yag = yagmail.SMTP(
-                    user=email_setting['smtp_username'] or email_setting['email_address'],
-                    password=email_password,
-                    host=email_setting['smtp_server'],
-                    port=email_setting['smtp_port'],
-                    smtp_starttls=email_setting['use_tls'],
-                    smtp_ssl=not email_setting['use_tls']
-                )
+                # 표준 smtplib 사용
+                import smtplib
+                from email.mime.multipart import MIMEMultipart
+                from email.mime.text import MIMEText
                 
                 # 이메일 내용 구성
                 subject = f"[예규판례 모니터링] {notification.title}"
-                
-                # HTML 본문 생성 (동기 버전 필요)
                 html_content = self._create_email_html_content_sync(notification)
                 
-                # 이메일 발송
-                yag.send(
-                    to=email_setting['email_address'],
-                    subject=subject,
-                    contents=html_content
-                )
+                # MIME 메시지 생성
+                msg = MIMEMultipart('alternative')
+                msg['Subject'] = subject
+                msg['From'] = email_setting['smtp_username'] or email_setting['email_address']
+                msg['To'] = email_setting['email_address']
+                
+                # HTML 본문 추가
+                html_part = MIMEText(html_content, 'html')
+                msg.attach(html_part)
+                
+                # SMTP 서버 연결 및 발송
+                with smtplib.SMTP(email_setting['smtp_server'], int(email_setting['smtp_port'])) as server:
+                    if email_setting['use_tls']:
+                        server.starttls()
+                    server.login(
+                        email_setting['smtp_username'] or email_setting['email_address'],
+                        email_password
+                    )
+                    server.send_message(msg)
                 
                 self.logger.info(f"이메일 발송 성공: {email_setting['email_address']}")
                 return True
