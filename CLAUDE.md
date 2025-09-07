@@ -43,6 +43,24 @@ systemctl --user stop taxupdater localtunnel      # 중지
 https://taxupdater-monitor.loca.lt
 ```
 
+### ngrok 우회 방안 (LocalTunnel 대안)
+```bash
+# ngrok 설정 스크립트 실행 (한 번만 실행)
+./setup_ngrok.sh
+
+# ngrok 서비스 관리
+systemctl --user status ngrok        # 상태 확인
+systemctl --user start ngrok         # 시작
+systemctl --user stop ngrok          # 중지
+systemctl --user restart ngrok       # 재시작
+
+# ngrok 터널 URL 확인
+./get_ngrok_url.sh
+
+# 웹 인터페이스에서 터널 관리
+# /settings 페이지의 "터널 관리" 섹션에서 GUI로 제어 가능
+```
+
 ### CLI 실행
 ```bash
 # 레거시 GUI 실행 

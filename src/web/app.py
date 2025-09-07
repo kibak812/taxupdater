@@ -1144,6 +1144,109 @@ async def run_crawling_task(choice: str):
             "timestamp": datetime.now().isoformat()
         })
 
+@app.get("/api/tunnel-status")
+async def get_tunnel_status():
+    """터널 상태 조회 (LocalTunnel/ngrok)"""
+    try:
+        import requests
+        import subprocess
+        
+        tunnel_status = {
+            "localtunnel": {"status": "unknown", "url": None},
+            "ngrok": {"status": "unknown", "url": None}
+        }
+        
+        # LocalTunnel 상태 확인
+        try:
+            result = subprocess.run(['systemctl', '--user', 'is-active', 'localtunnel'], 
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode == 0 and result.stdout.strip() == 'active':
+                tunnel_status["localtunnel"]["status"] = "active"
+                tunnel_status["localtunnel"]["url"] = "https://taxupdater-monitor.loca.lt"
+            else:
+                tunnel_status["localtunnel"]["status"] = "inactive"
+        except Exception as e:
+            tunnel_status["localtunnel"]["status"] = f"error: {str(e)}"
+        
+        # ngrok 상태 확인
+        try:
+            result = subprocess.run(['pgrep', '-x', 'ngrok'], 
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                tunnel_status["ngrok"]["status"] = "active"
+                # ngrok API에서 URL 가져오기 시도
+                try:
+                    response = requests.get("http://localhost:4040/api/tunnels", timeout=3)
+                    if response.status_code == 200:
+                        tunnels = response.json().get('tunnels', [])
+                        if tunnels:
+                            tunnel_status["ngrok"]["url"] = tunnels[0].get('public_url')
+                except:
+                    pass
+            else:
+                tunnel_status["ngrok"]["status"] = "inactive"
+        except Exception as e:
+            tunnel_status["ngrok"]["status"] = f"error: {str(e)}"
+        
+        return tunnel_status
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"터널 상태 확인 실패: {str(e)}")
+
+@app.post("/api/tunnel/start/{tunnel_type}")
+async def start_tunnel(tunnel_type: str):
+    """터널 시작 (localtunnel/ngrok)"""
+    try:
+        import subprocess
+        
+        if tunnel_type == "localtunnel":
+            result = subprocess.run(['systemctl', '--user', 'start', 'localtunnel'], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                return {"message": "LocalTunnel이 시작되었습니다", "success": True}
+            else:
+                raise HTTPException(status_code=500, detail=f"LocalTunnel 시작 실패: {result.stderr}")
+                
+        elif tunnel_type == "ngrok":
+            result = subprocess.run(['systemctl', '--user', 'start', 'ngrok'], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                return {"message": "ngrok이 시작되었습니다", "success": True}
+            else:
+                raise HTTPException(status_code=500, detail=f"ngrok 시작 실패: {result.stderr}")
+        else:
+            raise HTTPException(status_code=400, detail="지원하지 않는 터널 타입입니다")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"터널 시작 실패: {str(e)}")
+
+@app.post("/api/tunnel/stop/{tunnel_type}")
+async def stop_tunnel(tunnel_type: str):
+    """터널 중지 (localtunnel/ngrok)"""
+    try:
+        import subprocess
+        
+        if tunnel_type == "localtunnel":
+            result = subprocess.run(['systemctl', '--user', 'stop', 'localtunnel'], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                return {"message": "LocalTunnel이 중지되었습니다", "success": True}
+            else:
+                raise HTTPException(status_code=500, detail=f"LocalTunnel 중지 실패: {result.stderr}")
+                
+        elif tunnel_type == "ngrok":
+            result = subprocess.run(['systemctl', '--user', 'stop', 'ngrok'], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                return {"message": "ngrok이 중지되었습니다", "success": True}
+            else:
+                raise HTTPException(status_code=500, detail=f"ngrok 중지 실패: {result.stderr}")
+        else:
+            raise HTTPException(status_code=400, detail="지원하지 않는 터널 타입입니다")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"터널 중지 실패: {str(e)}")
+
 @app.websocket("/ws/crawl")
 async def websocket_endpoint(websocket: WebSocket):
     """크롤링 상태 실시간 WebSocket"""

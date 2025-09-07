@@ -310,6 +310,40 @@
                 flex-direction: column;
             }
         }
+        
+        /* 터널 관리 스타일 */
+        .tunnel-status-container {
+            border: 1px solid var(--color-gray-200);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            background: var(--color-gray-50);
+        }
+        
+        .site-url {
+            font-family: 'Courier New', monospace;
+            font-size: var(--font-size-sm);
+            color: var(--color-primary);
+            background: var(--color-gray-100);
+            padding: var(--spacing-xs) var(--spacing-sm);
+            border-radius: var(--radius-sm);
+            margin-top: var(--spacing-xs);
+            word-break: break-all;
+        }
+        
+        .site-controls button {
+            margin-right: var(--spacing-xs);
+        }
+        
+        .btn-outline {
+            border: 1px solid var(--color-gray-300);
+            background: white;
+            color: var(--color-gray-700);
+        }
+        
+        .btn-outline:hover {
+            background: var(--color-gray-50);
+            border-color: var(--color-gray-400);
+        }
     </style>
 </head>
 <body class="dashboard-body">
@@ -403,6 +437,51 @@
                 
                 <div class="site-list" id="siteList">
                     <!-- Site items will be populated dynamically -->
+                </div>
+            </section>
+
+            <!-- Tunnel Management -->
+            <section class="settings-section">
+                <h3>터널 관리</h3>
+                <p>외부 접속을 위한 터널 서비스를 관리합니다.</p>
+                
+                <div class="tunnel-status-container">
+                    <!-- LocalTunnel Status -->
+                    <div class="form-group">
+                        <div class="site-item">
+                            <div class="site-info">
+                                <div class="site-name">LocalTunnel</div>
+                                <div class="site-status" id="localtunnel-status">상태 확인 중...</div>
+                                <div class="site-url" id="localtunnel-url" style="display: none;"></div>
+                            </div>
+                            <div class="site-controls">
+                                <button class="btn btn-sm btn-outline" id="localtunnel-start" style="display: none;">시작</button>
+                                <button class="btn btn-sm btn-outline" id="localtunnel-stop" style="display: none;">중지</button>
+                                <button class="btn btn-sm btn-outline" id="localtunnel-copy" style="display: none;">URL 복사</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ngrok Status -->
+                    <div class="form-group">
+                        <div class="site-item">
+                            <div class="site-info">
+                                <div class="site-name">ngrok</div>
+                                <div class="site-status" id="ngrok-status">상태 확인 중...</div>
+                                <div class="site-url" id="ngrok-url" style="display: none;"></div>
+                            </div>
+                            <div class="site-controls">
+                                <button class="btn btn-sm btn-outline" id="ngrok-start" style="display: none;">시작</button>
+                                <button class="btn btn-sm btn-outline" id="ngrok-stop" style="display: none;">중지</button>
+                                <button class="btn btn-sm btn-outline" id="ngrok-copy" style="display: none;">URL 복사</button>
+                                <button class="btn btn-sm btn-outline" id="ngrok-setup" onclick="location.href='./setup_ngrok.sh'">ngrok 설정</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <button class="btn btn-primary" id="refresh-tunnel-status">터널 상태 새로고침</button>
                 </div>
             </section>
 

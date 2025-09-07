@@ -95,6 +95,33 @@ class ExpertSettings {
             this.sendTestEmail();
         });
         
+        // 터널 관리
+        document.getElementById('refresh-tunnel-status')?.addEventListener('click', () => {
+            this.refreshTunnelStatus();
+        });
+        
+        // LocalTunnel 제어
+        document.getElementById('localtunnel-start')?.addEventListener('click', () => {
+            this.controlTunnel('localtunnel', 'start');
+        });
+        document.getElementById('localtunnel-stop')?.addEventListener('click', () => {
+            this.controlTunnel('localtunnel', 'stop');
+        });
+        document.getElementById('localtunnel-copy')?.addEventListener('click', () => {
+            this.copyTunnelUrl('localtunnel');
+        });
+        
+        // ngrok 제어
+        document.getElementById('ngrok-start')?.addEventListener('click', () => {
+            this.controlTunnel('ngrok', 'start');
+        });
+        document.getElementById('ngrok-stop')?.addEventListener('click', () => {
+            this.controlTunnel('ngrok', 'stop');
+        });
+        document.getElementById('ngrok-copy')?.addEventListener('click', () => {
+            this.copyTunnelUrl('ngrok');
+        });
+        
         // Form inputs change detection
         document.querySelectorAll('.form-input, .toggle-input').forEach(input => {
             input.addEventListener('change', () => {
@@ -108,7 +135,8 @@ class ExpertSettings {
             await Promise.all([
                 this.loadSystemStatus(),
                 this.loadSiteSchedules(),
-                this.loadSettings()
+                this.loadSettings(),
+                this.loadTunnelStatus()
             ]);
         } catch (error) {
             console.error('Failed to load initial data:', error);
@@ -845,6 +873,140 @@ class ExpertSettings {
                 }
             }, 300);
         }, 5000);
+    }
+
+    // 터널 관리 메서드들
+    async loadTunnelStatus() {
+        try {
+            const response = await fetch('/api/tunnel-status');
+            const status = await response.json();
+            this.updateTunnelUI(status);
+        } catch (error) {
+            console.error('터널 상태 로드 실패:', error);
+            this.showToast('터널 오류', 'error', '터널 상태를 가져올 수 없습니다');
+        }
+    }
+
+    async refreshTunnelStatus() {
+        const button = document.getElementById('refresh-tunnel-status');
+        if (button) {
+            button.disabled = true;
+            button.textContent = '새로고침 중...';
+        }
+
+        try {
+            await this.loadTunnelStatus();
+            this.showToast('새로고침 완료', 'success', '터널 상태가 업데이트되었습니다');
+        } catch (error) {
+            this.showToast('새로고침 실패', 'error', '터널 상태 새로고침에 실패했습니다');
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.textContent = '터널 상태 새로고침';
+            }
+        }
+    }
+
+    updateTunnelUI(status) {
+        // LocalTunnel UI 업데이트
+        const ltStatus = document.getElementById('localtunnel-status');
+        const ltUrl = document.getElementById('localtunnel-url');
+        const ltStart = document.getElementById('localtunnel-start');
+        const ltStop = document.getElementById('localtunnel-stop');
+        const ltCopy = document.getElementById('localtunnel-copy');
+
+        if (ltStatus) {
+            const ltData = status.localtunnel;
+            if (ltData.status === 'active') {
+                ltStatus.textContent = '실행 중';
+                ltStatus.style.color = '#059669';
+                if (ltData.url) {
+                    ltUrl.textContent = ltData.url;
+                    ltUrl.style.display = 'block';
+                    ltCopy.style.display = 'inline-block';
+                }
+                ltStart.style.display = 'none';
+                ltStop.style.display = 'inline-block';
+            } else {
+                ltStatus.textContent = '중지됨';
+                ltStatus.style.color = '#DC2626';
+                ltUrl.style.display = 'none';
+                ltCopy.style.display = 'none';
+                ltStart.style.display = 'inline-block';
+                ltStop.style.display = 'none';
+            }
+        }
+
+        // ngrok UI 업데이트
+        const ngrokStatus = document.getElementById('ngrok-status');
+        const ngrokUrl = document.getElementById('ngrok-url');
+        const ngrokStart = document.getElementById('ngrok-start');
+        const ngrokStop = document.getElementById('ngrok-stop');
+        const ngrokCopy = document.getElementById('ngrok-copy');
+
+        if (ngrokStatus) {
+            const ngrokData = status.ngrok;
+            if (ngrokData.status === 'active') {
+                ngrokStatus.textContent = '실행 중';
+                ngrokStatus.style.color = '#059669';
+                if (ngrokData.url) {
+                    ngrokUrl.textContent = ngrokData.url;
+                    ngrokUrl.style.display = 'block';
+                    ngrokCopy.style.display = 'inline-block';
+                }
+                ngrokStart.style.display = 'none';
+                ngrokStop.style.display = 'inline-block';
+            } else {
+                ngrokStatus.textContent = '중지됨';
+                ngrokStatus.style.color = '#DC2626';
+                ngrokUrl.style.display = 'none';
+                ngrokCopy.style.display = 'none';
+                ngrokStart.style.display = 'inline-block';
+                ngrokStop.style.display = 'none';
+            }
+        }
+    }
+
+    async controlTunnel(tunnelType, action) {
+        const button = document.getElementById(`${tunnelType}-${action}`);
+        const originalText = button.textContent;
+        
+        try {
+            button.disabled = true;
+            button.textContent = `${action === 'start' ? '시작' : '중지'} 중...`;
+
+            const response = await fetch(`/api/tunnel/${action}/${tunnelType}`, {
+                method: 'POST'
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                this.showToast('터널 제어', 'success', result.message);
+                // 상태 업데이트
+                setTimeout(() => this.loadTunnelStatus(), 2000);
+            } else {
+                throw new Error(result.message);
+            }
+        } catch (error) {
+            this.showToast('터널 오류', 'error', error.message);
+        } finally {
+            button.disabled = false;
+            button.textContent = originalText;
+        }
+    }
+
+    copyTunnelUrl(tunnelType) {
+        const urlElement = document.getElementById(`${tunnelType}-url`);
+        if (urlElement && urlElement.textContent) {
+            navigator.clipboard.writeText(urlElement.textContent)
+                .then(() => {
+                    this.showToast('URL 복사됨', 'success', '터널 URL이 클립보드에 복사되었습니다');
+                })
+                .catch(() => {
+                    this.showToast('복사 실패', 'error', 'URL 복사에 실패했습니다');
+                });
+        }
     }
 }
 
