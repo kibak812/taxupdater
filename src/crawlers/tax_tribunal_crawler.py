@@ -4,6 +4,10 @@ import pandas as pd
 from bs4 import BeautifulSoup
 import requests
 from typing import Optional
+import urllib3
+
+# SSL 경고 메시지 억제
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 상위 디렉토리 모듈 import
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -162,10 +166,10 @@ class TaxTribunalCrawler(BaseCrawler):
             retries = self.config["retry_count"]
         if delay is None:
             delay = self.config["retry_delay"]
-        
+
         for attempt in range(retries):
             try:
-                response = requests.get(url, params=params, timeout=self.config["timeout"])
+                response = requests.get(url, params=params, timeout=self.config["timeout"], verify=False)
                 response.raise_for_status()
                 return response
             except (requests.exceptions.RequestException, TimeoutError) as e:
