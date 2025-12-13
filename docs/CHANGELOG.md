@@ -38,6 +38,65 @@
 - 모든 레거시 크롤러 (기획재정부, 행정안전부, 감사원) 정상 작동
 - 국세청 유권해석/판례 초기 데이터 수집 (약 5000개) 정상 저장
 
+### 2025.12.14 - 아키텍처 재설계 (Eric Gamma 스타일)
+
+#### 새로운 아키텍처 구조
+GPT-5.2 검토를 반영한 클린 아키텍처 도입:
+
+```
+src/
+├── core/                      # 도메인 코어 (NEW)
+│   ├── domain/               # Value Objects
+│   │   ├── site.py           # SiteDefinition
+│   │   └── crawl_result.py   # CrawlResult, CrawlStatistics
+│   ├── ports/                # 인터페이스 (Hexagonal Architecture)
+│   │   ├── crawler_port.py   # ICrawler
+│   │   ├── repository_port.py # IRepository
+│   │   └── notification_port.py # INotificationChannel
+│   └── services/
+│       └── crawl_orchestrator.py
+│
+├── config/
+│   └── sites.py              # SiteCatalog + SiteDisplay (단일 소스)
+│
+├── crawlers/
+│   ├── nts_base_crawler.py   # Template Method 패턴 (NEW)
+│   └── legacy_adapter.py     # Adapter 패턴 (NEW)
+│
+├── services/notifications/    # Strategy 패턴 (NEW)
+│   ├── email_channel.py
+│   ├── websocket_channel.py
+│   └── dispatcher.py
+│
+└── web/routes/               # 라우터 분리 (NEW)
+    ├── dashboard_routes.py
+    ├── crawl_routes.py
+    ├── schedule_routes.py
+    ├── notification_routes.py
+    └── settings_routes.py
+```
+
+#### 적용된 디자인 패턴
+| 패턴 | 적용 대상 | 효과 |
+|------|----------|------|
+| **Value Object** | SiteDefinition, CrawlResult | 불변 도메인 객체 |
+| **Template Method** | NTSBaseCrawler | NTS 크롤러 95% 중복 제거 |
+| **Adapter** | LegacyCrawlerAdapter | 함수형 크롤러 ICrawler 래핑 |
+| **Strategy** | INotificationChannel | 알림 채널 분리 |
+
+#### 코드 감소량
+| 파일 | 변경 전 | 변경 후 | 감소율 |
+|------|--------|--------|-------|
+| nts_authority_crawler.py | 208줄 | 63줄 | **70%** |
+| nts_precedent_crawler.py | 210줄 | 63줄 | **70%** |
+| 사이트 메타데이터 | 5곳 중복 | 1곳 (sites.py) | **80%** |
+
+#### 핵심 개선사항
+1. **단일 진실 소스**: 모든 사이트 정보가 `src/config/sites.py`에 집중
+2. **인터페이스 분리**: Hexagonal Architecture 포트/어댑터 패턴
+3. **중복 제거**: NTS 크롤러 공통 로직을 Template Method로 추출
+4. **확장성**: 새 사이트 추가 시 1개 파일만 수정
+
 ---
 
 ## 2025년 7월
