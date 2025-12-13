@@ -920,22 +920,22 @@ class NotificationService:
             
             site_status.append(f"  • {site_name}: {count:,}건 ({last_update})")
         
-        report = f"""📊 데이터 모니터링 현황 보고서
+        report = f"""[데이터 모니터링 현황 보고서]
 
-📈 전체 수집 현황:
-  • 총 수집 데이터: {total_records:,}건
-  • 모니터링 사이트: {len(repository_stats)}개
-  • 보고서 생성: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+[전체 수집 현황]
+  - 총 수집 데이터: {total_records:,}건
+  - 모니터링 사이트: {len(repository_stats)}개
+  - 보고서 생성: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
-📋 사이트별 현황:
+[사이트별 현황]
 {chr(10).join(site_status)}
 
-🔍 모니터링 목적:
-  • 새로운 법령 해석 및 판례의 신속한 탐지
-  • 업로드 누락 방지를 위한 지속적 감시
-  • 데이터 무결성 보장
+[모니터링 목적]
+  - 새로운 법령 해석 및 판례의 신속한 탐지
+  - 업로드 누락 방지를 위한 지속적 감시
+  - 데이터 무결성 보장
 
-✅ 시스템 상태: 정상 작동 중"""
+[시스템 상태] 정상 작동 중"""
 
         return report
     
@@ -984,13 +984,13 @@ class NotificationService:
         """
         site_name = self.site_names.get(site_key, site_key)
         
-        return f"""⚠️ 크롤링 오류 발생
+        return f"""[크롤링 오류 발생]
 
-🌐 사이트: {site_name}
-❌ 오류 내용: {error_message}
-🕒 발생 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+사이트: {site_name}
+오류 내용: {error_message}
+발생 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
-📝 조치 사항:
+[조치 사항]
 - 사이트 접속 가능 여부 확인
 - 네트워크 연결 상태 점검
 - 로그 파일 검토

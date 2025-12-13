@@ -494,12 +494,12 @@ def main():
         success = migration.migrate_to_monitoring_system()
         
         if success:
-            print("✅ 마이그레이션 성공!")
+            print("[SUCCESS] 마이그레이션 성공!")
         else:
-            print("❌ 마이그레이션 실패!")
+            print("[ERROR] 마이그레이션 실패!")
             return False
     else:
-        print("✅ 마이그레이션이 이미 완료되었습니다.")
+        print("[OK] 마이그레이션이 이미 완료되었습니다.")
     
     return True
 

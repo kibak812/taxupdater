@@ -9,6 +9,13 @@ import sys
 import os
 from pathlib import Path
 
+# Windows cp949 인코딩 문제 해결: stdout/stderr를 UTF-8로 강제 설정
+# 이모지나 특수문자 출력 시 UnicodeEncodeError 방지
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 # 프로젝트 루트 경로 추가
 project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
@@ -33,6 +40,7 @@ from src.crawlers.nts_authority_crawler import NTSAuthorityCrawler
 from src.crawlers.nts_precedent_crawler import NTSPrecedentCrawler
 from src.config.settings import GUI_CONFIG
 from src.config.logging_config import setup_logging, get_logger
+from src.config.sites import get_choice_by_key
 
 # 새로운 모니터링 시스템 import
 from src.services.scheduler_service import SchedulerService
@@ -63,28 +71,12 @@ except ImportError as e:
     def crawl_bai_site(**kwargs):
         raise NotImplementedError("웹 레거시 크롤러 사용 불가")
 
-class LegacyCrawlerWrapper:
-    """레거시 크롤러 함수를 클래스 인터페이스로 래핑"""
-    def __init__(self, site_name, site_key, crawler_func, key_column):
-        self.site_name = site_name
-        self.site_key = site_key
-        self.crawler_func = crawler_func
-        self.key_column = key_column
-    
-    def get_site_name(self):
-        return self.site_name
-    
-    def get_site_key(self):
-        return self.site_key
-    
-    def get_key_column(self):
-        return self.key_column
-    
-    def crawl(self, progress_callback=None, status_callback=None, **kwargs):
-        return self.crawler_func(progress=progress_callback, status_message=status_callback, **kwargs)
-    
-    def validate_data(self, data):
-        return not data.empty if data is not None else False
+# LegacyCrawlerWrapper는 더 이상 사용하지 않음
+# 대신 src/crawlers/legacy_adapter.py의 LegacyCrawlerAdapter 사용
+from src.crawlers.legacy_adapter import (
+    LegacyCrawlerAdapter,
+    create_moef_adapter, create_mois_adapter, create_bai_adapter
+)
 
 
 # FastAPI 앱 초기화
@@ -115,18 +107,12 @@ crawlers = {
     "nts_precedent": NTSPrecedentCrawler(),
 }
 
-# 레거시 크롤러들 (tkinter 사용 가능한 경우에만 추가)
+# 레거시 크롤러들 (LegacyCrawlerAdapter 사용)
 if LEGACY_CRAWLERS_AVAILABLE:
     crawlers.update({
-        "moef": LegacyCrawlerWrapper(
-            "기획재정부", "moef", crawl_moef_site, "문서번호"
-        ),
-        "mois": LegacyCrawlerWrapper(
-            "행정안전부", "mois", crawl_mois_site, "문서번호"
-        ),
-        "bai": LegacyCrawlerWrapper(
-            "감사원", "bai", crawl_bai_site, "문서번호"
-        )
+        "moef": create_moef_adapter(),
+        "mois": create_mois_adapter(),
+        "bai": create_bai_adapter()
     })
     logger.info(f"모든 크롤러 사용 가능: {len(crawlers)}개")
 else:
@@ -434,18 +420,10 @@ async def start_crawling(site_key: str):
         if site_key not in SITE_INFO:
             raise HTTPException(status_code=404, detail="Site not found")
         
-        # site_key를 choice로 변환하는 매핑
-        site_to_choice_mapping = {
-            "tax_tribunal": "1",
-            "nts_authority": "2", 
-            "moef": "3",
-            "nts_precedent": "4",
-            "mois": "5",
-            "bai": "6"
-        }
-        
-        choice = site_to_choice_mapping.get(site_key)
-        if not choice:
+        # site_key를 choice로 변환 (sites.py의 get_choice_by_key 사용)
+        try:
+            choice = get_choice_by_key(site_key)
+        except KeyError:
             raise HTTPException(status_code=400, detail=f"Invalid site_key: {site_key}")
         
         # 스케줄러 서비스를 통한 수동 크롤링 실행 (로그 저장됨)

@@ -3,8 +3,40 @@
 이 문서는 예규판례 모니터링 시스템의 주요 개발 내역과 변경사항을 시간순으로 기록합니다.
 
 ## 목차
+- [2025년 12월](#2025년-12월)
 - [2025년 7월](#2025년-7월)
 - [2025년 6월](#2025년-6월)
+
+---
+
+## 2025년 12월
+
+### 2025.12.14 - Windows 인코딩 문제 해결 및 SQLite 배치 저장 수정
+
+#### 문제 해결
+1. **Windows cp949 인코딩 오류 해결**
+   - 증상: 기획재정부, 행정안전부, 감사원 크롤링 시 `'cp949' codec can't encode character` 오류 발생
+   - 원인: Windows 콘솔의 기본 인코딩(cp949)이 유니코드 특수문자를 처리하지 못함
+   - 해결: `app.py`에서 stdout/stderr를 UTF-8로 강제 설정
+
+2. **LegacyCrawlerAdapter get_site_name() 누락 수정**
+   - 증상: 레거시 크롤러(moef, mois, bai) 실행 시 `'LegacyCrawlerAdapter' object has no attribute 'get_site_name'` 오류
+   - 해결: `LegacyCrawlerAdapter` 클래스에 `get_site_name()` 메서드 추가
+
+3. **SQLite 대용량 데이터 저장 실패 수정**
+   - 증상: 국세청 유권해석/판례 크롤링 시 `too many SQL variables` 오류 (4900+개 데이터)
+   - 원인: SQLite의 SQL 변수 개수 제한 (~999개)
+   - 해결: 500개씩 배치로 나누어 저장하도록 수정
+
+#### 코드 변경사항
+- `src/web/app.py`: Windows UTF-8 인코딩 강제 설정 추가
+- `src/crawlers/legacy_adapter.py`: `get_site_name()` 메서드 추가
+- `src/repositories/sqlite_repository.py`: 배치 저장 로직 구현 (500개씩)
+- 다수 파일에서 이모지 문자를 텍스트로 대체 (`[INFO]`, `[ERROR]` 등)
+
+#### 영향받는 기능
+- 모든 레거시 크롤러 (기획재정부, 행정안전부, 감사원) 정상 작동
+- 국세청 유권해석/판례 초기 데이터 수집 (약 5000개) 정상 저장
 
 ---
 
