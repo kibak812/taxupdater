@@ -43,17 +43,21 @@ class EmailChannel(INotificationChannel):
     SMTP를 통해 이메일 알림을 발송합니다.
     ThreadPoolExecutor를 사용하여 비동기로 발송.
 
+    자원 관리:
+        채널 사용 완료 후 반드시 shutdown()을 호출하거나
+        context manager로 사용하세요.
+
     사용 예:
-        channel = EmailChannel(
-            config=EmailConfig(
-                smtp_server="smtp.gmail.com",
-                smtp_port=587,
-                smtp_username="user@gmail.com",
-                email_address="user@gmail.com"
-            ),
-            get_email_settings=lambda: get_active_email_settings()
-        )
-        await channel.send_new_data_notification(result)
+        # 방법 1: 명시적 shutdown
+        channel = EmailChannel(get_email_settings=get_active_email_settings)
+        try:
+            await channel.send_new_data_notification(result)
+        finally:
+            channel.shutdown()
+
+        # 방법 2: context manager
+        with EmailChannel(get_email_settings=get_active_email_settings) as channel:
+            await channel.send_new_data_notification(result)
     """
 
     def __init__(
@@ -74,6 +78,40 @@ class EmailChannel(INotificationChannel):
         self._get_email_settings = get_email_settings
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._logger = get_logger(__name__)
+        self._shutdown = False
+
+    def __enter__(self):
+        """Context manager 진입"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager 종료 - 자원 정리"""
+        self.shutdown()
+        return False
+
+    def shutdown(self, wait: bool = True):
+        """
+        ThreadPoolExecutor 정리
+
+        Args:
+            wait: 실행 중인 작업 완료 대기 여부
+
+        Note:
+            Martin Fowler 리팩토링 원칙 적용:
+            자원 누수 방지를 위해 명시적 정리 메서드 제공
+        """
+        if not self._shutdown:
+            self._executor.shutdown(wait=wait)
+            self._shutdown = True
+            self._logger.debug("EmailChannel executor shutdown completed")
+
+    def __del__(self):
+        """소멸자 - 안전망으로 자원 정리 시도"""
+        try:
+            if hasattr(self, '_shutdown') and not self._shutdown:
+                self.shutdown(wait=False)
+        except Exception:
+            pass  # 소멸자에서는 예외 무시
 
     @property
     def channel_name(self) -> str:

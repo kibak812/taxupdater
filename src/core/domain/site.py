@@ -19,6 +19,17 @@ class SiteDefinition:
     - 동일한 key를 가진 SiteDefinition은 동일한 객체로 취급
     - 생성 후 변경 불가
 
+    동등성 설계 (Design Decision):
+        key만으로 동등성을 비교합니다. 이는 의도적인 설계로,
+        SITE_CATALOG에서 key로 조회하는 패턴에 최적화되어 있습니다.
+
+        Martin Fowler의 관점에서 이는 Value Object보다 Entity에
+        가깝지만, 현재 사용 패턴(Dict[str, SiteDefinition])에서는
+        key 기반 동등성이 더 실용적입니다.
+
+        향후 SiteDefinition을 set이나 캐시 키로 사용할 경우,
+        모든 속성 기반 동등성으로 변경을 고려하세요.
+
     Attributes:
         key: 사이트 고유 식별자 (예: "tax_tribunal", "nts_authority")
         url: 크롤링 대상 URL

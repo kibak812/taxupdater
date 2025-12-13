@@ -38,6 +38,28 @@
 - 모든 레거시 크롤러 (기획재정부, 행정안전부, 감사원) 정상 작동
 - 국세청 유권해석/판례 초기 데이터 수집 (약 5000개) 정상 저장
 
+### 2025.12.14 - Martin Fowler 리팩토링 원칙 적용
+
+#### 코드 리뷰 반영
+GPT-5.1-codex-max (Eric Gamma 관점) 및 Claude (Martin Fowler 관점) 리뷰 반영:
+
+1. **EmailChannel 자원 누수 수정**
+   - 문제: ThreadPoolExecutor가 해제되지 않아 메모리 누수 발생
+   - 해결: `shutdown()` 메서드 및 context manager 추가
+   - Fowler 원칙: 명시적 자원 정리로 안전한 자원 관리
+
+2. **SiteDefinition 설계 의도 문서화**
+   - key 기반 동등성이 Value Object보다 Entity에 가깝다는 점 명시
+   - 현재 사용 패턴에서는 실용적이라는 판단 기록
+
+#### 향후 리팩토링 과제 (YAGNI 원칙 적용으로 현재 보류)
+- Template Method 예외를 CrawlError로 전파 (Medium)
+- Adapter에 데이터 검증/예외 변환 추가 (Low)
+- 새 데이터 판별 로직을 Repository로 이동 (Medium)
+- 알림 채널에서 Transport/Template 분리 (Low)
+
+---
+
 ### 2025.12.14 - 아키텍처 재설계 (Eric Gamma 스타일)
 
 #### 새로운 아키텍처 구조
