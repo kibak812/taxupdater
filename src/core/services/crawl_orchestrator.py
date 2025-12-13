@@ -145,11 +145,12 @@ class CrawlOrchestrator:
             return result
 
         except Exception as e:
-            # 에러 결과 생성
+            # 에러 결과 생성 (소요 시간 포함)
             duration = (datetime.now() - start_time).total_seconds()
             result = CrawlResult.error(
                 site_key=site_key,
-                error_message=str(e)
+                error_message=str(e),
+                partial_statistics=CrawlStatistics(0, 0, 0, 0, duration)
             )
 
             # 에러 알림
