@@ -93,8 +93,9 @@ templates_path = project_root / "src" / "web" / "templates"
 app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 templates = Jinja2Templates(directory=str(templates_path))
 
-# 크롤링 서비스 초기화
-repository = SQLiteRepository()
+# 크롤링 서비스 초기화 (환경변수 지원)
+db_path = os.environ.get("DATABASE_PATH", "data/tax_data.db")
+repository = SQLiteRepository(db_path=db_path)
 
 # 기존 데이터베이스 스키마 업데이트 (웹 서버 시작 시)
 logger.info("기존 데이터베이스 스키마 업데이트 중...")
@@ -179,6 +180,26 @@ BASE_SITE_INFO = {
 
 # 실제 사용 가능한 크롤러만 포함
 SITE_INFO = {key: value for key, value in BASE_SITE_INFO.items() if key in crawlers}
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Railway/container orchestration"""
+    try:
+        # DB 연결 확인
+        import sqlite3
+        with sqlite3.connect(repository.db_path) as conn:
+            conn.execute("SELECT 1")
+
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "scheduler": "running" if (scheduler_service and scheduler_service.is_running()) else "stopped"
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "error": str(e)}
+        )
 
 @app.get("/", response_class=HTMLResponse)
 async def main_dashboard(request: Request):

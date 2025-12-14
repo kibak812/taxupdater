@@ -60,53 +60,83 @@ journalctl --user -u localtunnel -f
 lt --port 8001 --subdomain taxupdater-monitor
 ```
 
-## Fly.io 배포
+## Fly.io 배포 (Production)
+
+### 현재 배포 상태
+- **URL**: https://taxupdater-monitor.fly.dev
+- **리전**: Tokyo (nrt) - 한국에서 가장 가까운 리전
+- **VM**: shared-cpu-1x, 512MB RAM
+- **볼륨**: 1GB 영구 스토리지 (\`/data\` 마운트)
 
 ### 개요
 Fly.io는 컨테이너 기반의 글로벌 배포 플랫폼으로, 애플리케이션을 전 세계 여러 지역에 쉽게 배포할 수 있습니다.
 
-### 배포 준비
-1. **Fly CLI 설치**
-   ```bash
-   curl -L https://fly.io/install.sh | sh
-   ```
+### 설정 파일
+프로젝트 루트에 위치:
+- \`fly.toml\`: Fly.io 앱 설정
+- \`Dockerfile\`: 컨테이너 빌드 설정 (Chrome + Python 포함)
 
-2. **설정 파일**
-   - 앱 설정: `deploy/fly.io/fly.toml`
-   - Dockerfile: `deploy/fly.io/Dockerfile.fly`
-   - 마이그레이션 확인: `deploy/fly.io/migration_check.py`
+### fly.toml 주요 설정
+```toml
+app = "taxupdater-monitor"
+primary_region = "nrt"
 
-### 배포 과정
+[env]
+  DATABASE_PATH = "/data/tax_data.db"
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false    # 항상 실행 유지
+  auto_start_machines = true
+  min_machines_running = 1
+
+[mounts]
+  source = "taxupdater_data"
+  destination = "/data"
+```
+
+### 초기 설정 (최초 1회)
 ```bash
-# Fly.io 로그인
+# Fly CLI 설치
+curl -L https://fly.io/install.sh | sh
+
+# 로그인
 fly auth login
 
-# 앱 생성 (최초 1회)
+# 앱 생성
 fly apps create taxupdater-monitor
 
 # 볼륨 생성 (데이터 영속성)
-fly volumes create data --size 1 --region nrt
-
-# 배포
-fly deploy --config deploy/fly.io/fly.toml --dockerfile deploy/fly.io/Dockerfile.fly
+fly volumes create taxupdater_data --size 1 --region nrt
 ```
 
-### 배포 후 확인
+### 배포 명령어
 ```bash
-# SSH 접속
-fly ssh console
+# 프로젝트 루트에서 실행
+fly deploy
+```
 
-# 마이그레이션 상태 확인
-python deploy/fly.io/migration_check.py
+### 관리 명령어
+```bash
+# 상태 확인
+fly status
 
 # 로그 확인
 fly logs
+
+# SSH 접속
+fly ssh console
+
+# 앱 재시작
+fly apps restart taxupdater-monitor
 ```
 
 ### 문제 해결
 - **500 에러 발생 시**: 모니터링 시스템 테이블 누락 가능성
 - **해결 방법**: 자동 마이그레이션이 실행되도록 서버 재시작
-- **수동 마이그레이션**: `python src/database/migrations.py`
+- **수동 마이그레이션**: \`python src/database/migrations.py\`
 
 ## systemd 서비스 설정
 
@@ -116,15 +146,15 @@ systemd를 사용하여 시스템 부팅 시 자동으로 서비스를 시작하
 ### 자동화 아키텍처
 ```
 부팅 시작
-    ↓
+    |
 systemd 사용자 서비스 자동 시작
-    ↓
-├── taxupdater.service (웹서버)
-│   └── localhost:8001에서 서비스 실행
-│
-└── localtunnel.service (터널링)
-    └── https://taxupdater-monitor.loca.lt로 고정 연결
-    ↓
+    |
++-- taxupdater.service (웹서버)
+|   +-- localhost:8001에서 서비스 실행
+|
++-- localtunnel.service (터널링)
+    +-- https://taxupdater-monitor.loca.lt로 고정 연결
+    |
 완전 자동화 완료 (사용자 개입 불필요)
 ```
 
@@ -165,7 +195,7 @@ WantedBy=default.target
 | 방법 | 장점 | 단점 | 권장 사용 사례 |
 |------|------|------|----------------|
 | LocalTunnel | 고정 URL, 무료 | 로컬 PC 필요 | 개발/테스트 |
-| Fly.io | 클라우드 기반 | 설정 복잡 | 프로덕션 |
+| Fly.io | 클라우드 기반, 24/7 운영 | 유료 (소량 무료) | 프로덕션 |
 | systemd | 완전 자동화 | 로컬 환경 한정 | 로컬 24/7 운영 |
 
 ---

@@ -10,3 +10,6 @@ cloudflared-linux-amd64
 taxupdater_venv/
 .env
 *.log
+nul
+logs/
+.claude/
