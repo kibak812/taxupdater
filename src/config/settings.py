@@ -1,6 +1,17 @@
 # 세금 관련 법령 크롤러 설정
+#
+# DEPRECATED NOTICE:
+# URLS, DATA_COLUMNS, KEY_COLUMNS는 src/config/sites.py의
+# SITE_CATALOG으로 이동되었습니다.
+# 새 코드는 sites.py의 SITE_CATALOG, SITE_DISPLAY를 사용해주세요.
+#
+# 예: from src.config.sites import SITE_CATALOG, get_site
+#     site = get_site("tax_tribunal")
+#     url = site.url
+#     key_column = site.key_column
+#     data_columns = site.data_columns
 
-# 기본 URL 설정
+# 기본 URL 설정 (DEPRECATED: SITE_CATALOG.url 사용)
 BASE_URL = "https://www.tt.go.kr"
 MOEF_URL = "https://www.moef.go.kr"
 

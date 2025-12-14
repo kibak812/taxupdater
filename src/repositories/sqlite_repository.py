@@ -290,8 +290,14 @@ class SQLiteRepository(DataRepositoryInterface):
                             new_entries['updated_at'] = timestamp
                         
                         # INSERT OR IGNORE 방식으로 중복 키 에러 방지
+                        # 배치 저장으로 SQLite 변수 개수 제한(999개) 회피
                         try:
-                            new_entries.to_sql(table_name, conn, if_exists='append', index=False, method='multi')
+                            # chunksize를 사용하여 배치로 저장 (500개씩)
+                            batch_size = 500
+                            for i in range(0, len(new_entries), batch_size):
+                                batch = new_entries.iloc[i:i+batch_size]
+                                batch.to_sql(table_name, conn, if_exists='append', index=False)
+                                self.logger.debug(f"[SQLite] {site_key}: 배치 {i//batch_size + 1} 저장 ({len(batch)}개)")
                         except sqlite3.IntegrityError as ie:
                             self.logger.warning(f"[SQLite] {site_key}: UNIQUE constraint 에러 발생, INSERT OR IGNORE 방식 사용")
                             # 개별 행씩 INSERT OR IGNORE 처리
@@ -312,8 +318,15 @@ class SQLiteRepository(DataRepositoryInterface):
                         data['created_at'] = timestamp
                     if 'updated_at' not in data.columns:
                         data['updated_at'] = timestamp
-                    
-                    data.to_sql(table_name, conn, if_exists='replace', index=False, method='multi')
+
+                    # 배치 저장으로 SQLite 변수 개수 제한 회피
+                    batch_size = 500
+                    for i in range(0, len(data), batch_size):
+                        batch = data.iloc[i:i+batch_size]
+                        # 첫 배치는 replace, 나머지는 append
+                        if_exists_mode = 'replace' if i == 0 else 'append'
+                        batch.to_sql(table_name, conn, if_exists=if_exists_mode, index=False)
+
                     self._update_metadata(conn, site_key, len(data), replace=True)
                     self.logger.info(f"[SQLite] {site_key}: {len(data)}개 항목 전체 저장 완료")
                 

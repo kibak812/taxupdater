@@ -3,8 +3,121 @@
 이 문서는 예규판례 모니터링 시스템의 주요 개발 내역과 변경사항을 시간순으로 기록합니다.
 
 ## 목차
+- [2025년 12월](#2025년-12월)
 - [2025년 7월](#2025년-7월)
 - [2025년 6월](#2025년-6월)
+
+---
+
+## 2025년 12월
+
+### 2025.12.14 - Windows 인코딩 문제 해결 및 SQLite 배치 저장 수정
+
+#### 문제 해결
+1. **Windows cp949 인코딩 오류 해결**
+   - 증상: 기획재정부, 행정안전부, 감사원 크롤링 시 `'cp949' codec can't encode character` 오류 발생
+   - 원인: Windows 콘솔의 기본 인코딩(cp949)이 유니코드 특수문자를 처리하지 못함
+   - 해결: `app.py`에서 stdout/stderr를 UTF-8로 강제 설정
+
+2. **LegacyCrawlerAdapter get_site_name() 누락 수정**
+   - 증상: 레거시 크롤러(moef, mois, bai) 실행 시 `'LegacyCrawlerAdapter' object has no attribute 'get_site_name'` 오류
+   - 해결: `LegacyCrawlerAdapter` 클래스에 `get_site_name()` 메서드 추가
+
+3. **SQLite 대용량 데이터 저장 실패 수정**
+   - 증상: 국세청 유권해석/판례 크롤링 시 `too many SQL variables` 오류 (4900+개 데이터)
+   - 원인: SQLite의 SQL 변수 개수 제한 (~999개)
+   - 해결: 500개씩 배치로 나누어 저장하도록 수정
+
+#### 코드 변경사항
+- `src/web/app.py`: Windows UTF-8 인코딩 강제 설정 추가
+- `src/crawlers/legacy_adapter.py`: `get_site_name()` 메서드 추가
+- `src/repositories/sqlite_repository.py`: 배치 저장 로직 구현 (500개씩)
+- 다수 파일에서 이모지 문자를 텍스트로 대체 (`[INFO]`, `[ERROR]` 등)
+
+#### 영향받는 기능
+- 모든 레거시 크롤러 (기획재정부, 행정안전부, 감사원) 정상 작동
+- 국세청 유권해석/판례 초기 데이터 수집 (약 5000개) 정상 저장
+
+### 2025.12.14 - Martin Fowler 리팩토링 원칙 적용
+
+#### 코드 리뷰 반영
+GPT-5.1-codex-max (Eric Gamma 관점) 및 Claude (Martin Fowler 관점) 리뷰 반영:
+
+1. **EmailChannel 자원 누수 수정**
+   - 문제: ThreadPoolExecutor가 해제되지 않아 메모리 누수 발생
+   - 해결: `shutdown()` 메서드 및 context manager 추가
+   - Fowler 원칙: 명시적 자원 정리로 안전한 자원 관리
+
+2. **SiteDefinition 설계 의도 문서화**
+   - key 기반 동등성이 Value Object보다 Entity에 가깝다는 점 명시
+   - 현재 사용 패턴에서는 실용적이라는 판단 기록
+
+#### 향후 리팩토링 과제 (YAGNI 원칙 적용으로 현재 보류)
+- Template Method 예외를 CrawlError로 전파 (Medium)
+- Adapter에 데이터 검증/예외 변환 추가 (Low)
+- 새 데이터 판별 로직을 Repository로 이동 (Medium)
+- 알림 채널에서 Transport/Template 분리 (Low)
+
+---
+
+### 2025.12.14 - 아키텍처 재설계 (Eric Gamma 스타일)
+
+#### 새로운 아키텍처 구조
+GPT-5.2 검토를 반영한 클린 아키텍처 도입:
+
+```
+src/
+├── core/                      # 도메인 코어 (NEW)
+│   ├── domain/               # Value Objects
+│   │   ├── site.py           # SiteDefinition
+│   │   └── crawl_result.py   # CrawlResult, CrawlStatistics
+│   ├── ports/                # 인터페이스 (Hexagonal Architecture)
+│   │   ├── crawler_port.py   # ICrawler
+│   │   ├── repository_port.py # IRepository
+│   │   └── notification_port.py # INotificationChannel
+│   └── services/
+│       └── crawl_orchestrator.py
+│
+├── config/
+│   └── sites.py              # SiteCatalog + SiteDisplay (단일 소스)
+│
+├── crawlers/
+│   ├── nts_base_crawler.py   # Template Method 패턴 (NEW)
+│   └── legacy_adapter.py     # Adapter 패턴 (NEW)
+│
+├── services/notifications/    # Strategy 패턴 (NEW)
+│   ├── email_channel.py
+│   ├── websocket_channel.py
+│   └── dispatcher.py
+│
+└── web/routes/               # 라우터 분리 (NEW)
+    ├── dashboard_routes.py
+    ├── crawl_routes.py
+    ├── schedule_routes.py
+    ├── notification_routes.py
+    └── settings_routes.py
+```
+
+#### 적용된 디자인 패턴
+| 패턴 | 적용 대상 | 효과 |
+|------|----------|------|
+| **Value Object** | SiteDefinition, CrawlResult | 불변 도메인 객체 |
+| **Template Method** | NTSBaseCrawler | NTS 크롤러 95% 중복 제거 |
+| **Adapter** | LegacyCrawlerAdapter | 함수형 크롤러 ICrawler 래핑 |
+| **Strategy** | INotificationChannel | 알림 채널 분리 |
+
+#### 코드 감소량
+| 파일 | 변경 전 | 변경 후 | 감소율 |
+|------|--------|--------|-------|
+| nts_authority_crawler.py | 208줄 | 63줄 | **70%** |
+| nts_precedent_crawler.py | 210줄 | 63줄 | **70%** |
+| 사이트 메타데이터 | 5곳 중복 | 1곳 (sites.py) | **80%** |
+
+#### 핵심 개선사항
+1. **단일 진실 소스**: 모든 사이트 정보가 `src/config/sites.py`에 집중
+2. **인터페이스 분리**: Hexagonal Architecture 포트/어댑터 패턴
+3. **중복 제거**: NTS 크롤러 공통 로직을 Template Method로 추출
+4. **확장성**: 새 사이트 추가 시 1개 파일만 수정
 
 ---
 

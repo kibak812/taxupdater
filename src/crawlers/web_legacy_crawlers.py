@@ -66,7 +66,7 @@ def safe_request(url, params, retries=None, delay=None):
 
 def crawl_moef_site(progress=None, status_message=None, **kwargs):
     """기획재정부 크롤링 (example.py 기반)"""
-    print("🔍 기획재정부 크롤링 시작...")
+    print("[INFO] 기획재정부 크롤링 시작...")
     
     if progress is None:
         progress = WebProgress()
@@ -147,7 +147,7 @@ def crawl_moef_site(progress=None, status_message=None, **kwargs):
 
 def crawl_mois_site(progress=None, status_message=None, **kwargs):
     """행정안전부 크롤링 (example.py 기반)"""
-    print("🔍 행정안전부 크롤링 시작...")
+    print("[INFO] 행정안전부 크롤링 시작...")
     
     if progress is None:
         progress = WebProgress()
@@ -301,7 +301,7 @@ def crawl_mois_site(progress=None, status_message=None, **kwargs):
 
 def crawl_bai_site(progress=None, status_message=None, **kwargs):
     """감사원 크롤링 (example.py 기반)"""
-    print("🔍 감사원 크롤링 시작...")
+    print("[INFO] 감사원 크롤링 시작...")
     
     if progress is None:
         progress = WebProgress()

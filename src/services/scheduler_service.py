@@ -23,6 +23,7 @@ from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 import pytz
 
 from src.config.logging_config import get_logger
+from src.config.sites import get_choice_by_key
 from src.services.crawler_service import CrawlingService
 from src.services.notification_service import NotificationService
 
@@ -258,18 +259,10 @@ class SchedulerService:
             # 시스템 상태 업데이트
             self._update_system_status(site_key, 'running')
             
-            # 크롤링 실행
-            site_to_choice = {
-                "tax_tribunal": "1",
-                "nts_authority": "2", 
-                "moef": "3",
-                "nts_precedent": "4",
-                "mois": "5",
-                "bai": "6"
-            }
-            
-            choice = site_to_choice.get(site_key)
-            if not choice:
+            # 크롤링 실행 (sites.py의 get_choice_by_key 사용)
+            try:
+                choice = get_choice_by_key(site_key)
+            except KeyError:
                 raise ValueError(f"알 수 없는 사이트: {site_key}")
             
             # 크롤링 서비스 실행

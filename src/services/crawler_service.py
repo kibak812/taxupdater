@@ -210,7 +210,7 @@ class CrawlingService:
             
             # 데이터 유효성 검증
             if not crawler.validate_data(new_data):
-                error_msg = f"  ❌ {site_name}: 크롤링된 데이터가 유효하지 않습니다."
+                error_msg = f"  [ERROR] {site_name}: 크롤링된 데이터가 유효하지 않습니다."
                 self.logger.error(error_msg)
                 return {
                     'site_key': crawler_key,
@@ -221,7 +221,7 @@ class CrawlingService:
                 }
             
             if new_data.empty:
-                error_msg = f"  ⚠️  {site_name}: 크롤링 결과 데이터 없음."
+                error_msg = f"  [WARN] {site_name}: 크롤링 결과 데이터 없음."
                 self.logger.error(error_msg)
                 return {
                     'site_key': crawler_key,
@@ -375,8 +375,8 @@ class CrawlingService:
             }
                 
         except Exception as e:
-            error_msg = f"  ❌ {crawler_key} 크롤링 중 오류 발생: {str(e)}"
-            print(error_msg)
+            error_msg = f"  [ERROR] {crawler_key} 크롤링 중 오류 발생: {str(e)}"
+            self.logger.error(error_msg)
             
             # 오류 알림 생성
             error_alert = self.notification_service.create_error_alert(
