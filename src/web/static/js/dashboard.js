@@ -6,13 +6,14 @@
 class ExpertDashboard {
     constructor() {
         this.currentTimeFilter = 24; // Default: last 24 hours
+        // iOS-style accent colors
         this.siteColors = {
-            'tax_tribunal': '#4F46E5',
-            'nts_authority': '#059669',
-            'nts_precedent': '#D97706',
-            'moef': '#8B5CF6',
-            'mois': '#DC2626',
-            'bai': '#6B7280'
+            'tax_tribunal': '#5E5CE6',
+            'nts_authority': '#30D158',
+            'nts_precedent': '#FF9F0A',
+            'moef': '#BF5AF2',
+            'mois': '#FF453A',
+            'bai': '#64D2FF'
         };
         
         this.siteNames = {
@@ -138,14 +139,14 @@ class ExpertDashboard {
         const statusElement = document.getElementById('connectionStatus');
         const dotElement = statusElement?.querySelector('.indicator-dot');
         const textElement = statusElement?.querySelector('span');
-        
+
         if (dotElement && textElement) {
             if (isConnected) {
-                dotElement.style.background = '#10B981';
-                textElement.textContent = '연결됨';
+                dotElement.style.background = '#30D158';
+                textElement.textContent = 'Live';
             } else {
-                dotElement.style.background = '#EF4444';
-                textElement.textContent = '연결 끊어짐';
+                dotElement.style.background = '#FF453A';
+                textElement.textContent = 'Offline';
             }
         }
     }
@@ -251,14 +252,58 @@ class ExpertDashboard {
     renderStatusCards(sites, recentCounts) {
         const container = document.getElementById('statusCardsGrid');
         if (!container) return;
-        
+
         container.innerHTML = '';
-        
+
+        // Calculate total new count for hero section
+        let totalNewCount = 0;
+
         sites.forEach(site => {
             const recentCount = recentCounts[site.site_key]?.count || 0;
+            totalNewCount += recentCount;
             const card = this.createStatusCard(site, recentCount);
             container.appendChild(card);
         });
+
+        // Update hero section
+        this.updateHeroSection(totalNewCount);
+    }
+
+    updateHeroSection(totalCount) {
+        const countElement = document.getElementById('totalNewCount');
+        const labelElement = document.getElementById('heroLabel');
+
+        if (countElement) {
+            // Animate count
+            this.animateCount(countElement, totalCount);
+        }
+
+        if (labelElement) {
+            labelElement.textContent = `${this.formatTimeFilter()} 새로운 예규판례`;
+        }
+    }
+
+    animateCount(element, targetValue) {
+        const duration = 600;
+        const startValue = parseInt(element.textContent) || 0;
+        const startTime = performance.now();
+
+        const animate = (currentTime) => {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            // Ease out cubic
+            const easeOut = 1 - Math.pow(1 - progress, 3);
+            const currentValue = Math.round(startValue + (targetValue - startValue) * easeOut);
+
+            element.textContent = currentValue;
+
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            }
+        };
+
+        requestAnimationFrame(animate);
     }
     
     createStatusCard(site, recentCount) {
@@ -349,16 +394,16 @@ class ExpertDashboard {
         try {
             console.log('즉시 탐색 시작');
             
-            // 버튼 비활성화
+            // Disable button
             const btn = document.getElementById('instantCrawlBtn');
             if (btn) {
                 btn.disabled = true;
                 btn.innerHTML = `
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
                         <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                    탐색 중...
+                    Scanning...
                 `;
             }
             
@@ -387,10 +432,10 @@ class ExpertDashboard {
         if (btn) {
             btn.disabled = false;
             btn.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
-                즉시 탐색
+                Scan Now
             `;
         }
     }
