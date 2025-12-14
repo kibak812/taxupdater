@@ -11,6 +11,33 @@
 
 ## 2025년 12월
 
+### 2025.12.14 - 스케줄러 중복 실행 문제 해결
+
+#### 문제 해결
+1. **스케줄러 중복 실행으로 인한 크롤링 실패 해결**
+   - 증상: 스케줄된 시간에 일부 크롤러가 "이미 실행 중" 경고와 함께 실패(소요시간 0초)
+   - 원인: 개별 사이트 스케줄 + 전체 크롤링 스케줄이 동시에 트리거되어 충돌
+   - 해결: 하드코딩된 전체 크롤링 스케줄 제거, 개별 사이트 스케줄만 사용하도록 통합
+
+2. **DB 컬럼 누락으로 인한 에러 해결**
+   - 증상: "no such column: avg_crawl_time", "no such column: consecutive_errors" 에러
+   - 원인: 코드에서 존재하지 않는 컬럼에 접근 시도
+   - 해결: 누락된 컬럼 참조 제거, 기존 컬럼만 사용하도록 수정
+
+#### 코드 변경사항
+- `src/services/scheduler_service.py`:
+  - `_load_schedules_from_db()`: 개별 사이트 스케줄을 APScheduler에 등록
+  - `_add_system_maintenance_jobs()`: 전체 크롤링 스케줄(`crawl_all_sites`) 제거
+  - `_handle_crawl_success()`: `avg_crawl_time` 업데이트 로직 제거
+  - `_system_health_check()`: `consecutive_errors` 참조 제거
+
+#### 개선된 동작
+- 웹 설정에서 각 사이트별 스케줄을 개별적으로 관리 가능
+- 스케줄 충돌 없이 설정된 시간에 정확히 크롤링 실행
+- 특정 사이트만 다른 주기로 실행하는 유연한 운영 가능
+
+---
+
 ### 2025.12.14 - Windows 인코딩 문제 해결 및 SQLite 배치 저장 수정
 
 #### 문제 해결

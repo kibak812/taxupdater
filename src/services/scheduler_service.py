@@ -529,14 +529,13 @@ class SchedulerService:
             # 스케줄 정보 업데이트
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute("""
-                    UPDATE crawl_schedules 
+                    UPDATE crawl_schedules
                     SET last_run = CURRENT_TIMESTAMP,
                         last_success = CURRENT_TIMESTAMP,
                         success_count = success_count + 1,
-                        avg_crawl_time = (avg_crawl_time + ?) / 2,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE site_key = ?
-                """, (duration, site_key))
+                """, (site_key,))
             
             # 메타데이터 업데이트
             self._update_crawl_metadata(site_key, duration, success=True)
@@ -665,22 +664,23 @@ class SchedulerService:
             self.logger.error(f"메타데이터 업데이트 실패: {e}")
     
     def _load_schedules_from_db(self):
-        """데이터베이스에서 스케줄 로드"""
+        """데이터베이스에서 개별 사이트 스케줄 로드 및 APScheduler에 등록"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT site_key, cron_expression, enabled, priority, notification_threshold
+                    SELECT site_key, cron_expression, enabled
                     FROM crawl_schedules WHERE enabled = 1
                 """)
-                
+
+                loaded_count = 0
                 for row in cursor.fetchall():
-                    site_key, cron_expr, enabled, priority, threshold = row
-                    
+                    site_key, cron_expr, enabled = row
+
                     if enabled:
                         job_id = f"crawl_{site_key}"
                         trigger = CronTrigger.from_crontab(cron_expr, timezone=self.timezone)
-                        
+
                         self.scheduler.add_job(
                             func=self._execute_crawl_job,
                             trigger=trigger,
@@ -691,14 +691,21 @@ class SchedulerService:
                             max_instances=1,
                             misfire_grace_time=3600
                         )
-                        
+                        loaded_count += 1
                         self.logger.info(f"스케줄 로드: {site_key} ({cron_expr})")
-                        
+
+                if loaded_count > 0:
+                    self.logger.info(f"총 {loaded_count}개 사이트 스케줄 등록 완료")
+
         except Exception as e:
             self.logger.error(f"스케줄 로드 실패: {e}")
     
     def _add_system_maintenance_jobs(self):
-        """시스템 유지보수 작업 추가"""
+        """시스템 유지보수 작업 추가
+
+        Note: 크롤링 스케줄은 _load_schedules_from_db()에서 개별 사이트별로 등록됩니다.
+        여기서는 시스템 유지보수 작업만 등록합니다.
+        """
         try:
             # 시스템 상태 체크 (5분마다)
             self.scheduler.add_job(
@@ -708,7 +715,7 @@ class SchedulerService:
                 name="시스템 상태 체크",
                 replace_existing=True
             )
-            
+
             # 알림 정리 (매일 자정)
             self.scheduler.add_job(
                 func=self._cleanup_old_notifications,
@@ -717,20 +724,9 @@ class SchedulerService:
                 name="알림 정리",
                 replace_existing=True
             )
-            
-            # 전체 크롤링 스케줄 (매일 오전 2시와 오후 2시)
-            self.scheduler.add_job(
-                func=self._execute_all_sites_crawl,
-                trigger=CronTrigger(hour='2,14', minute=0, timezone=self.timezone),
-                id="crawl_all_sites",
-                name="전체 사이트 크롤링",
-                replace_existing=True,
-                max_instances=1,
-                misfire_grace_time=3600
-            )
-            
+
             self.logger.info("시스템 유지보수 작업 추가 완료")
-            
+
         except Exception as e:
             self.logger.error(f"유지보수 작업 추가 실패: {e}")
     
@@ -739,34 +735,29 @@ class SchedulerService:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                
+
                 # 각 사이트 상태 체크
                 cursor.execute("SELECT DISTINCT site_key FROM crawl_schedules")
                 sites = [row[0] for row in cursor.fetchall()]
-                
+
                 for site_key in sites:
-                    # 마지막 성공한 크롤링 시간 확인
+                    # 마지막 성공/실패 시간 확인
                     cursor.execute("""
-                        SELECT last_success, consecutive_errors 
+                        SELECT last_success, failure_count
                         FROM crawl_schedules WHERE site_key = ?
                     """, (site_key,))
-                    
+
                     result = cursor.fetchone()
                     if result:
-                        last_success, consecutive_errors = result
-                        
+                        last_success, failure_count = result
+
                         # 24시간 이상 성공 없음 체크
                         if last_success:
                             last_success_dt = datetime.fromisoformat(last_success)
                             if datetime.now() - last_success_dt > timedelta(hours=24):
-                                self._update_system_status(site_key, 'warning', 
+                                self._update_system_status(site_key, 'warning',
                                                          "24시간 이상 성공한 크롤링 없음")
-                        
-                        # 연속 에러 체크
-                        if consecutive_errors >= 3:
-                            self._update_system_status(site_key, 'error', 
-                                                     f"연속 {consecutive_errors}회 실패")
-                            
+
         except Exception as e:
             self.logger.error(f"시스템 건강도 체크 실패: {e}")
     
