@@ -11,25 +11,6 @@
 
 ## 2025년 12월
 
-### 2025.12.14 - Fly.io 프로덕션 배포 완료
-
-#### 배포 상태
-- **URL**: https://taxupdater-monitor.fly.dev
-- **리전**: Tokyo (nrt) - 한국에서 가장 가까운 리전
-- **VM**: shared-cpu-1x, 512MB RAM
-- **볼륨**: 1GB 영구 스토리지 (SQLite DB + 백업)
-
-#### 설정 파일
-- fly.toml: Fly.io 앱 설정 (루트 디렉토리)
-- Dockerfile: 컨테이너 빌드 설정 (Chrome + Python)
-
-#### 주요 특징
-- **24/7 운영**: auto_stop_machines = false로 항상 실행 유지
-- **데이터 영속성**: 볼륨 마운트로 재배포 시에도 데이터 보존
-- **HTTPS 강제**: force_https = true로 보안 통신
-
----
-
 ### 2025.12.14 - 스케줄러 중복 실행 문제 해결
 
 #### 문제 해결
@@ -223,19 +204,9 @@ src/
 
 ### 2025.07.06 - 프로젝트 구조 정리
 - **체계적인 파일 분류**: 루트 디렉토리 파일들을 성격별로 정리
-- **새로운 디렉토리 구조**: `docs/`, `scripts/`, `tests/`, `config/`, `deploy/` 생성
+- **새로운 디렉토리 구조**: `docs/`, `scripts/`, `config/` 생성
 - **ngrok 잔재 제거**: 관련 파일 11개 삭제
 - **가독성 향상**: 프로젝트 구조가 직관적이고 표준적으로 개선
-
-### 2025.07.05 - 배포 관련 파일 정리 및 Fly.io 문제 해결
-#### 배포 파일 정리
-- **삭제된 파일**: `render.yaml`, `build.sh`, `railway.json`, `Procfile`, `Dockerfile`, `.dockerignore`
-- **배포 전략 명확화**: LocalTunnel(주력) + Fly.io(대안) 조합으로 단순화
-
-#### Fly.io 배포 문제 해결
-- **문제**: 모니터링 시스템 테이블 누락으로 API 500 에러
-- **해결**: 자동 마이그레이션 시스템 구현 및 안전한 서비스 초기화
-- **배포용 도구**: `migration_check.py` 스크립트 제공
 
 ### 2025.07.02 - 최종 사용자 경험 최적화
 

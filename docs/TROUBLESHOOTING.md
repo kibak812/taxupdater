@@ -116,7 +116,7 @@ except sqlite3.IntegrityError:
 ```
 
 ### 마이그레이션 실패
-**문제점**: Fly.io 배포 환경에서 모니터링 시스템 테이블 누락
+**문제점**: 모니터링 시스템 테이블 누락
 
 **해결 방법**:
 1. 자동 마이그레이션 시스템
@@ -129,7 +129,6 @@ except sqlite3.IntegrityError:
 
 2. 수동 마이그레이션
    ```bash
-   fly ssh console
    python src/database/migrations.py
    ```
 
@@ -191,26 +190,6 @@ if 'created_at' in existing_columns or 'updated_at' in existing_columns:
 ```
 
 ## 배포 환경 문제
-
-### Fly.io 500 에러
-**문제점**: 모니터링 기능 관련 API 500 에러
-
-**원인**:
-1. 데이터베이스 테이블 누락
-2. 서비스 초기화 실패
-3. None 상태에서 메서드 호출 시도
-
-**해결 방법**:
-```python
-# 안전한 서비스 초기화
-try:
-    scheduler_service = SchedulerService(db_path=repository.db_path)
-    notification_service = NotificationService(db_path=repository.db_path)
-except Exception as e:
-    logger.error(f"모니터링 시스템 초기화 실패: {e}")
-    scheduler_service = None
-    notification_service = None
-```
 
 ### LocalTunnel 연결 문제
 **문제점**: 터널이 연결되지 않거나 중단됨

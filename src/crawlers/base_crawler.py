@@ -3,13 +3,13 @@ import os
 import pandas as pd
 from typing import Dict, Any, Optional, Callable
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 
 # 상위 디렉토리 모듈 import
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.interfaces.crawler_interface import CrawlerInterface
-from src.config.settings import SELENIUM_OPTIONS, CRAWLING_CONFIG
+from src.config.settings import CRAWLING_CONFIG
 from src.config.logging_config import get_logger
+from src.crawlers.selenium_driver import create_chrome_driver
 
 
 class BaseCrawler(CrawlerInterface):
@@ -50,10 +50,7 @@ class BaseCrawler(CrawlerInterface):
     
     def get_selenium_driver(self) -> webdriver.Chrome:
         """Selenium 드라이버 생성"""
-        options = Options()
-        for option in SELENIUM_OPTIONS:
-            options.add_argument(option)
-        return webdriver.Chrome(options=options)
+        return create_chrome_driver()
     
     def safe_selenium_operation(self, operation_func: Callable, retries: Optional[int] = None, delay: Optional[int] = None) -> Any:
         """

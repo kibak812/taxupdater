@@ -128,3 +128,9 @@ Thumbs.db
 
 # Deployment binaries
 ngrok
+
+# Selenium runtime artifacts
+.selenium-cache/
+.chrome-profile/
+.chrome-data-dir/
+chromedriver/

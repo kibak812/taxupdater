@@ -5,7 +5,7 @@
 ## 목차
 - [로컬 개발 환경](#로컬-개발-환경)
 - [LocalTunnel 배포](#localtunnel-배포)
-- [Fly.io 배포](#flyio-배포)
+- [ngrok 배포](#ngrok-배포)
 - [systemd 서비스 설정](#systemd-서비스-설정)
 
 ---
@@ -60,83 +60,24 @@ journalctl --user -u localtunnel -f
 lt --port 8001 --subdomain taxupdater-monitor
 ```
 
-## Fly.io 배포 (Production)
-
-### 현재 배포 상태
-- **URL**: https://taxupdater-monitor.fly.dev
-- **리전**: Tokyo (nrt) - 한국에서 가장 가까운 리전
-- **VM**: shared-cpu-1x, 512MB RAM
-- **볼륨**: 1GB 영구 스토리지 (\`/data\` 마운트)
+## ngrok 배포
 
 ### 개요
-Fly.io는 컨테이너 기반의 글로벌 배포 플랫폼으로, 애플리케이션을 전 세계 여러 지역에 쉽게 배포할 수 있습니다.
+ngrok은 임시 외부 접속 URL이 필요할 때 사용하는 터널링 옵션입니다.
+고정 URL 운영은 LocalTunnel을 우선 사용하고, 임시 공유나 백업 접속 경로가 필요할 때 ngrok을 사용합니다.
 
-### 설정 파일
-프로젝트 루트에 위치:
-- \`fly.toml\`: Fly.io 앱 설정
-- \`Dockerfile\`: 컨테이너 빌드 설정 (Chrome + Python 포함)
-
-### fly.toml 주요 설정
-```toml
-app = "taxupdater-monitor"
-primary_region = "nrt"
-
-[env]
-  DATABASE_PATH = "/data/tax_data.db"
-  PORT = "8080"
-
-[http_service]
-  internal_port = 8080
-  force_https = true
-  auto_stop_machines = false    # 항상 실행 유지
-  auto_start_machines = true
-  min_machines_running = 1
-
-[mounts]
-  source = "taxupdater_data"
-  destination = "/data"
-```
-
-### 초기 설정 (최초 1회)
+### 설정
 ```bash
-# Fly CLI 설치
-curl -L https://fly.io/install.sh | sh
-
-# 로그인
-fly auth login
-
-# 앱 생성
-fly apps create taxupdater-monitor
-
-# 볼륨 생성 (데이터 영속성)
-fly volumes create taxupdater_data --size 1 --region nrt
+./setup_ngrok.sh
+./get_ngrok_url.sh
 ```
 
-### 배포 명령어
+### 서비스 관리
 ```bash
-# 프로젝트 루트에서 실행
-fly deploy
+systemctl --user status ngrok
+systemctl --user restart ngrok
+systemctl --user stop ngrok
 ```
-
-### 관리 명령어
-```bash
-# 상태 확인
-fly status
-
-# 로그 확인
-fly logs
-
-# SSH 접속
-fly ssh console
-
-# 앱 재시작
-fly apps restart taxupdater-monitor
-```
-
-### 문제 해결
-- **500 에러 발생 시**: 모니터링 시스템 테이블 누락 가능성
-- **해결 방법**: 자동 마이그레이션이 실행되도록 서버 재시작
-- **수동 마이그레이션**: \`python src/database/migrations.py\`
 
 ## systemd 서비스 설정
 
@@ -195,7 +136,7 @@ WantedBy=default.target
 | 방법 | 장점 | 단점 | 권장 사용 사례 |
 |------|------|------|----------------|
 | LocalTunnel | 고정 URL, 무료 | 로컬 PC 필요 | 개발/테스트 |
-| Fly.io | 클라우드 기반, 24/7 운영 | 유료 (소량 무료) | 프로덕션 |
+| ngrok | 임시 공유 쉬움 | 무료 URL 변동 | 임시 외부 접속 |
 | systemd | 완전 자동화 | 로컬 환경 한정 | 로컬 24/7 운영 |
 
 ---

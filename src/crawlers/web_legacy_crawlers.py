@@ -7,11 +7,9 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime
-from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
 import time
 import sys
 import os
@@ -20,8 +18,9 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.config.settings import (
     URLS, SECTIONS, CRAWLING_CONFIG, 
-    BAI_CLAIM_TYPES, SELENIUM_OPTIONS
+    BAI_CLAIM_TYPES
 )
+from src.crawlers.selenium_driver import create_chrome_driver
 
 # 웹 환경용 가짜 progress/status 클래스
 class WebProgress:
@@ -158,10 +157,7 @@ def crawl_mois_site(progress=None, status_message=None, **kwargs):
     max_pages = kwargs.get('max_pages', 5)
     mois_url = "https://www.olta.re.kr/explainInfo/authoInterpretationList.do?menuNo=9020000&upperMenuId=9000000"
     
-    options = Options()
-    for option in SELENIUM_OPTIONS:
-        options.add_argument(option)
-    driver = webdriver.Chrome(options=options)
+    driver = create_chrome_driver()
     
     try:
         driver.get(mois_url)
@@ -312,16 +308,10 @@ def crawl_bai_site(progress=None, status_message=None, **kwargs):
     max_pages = kwargs.get('max_pages', 10)
     bai_url = "https://www.bai.go.kr/bai/exClaims/exClaims/list/"
     
-    options = Options()
-    for option in SELENIUM_OPTIONS:
-        options.add_argument(option)
-    driver = webdriver.Chrome(options=options)
+    driver = create_chrome_driver()
     
-    # 청구분야 목록 (조세 관련만) - 실제 사이트 값으로 수정
-    claim_types = [
-        {"name": "국세", "value": "10"},
-        {"name": "지방세", "value": "20"}
-    ]
+    # 청구분야 목록 (조세 관련만)
+    claim_types = BAI_CLAIM_TYPES
     
     try:
         all_data = []
@@ -337,8 +327,10 @@ def crawl_bai_site(progress=None, status_message=None, **kwargs):
             # 페이지 로딩 대기
             try:
                 WebDriverWait(driver, 15).until(
-                    lambda driver: driver.find_elements(By.CSS_SELECTOR, "select#reqDvsnCd") or
-                                   driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
+                    lambda driver: any(
+                        option.get_attribute("value") == claim_type["value"]
+                        for option in driver.find_elements(By.CSS_SELECTOR, "select#reqDvsnCd option")
+                    )
                 )
             except:
                 print("감사원 사이트 로딩 실패, 기본 대기 후 진행")
@@ -366,7 +358,7 @@ def crawl_bai_site(progress=None, status_message=None, **kwargs):
             
             # 해당 분야에서 페이지별 데이터 수집
             page = 1
-            pages_per_type = 5  # 각 분야별로 5페이지씩
+            pages_per_type = max_pages
             
             while page <= pages_per_type:
                 try:

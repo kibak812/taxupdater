@@ -28,12 +28,6 @@ pip install -r requirements.txt
 
 # Run web server (development)
 python -m uvicorn src.web.app:app --host 0.0.0.0 --port 8001 --reload
-
-# Run tests
-python -m pytest src/tests/ -v
-
-# Run specific test file
-python -m pytest src/tests/characterization/test_crawl_orchestrator.py -v
 ```
 
 ## Architecture
@@ -44,19 +38,16 @@ python -m pytest src/tests/characterization/test_crawl_orchestrator.py -v
 src/
 ├── core/                    # Domain core (no external dependencies)
 │   ├── domain/              # Value objects (CrawlResult, SiteDefinition)
-│   ├── ports/               # Interfaces (ICrawler, IRepository, INotificationChannel)
-│   └── services/            # CrawlOrchestrator (coordinates crawl workflow)
+│   └── ports/               # Interfaces (ICrawler, IRepository, INotificationChannel)
 ├── crawlers/                # Port implementations
 │   ├── nts_base_crawler.py  # Template Method pattern base
 │   ├── legacy_adapter.py    # Adapts function-based crawlers to ICrawler
 │   └── *_crawler.py         # Site-specific implementations
 ├── services/
-│   ├── scheduler_service.py # APScheduler-based auto crawling
-│   └── notifications/       # Strategy pattern (email, websocket channels)
-├── repositories/            # Data persistence (SQLite, Excel backup)
+│   └── scheduler_service.py # APScheduler-based auto crawling
+├── repositories/            # Data persistence (SQLite)
 ├── web/                     # FastAPI application
-│   ├── app.py               # Main application & WebSocket
-│   └── routes/              # API endpoints (modularized)
+│   └── app.py               # Main application, API endpoints & WebSocket
 └── config/
     ├── settings.py          # URLs, columns, key columns per site
     └── sites.py             # SITE_CATALOG, SITE_DISPLAY mappings

@@ -37,13 +37,16 @@ python -m uvicorn src.web.app:app --host 0.0.0.0 --port 8001 --reload
 
 # 웹 인터페이스 접속
 # 로컬: http://localhost:8001
-# 외부: https://taxupdater-monitor.loca.lt (고정 URL)
+# 외부: https://taxupdater-monitor.loca.lt (LocalTunnel 고정 URL)
 ```
 
-### LocalTunnel 자동 배포 설정
+### LocalTunnel/ngrok 터널 설정
 ```bash
 # LocalTunnel 자동 설정 (한 번만 실행)
 ./scripts/setup/setup_localtunnel.sh
+
+# ngrok 설정 (선택)
+./setup_ngrok.sh
 
 # 서비스 관리
 systemctl --user status taxupdater localtunnel    # 상태 확인
@@ -51,16 +54,12 @@ systemctl --user restart taxupdater localtunnel   # 재시작
 systemctl --user stop taxupdater localtunnel      # 중지
 ```
 
-### CLI 실행 (레거시)
-```bash
-# 예제 실행
-python scripts/examples/example.py
-
-# 기능 테스트
-python tests/test_functionality.py
-```
-
 ## 최신 업데이트
+
+### 🧹 프로젝트 정리 (2026.04.30)
+- Docker/Railway/Fly 설정과 이전 테스트 파일 제거
+- 현재 운영 경로는 FastAPI + SQLite + LocalTunnel/ngrok 터널링 중심으로 단순화
+- 오래된 구현은 필요한 항목만 `archive/legacy/`에 보존
 
 ### 🚀 LocalTunnel 완전 자동화 시스템 (2025.07.07)
 - **고정 URL**: `https://taxupdater-monitor.loca.lt` (절대 변경되지 않음)
@@ -71,7 +70,7 @@ python tests/test_functionality.py
 ### 📁 프로젝트 구조 정리 (2025.07.06)
 - **체계적 분류**: 루트 디렉토리 파일들을 성격별로 분류 및 정리
 - **ngrok 잔재 제거**: 11개의 불필요한 ngrok 관련 파일 삭제
-- **직관적 구조**: docs/, scripts/, tests/, config/, deploy/ 디렉토리 신설
+- **직관적 구조**: docs/, scripts/, config/ 중심으로 정리
 - **접근성 향상**: 관련 파일들의 논리적 그룹화로 유지보수성 개선
 
 ### 🎨 모니터링 시스템 완성 (2025.06.30 ~ 2025.07.02)
@@ -87,7 +86,6 @@ python tests/test_functionality.py
 
 ```
 taxupdater/
-├── main.py                    # 메인 실행 파일
 ├── start_web.py              # 웹서버 시작 파일  
 ├── requirements.txt          # 패키지 의존성
 ├── run.sh                    # 기본 실행 스크립트
@@ -96,12 +94,8 @@ taxupdater/
 ├── docs/                     # 📋 개발 문서들
 ├── scripts/                  # 🔧 스크립트 파일들
 │   ├── management/           # 시스템 관리 스크립트
-│   ├── examples/            # 예제/데모 스크립트  
 │   └── setup/               # 환경 설정 스크립트
-├── tests/                   # 🧪 테스트 파일들
 ├── config/                  # ⚙️ 설정 파일들
-├── deploy/                  # 🚀 배포 관련 파일들
-│   └── fly.io/             # Fly.io 배포 설정
 ├── src/                    # 소스 코드
 │   ├── crawlers/           # 크롤러 클래스들
 │   ├── services/           # 비즈니스 로직 서비스
