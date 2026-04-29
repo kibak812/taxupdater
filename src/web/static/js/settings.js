@@ -927,6 +927,13 @@ class ExpertSettings {
                 }
                 ltStart.style.display = 'none';
                 ltStop.style.display = 'inline-block';
+            } else if (ltData.status === 'connecting') {
+                ltStatus.textContent = '연결 중';
+                ltStatus.style.color = '#D97706';
+                ltUrl.style.display = 'none';
+                ltCopy.style.display = 'none';
+                ltStart.style.display = 'none';
+                ltStop.style.display = 'inline-block';
             } else {
                 ltStatus.textContent = '중지됨';
                 ltStatus.style.color = '#DC2626';
@@ -954,6 +961,13 @@ class ExpertSettings {
                     ngrokUrl.style.display = 'block';
                     ngrokCopy.style.display = 'inline-block';
                 }
+                ngrokStart.style.display = 'none';
+                ngrokStop.style.display = 'inline-block';
+            } else if (ngrokData.status === 'connecting') {
+                ngrokStatus.textContent = '연결 중';
+                ngrokStatus.style.color = '#D97706';
+                ngrokUrl.style.display = 'none';
+                ngrokCopy.style.display = 'none';
                 ngrokStart.style.display = 'none';
                 ngrokStop.style.display = 'inline-block';
             } else {
