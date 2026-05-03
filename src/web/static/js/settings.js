@@ -184,7 +184,7 @@ class ExpertSettings {
         if (button) {
             button.textContent = isRunning ? '스케줄러 중지' : '스케줄러 시작';
             button.disabled = false;
-            button.className = `btn btn-sm ${isRunning ? 'btn-warning' : 'btn-success'}`;
+            button.className = `btn btn-sm ${isRunning ? 'btn-danger-outline' : 'btn-success'}`;
         }
     }
     
@@ -252,10 +252,11 @@ class ExpertSettings {
 
     createSiteItem(siteKey, schedule) {
         const item = document.createElement('div');
-        item.className = 'site-item';
+        item.className = 'settings-toggle-row';
         
         const siteName = this.siteNames[siteKey] || siteKey;
         const siteColor = this.siteColors[siteKey] || '#6B7280';
+        item.style.setProperty('--setting-accent', siteColor);
         
         const isEnabled = schedule?.enabled || false;
         const cronExpression = schedule?.cron_expression || this.generateCronExpression(this.currentSettings.defaultInterval);
@@ -269,11 +270,11 @@ class ExpertSettings {
         }
         
         item.innerHTML = `
-            <div class="site-info">
-                <div class="site-indicator" style="background: ${siteColor};"></div>
-                <div>
-                    <div class="site-name">${siteName}</div>
-                    <div class="site-status">${statusText}</div>
+            <div class="settings-row-main">
+                <div class="site-indicator"></div>
+                <div class="settings-row-copy">
+                    <div class="settings-row-title">${siteName}</div>
+                    <div class="settings-row-description">${statusText}</div>
                 </div>
             </div>
             <label class="toggle-switch">
@@ -645,6 +646,8 @@ class ExpertSettings {
         const relativeTime = this.formatRelativeTime(startTime);
         const siteKey = job.site_key;
         const badgeColor = this.siteColors[siteKey] || '#6B7280';
+        item.style.setProperty('--badge-color', badgeColor);
+        item.style.setProperty('--badge-text-color', 'white');
 
         let statusIcon = '◯';
         let statusClass = 'status-running';
@@ -696,7 +699,7 @@ class ExpertSettings {
                     ${statusIcon} ${this.getSiteName(siteKey)} 크롤링 ${statusText}
                 </h4>
                 <div class="timeline-meta">
-                    <span class="organization-badge" style="--badge-color: ${badgeColor}; --badge-text-color: white; background: ${badgeColor};">
+                    <span class="organization-badge">
                         ${this.getSiteName(siteKey)}
                     </span>
                     <span class="job-status ${statusClass}">${statusText}</span>
@@ -758,10 +761,10 @@ class ExpertSettings {
     showSuccessMessage() {
         const successMessage = document.getElementById('successMessage');
         if (successMessage) {
-            successMessage.style.display = 'block';
+            successMessage.hidden = false;
             
             setTimeout(() => {
-                successMessage.style.display = 'none';
+                successMessage.hidden = true;
             }, 5000);
         }
         
@@ -850,7 +853,7 @@ class ExpertSettings {
         }
         
         if (permissionBtn) {
-            permissionBtn.style.display = permission === 'default' ? 'inline-block' : 'none';
+            permissionBtn.hidden = permission !== 'default';
         }
         
         if (statusElement) {
@@ -897,7 +900,7 @@ class ExpertSettings {
     toggleEmailSettings(enabled) {
         const detailsElement = document.getElementById('emailSettingsDetails');
         if (detailsElement) {
-            detailsElement.style.display = enabled ? 'block' : 'none';
+            detailsElement.hidden = !enabled;
         }
         
         if (enabled) {
@@ -1074,11 +1077,11 @@ class ExpertSettings {
         
         element.className = `status-message ${type}`;
         element.textContent = message;
-        element.style.display = 'block';
+        element.hidden = false;
         
         // 5초 후 자동 숨김
         setTimeout(() => {
-            element.style.display = 'none';
+            element.hidden = true;
         }, 5000);
     }
     
@@ -1145,7 +1148,6 @@ class ExpertSettings {
     }
 
     updateTunnelUI(status) {
-        // ngrok UI 업데이트
         const ngrokStatus = document.getElementById('ngrok-status');
         const ngrokConfiguredUrl = document.getElementById('ngrok-configured-url');
         const ngrokUrl = document.getElementById('ngrok-url');
@@ -1155,59 +1157,55 @@ class ExpertSettings {
 
         if (ngrokStatus) {
             const ngrokData = status.ngrok;
+            const setStatus = (text, tone) => {
+                ngrokStatus.textContent = text;
+                ngrokStatus.className = `settings-row-status ${tone}`;
+            };
+            const setControls = ({ start, stop, copy }) => {
+                if (ngrokStart) ngrokStart.hidden = !start;
+                if (ngrokStop) ngrokStop.hidden = !stop;
+                if (ngrokCopy) ngrokCopy.hidden = !copy;
+            };
+            const setCurrentUrl = (url) => {
+                if (!ngrokUrl) return;
+                if (url) {
+                    ngrokUrl.textContent = `현재 URL: ${url}`;
+                    ngrokUrl.dataset.copyUrl = url;
+                    ngrokUrl.hidden = false;
+                } else {
+                    ngrokUrl.hidden = true;
+                }
+            };
+
             if (ngrokConfiguredUrl) {
                 if (ngrokData.configured_url) {
                     ngrokConfiguredUrl.textContent = `고정 URL: ${ngrokData.configured_url}`;
-                    ngrokConfiguredUrl.style.display = 'block';
                 } else {
                     ngrokConfiguredUrl.textContent = '고정 URL 미설정';
-                    ngrokConfiguredUrl.style.display = 'block';
                 }
+                ngrokConfiguredUrl.hidden = false;
             }
 
             if (ngrokData.status === 'active') {
-                ngrokStatus.textContent = ngrokData.is_static ? '실행 중 (고정 URL)' : '실행 중';
-                ngrokStatus.style.color = '#059669';
-                if (ngrokData.url) {
-                    ngrokUrl.textContent = `현재 URL: ${ngrokData.url}`;
-                    ngrokUrl.dataset.copyUrl = ngrokData.url;
-                    ngrokUrl.style.display = 'block';
-                    ngrokCopy.style.display = 'inline-block';
-                }
-                ngrokStart.style.display = 'none';
-                ngrokStop.style.display = 'inline-block';
+                setStatus(ngrokData.is_static ? '실행 중 (고정 URL)' : '실행 중', 'is-success');
+                setCurrentUrl(ngrokData.url);
+                setControls({ start: false, stop: true, copy: Boolean(ngrokData.url) });
             } else if (ngrokData.status === 'active_dynamic') {
-                ngrokStatus.textContent = '실행 중 (임시 URL)';
-                ngrokStatus.style.color = '#D97706';
-                if (ngrokData.url) {
-                    ngrokUrl.textContent = `현재 URL: ${ngrokData.url}`;
-                    ngrokUrl.dataset.copyUrl = ngrokData.url;
-                    ngrokUrl.style.display = 'block';
-                    ngrokCopy.style.display = 'inline-block';
-                }
-                ngrokStart.style.display = 'none';
-                ngrokStop.style.display = 'inline-block';
+                setStatus('실행 중 (임시 URL)', 'is-warning');
+                setCurrentUrl(ngrokData.url);
+                setControls({ start: false, stop: true, copy: Boolean(ngrokData.url) });
             } else if (ngrokData.status === 'connecting') {
-                ngrokStatus.textContent = '연결 중';
-                ngrokStatus.style.color = '#D97706';
-                ngrokUrl.style.display = 'none';
-                ngrokCopy.style.display = 'none';
-                ngrokStart.style.display = 'none';
-                ngrokStop.style.display = 'inline-block';
+                setStatus('연결 중', 'is-warning');
+                setCurrentUrl(null);
+                setControls({ start: false, stop: true, copy: false });
             } else if (ngrokData.status === 'static_unconfigured') {
-                ngrokStatus.textContent = '고정 URL 미설정';
-                ngrokStatus.style.color = '#D97706';
-                ngrokUrl.style.display = 'none';
-                ngrokCopy.style.display = 'none';
-                ngrokStart.style.display = 'inline-block';
-                ngrokStop.style.display = 'none';
+                setStatus('고정 URL 미설정', 'is-warning');
+                setCurrentUrl(null);
+                setControls({ start: true, stop: false, copy: false });
             } else {
-                ngrokStatus.textContent = '중지됨';
-                ngrokStatus.style.color = '#DC2626';
-                ngrokUrl.style.display = 'none';
-                ngrokCopy.style.display = 'none';
-                ngrokStart.style.display = 'inline-block';
-                ngrokStop.style.display = 'none';
+                setStatus('중지됨', 'is-danger');
+                setCurrentUrl(null);
+                setControls({ start: true, stop: false, copy: false });
             }
         }
     }
