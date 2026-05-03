@@ -22,7 +22,8 @@ URLS = {
     "nts_precedent": "https://taxlaw.nts.go.kr/pd/USEPDI001M.do",
     "moef": "https://www.moef.go.kr/lw/intrprt/TaxLawIntrPrtCaseList.do",
     "mois": "https://www.olta.re.kr/explainInfo/authoInterpretationList.do?menuNo=9020000&upperMenuId=9000000",
-    "bai": "https://www.bai.go.kr/bai/exClaims/exClaims/list/"
+    "bai": "https://www.bai.go.kr/bai/exClaims/exClaims/list/",
+    "scourt_major_decisions": "https://www.scourt.go.kr"
 }
 
 # 크롤링 설정
@@ -67,7 +68,8 @@ DATA_COLUMNS = {
     "nts_precedent": ["세목", "생산일자", "문서번호", "제목", "링크"],
     "moef": ["문서번호", "회신일자", "제목", "링크"],
     "mois": ["세목", "문서번호", "생산일자", "제목", "링크"],
-    "bai": ["청구분야", "문서번호", "결정일자", "제목"]
+    "bai": ["청구분야", "문서번호", "결정일자", "제목"],
+    "scourt_major_decisions": ["번호", "작성일", "법원", "제목", "링크"]
 }
 
 # 사이트별 키 컬럼 정의
@@ -77,7 +79,8 @@ KEY_COLUMNS = {
     "nts_precedent": "문서번호", 
     "moef": "문서번호",
     "mois": "문서번호",
-    "bai": "문서번호"
+    "bai": "문서번호",
+    "scourt_major_decisions": "번호"
 }
 
 # GUI 설정
@@ -90,7 +93,8 @@ GUI_CONFIG = {
         "4. 국세법령정보시스템 (판례)",
         "5. 행정안전부",
         "6. 감사원",
-        "7. 모두 크롤링"
+        "7. 모두 크롤링",
+        "8. 전국법원 주요판결"
     ],
     "default_interval": 60  # 기본 주기 (분)
 }

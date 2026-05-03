@@ -34,6 +34,10 @@ class ExpertDataTable {
             'bai': {
                 documentColumn: '문서번호',
                 dateColumn: '결정일자'
+            },
+            'scourt_major_decisions': {
+                documentColumn: '번호',
+                dateColumn: '작성일'
             }
         };
         
@@ -286,11 +290,11 @@ class ExpertDataTable {
     getSortValue(item, column) {
         switch (column) {
             case 'document_number':
-                return item['문서번호'] || item['판례번호'] || item['청구번호'] || '';
+                return item['문서번호'] || item['판례번호'] || item['청구번호'] || item['번호'] || '';
             case 'title':
                 return item['제목'] || item['심판내용'] || '';
             case 'published_date':
-                return item['게시일'] || item['선고일'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자'] || '';
+                return item['게시일'] || item['작성일'] || item['선고일'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자'] || '';
             case 'collected_date':
                 return item['updated_at'] || item['created_at'] || '';
             // 조세심판원 전용 컬럼
@@ -340,11 +344,15 @@ class ExpertDataTable {
                 <th class="sortable" data-column="collected_date">수집일</th>
             `;
         } else {
-            // 기타 사이트: 기존 헤더 유지
+            // 기타 사이트: 사이트별 문서/일자 컬럼명 사용
+            const siteColumns = this.siteColumnNames[this.siteKey] || {};
+            const documentColumn = siteColumns.documentColumn || '문서번호';
+            const dateColumn = siteColumns.dateColumn || '게시일';
+
             thead.innerHTML = `
-                <th class="sortable" data-column="document_number">문서번호</th>
+                <th class="sortable" data-column="document_number">${documentColumn}</th>
                 <th class="sortable" data-column="title">제목</th>
-                <th class="sortable" data-column="published_date">게시일</th>
+                <th class="sortable" data-column="published_date">${dateColumn}</th>
                 <th class="sortable" data-column="collected_date">수집일</th>
             `;
         }
@@ -534,9 +542,9 @@ class ExpertDataTable {
             `;
         } else {
             // 기타 사이트: 기존 공통 포맷
-            const documentNumber = item['문서번호'] || item['판례번호'] || item['청구번호'] || '-';
+            const documentNumber = item['문서번호'] || item['판례번호'] || item['청구번호'] || item['번호'] || '-';
             const title = item['제목'] || item['심판내용'] || '-';
-            const publishedDate = this.formatDate(item['게시일'] || item['선고일'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자']);
+            const publishedDate = this.formatDate(item['게시일'] || item['작성일'] || item['선고일'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자']);
             const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
             const link = item['링크'] || item['원문링크'] || '#';
             

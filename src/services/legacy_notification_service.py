@@ -23,7 +23,8 @@ class NotificationService:
             "nts_precedent": "국세청 판례",
             "moef": "기획재정부",
             "mois": "행정안전부",
-            "bai": "감사원"
+            "bai": "감사원",
+            "scourt_major_decisions": "전국법원 주요판결"
         }
     
     def create_new_data_alert(self, site_key: str, new_entries: pd.DataFrame, 
@@ -213,6 +214,8 @@ class NotificationService:
                 key_info = f"{row.get('청구번호', 'N/A')} - {row.get('제목', 'N/A')[:50]}"
             elif site_key in ["nts_authority", "nts_precedent", "moef", "mois", "bai"]:
                 key_info = f"{row.get('문서번호', 'N/A')} - {row.get('제목', 'N/A')[:50]}"
+            elif site_key == "scourt_major_decisions":
+                key_info = f"{row.get('번호', 'N/A')} - {row.get('제목', 'N/A')[:50]}"
             else:
                 # 기본적으로 첫 번째와 마지막 컬럼 사용
                 cols = list(row.index)
@@ -270,7 +273,8 @@ class NotificationService:
             "nts_precedent": "문서번호",
             "moef": "문서번호",
             "mois": "문서번호",
-            "bai": "문서번호"
+            "bai": "문서번호",
+            "scourt_major_decisions": "번호"
         }
         
         key_column = key_column_mapping.get(site_key, "문서번호")

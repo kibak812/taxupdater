@@ -54,7 +54,8 @@ class NotificationService:
             "nts_precedent": "국세청 판례",
             "moef": "기획재정부",
             "mois": "행정안전부",
-            "bai": "감사원"
+            "bai": "감사원",
+            "scourt_major_decisions": "전국법원 주요판결"
         }
         
         # 알림 설정
@@ -660,7 +661,8 @@ class NotificationService:
                 "nts_precedent": "nts_precedent_cases",
                 "moef": "moef_tax_interpretations",
                 "mois": "mois_interpretations",
-                "bai": "bai_audit_claims"
+                "bai": "bai_audit_claims",
+                "scourt_major_decisions": "scourt_major_decisions_data"
             }
             
             table_name = table_mapping.get(site_key)
@@ -696,7 +698,8 @@ class NotificationService:
                 "nts_precedent": "nts_precedent_cases",
                 "moef": "moef_tax_interpretations",
                 "mois": "mois_interpretations",
-                "bai": "bai_audit_claims"
+                "bai": "bai_audit_claims",
+                "scourt_major_decisions": "scourt_major_decisions_data"
             }
             
             table_name = table_mapping.get(site_key)

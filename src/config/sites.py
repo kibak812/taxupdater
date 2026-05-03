@@ -68,6 +68,12 @@ SITE_CATALOG: Dict[str, SiteDefinition] = {
         key_column="문서번호",
         data_columns=("청구분야", "문서번호", "결정일자", "제목")
     ),
+    "scourt_major_decisions": SiteDefinition(
+        key="scourt_major_decisions",
+        url="https://www.scourt.go.kr",
+        key_column="번호",
+        data_columns=("번호", "작성일", "법원", "제목", "링크")
+    ),
 }
 
 
@@ -105,6 +111,11 @@ SITE_DISPLAY: Dict[str, SiteDisplay] = {
         name="감사원",
         color="#6366F1",
         choice_number="6"
+    ),
+    "scourt_major_decisions": SiteDisplay(
+        name="전국법원 주요판결",
+        color="#0F766E",
+        choice_number="8"
     ),
 }
 

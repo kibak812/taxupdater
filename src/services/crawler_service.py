@@ -10,6 +10,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.interfaces.crawler_interface import CrawlerInterface, DataRepositoryInterface
 from src.services.legacy_notification_service import NotificationService as LegacyNotificationService
 from src.config.logging_config import get_logger
+from src.config.sites import get_key_by_choice
 import sqlite3
 from datetime import datetime
 import json
@@ -59,7 +60,7 @@ class CrawlingService:
         핵심: 누락없는 데이터 수집과 정확한 새로운 데이터 식별
         
         Args:
-            choice: 사용자 선택 ("1"-"7")
+            choice: 사용자 선택 ("1"-"8", "7"은 전체 크롤링)
             progress: 진행률 콜백
             status_message: 상태 메시지 콜백
             is_periodic: 주기적 실행 여부
@@ -67,31 +68,21 @@ class CrawlingService:
         summary_results = []
         prefix = "주기적 크롤링 " if is_periodic else ""
         
-        # 선택에 따른 크롤러 매핑
-        crawler_mapping = {
-            "1": ["tax_tribunal"],
-            "2": ["nts_authority"],
-            "3": ["moef"],
-            "4": ["nts_precedent"],
-            "5": ["mois"],
-            "6": ["bai"],
-            "7": list(self.crawlers.keys())  # 실제 사용 가능한 모든 크롤러
-        }
-        
-        # 개별 사이트 선택인 경우 해당 크롤러가 사용 가능한지 확인
-        if choice in ["1", "2", "3", "4", "5", "6"]:
-            target_crawler = crawler_mapping[choice][0]
+        if choice == "7":
+            # 전체 크롤링인 경우만 사용 가능한 크롤러 필터링
+            selected_crawlers = [c for c in self.crawlers.keys()]
+        else:
+            try:
+                target_crawler = get_key_by_choice(choice)
+            except KeyError:
+                target_crawler = None
+
             if target_crawler not in self.crawlers:
                 error_msg = f"선택된 크롤러 '{target_crawler}'가 사용 불가능합니다."
                 self.logger.error(error_msg)
                 self._show_message(error_msg)
-                return
+                return {"status": "error", "message": error_msg, "results": []}
             selected_crawlers = [target_crawler]
-        elif choice == "7":
-            # 전체 크롤링인 경우만 사용 가능한 크롤러 필터링
-            selected_crawlers = [c for c in self.crawlers.keys()]
-        else:
-            selected_crawlers = []
         
         if not selected_crawlers:
             self._show_message("잘못된 선택입니다. 유효한 옵션을 선택해 주세요.")
@@ -206,8 +197,45 @@ class CrawlingService:
                 status_message.config(text=f"{site_name} 사이트에서 최신 데이터 수집 중...")
                 status_message.update()
             
-            new_data = crawler.crawl(progress_callback=progress, status_callback=status_message)
+            crawl_kwargs = self._build_crawl_kwargs(crawler, existing_data, key_column)
+            new_data = crawler.crawl(
+                progress_callback=progress,
+                status_callback=status_message,
+                **crawl_kwargs
+            )
             
+            if new_data.empty:
+                if getattr(crawler, "allows_empty_result", False):
+                    checked_count = getattr(crawler, "last_checked_count", 0)
+                    crawling_stats = {
+                        'total_crawled': checked_count,
+                        'existing_count': len(existing_data),
+                        'new_count': 0,
+                        'success_rate': 100.0,
+                        'site_name': site_name
+                    }
+                    self.logger.info(f"  {site_name}: 신규 데이터 없음")
+                    return {
+                        'site_key': crawler_key,
+                        'status': 'success',
+                        'new_count': 0,
+                        'total_crawled': checked_count,
+                        'existing_count': len(existing_data),
+                        'new_entries': new_data,
+                        'crawling_stats': crawling_stats,
+                        'key_samples': []
+                    }
+
+                error_msg = f"  [WARN] {site_name}: 크롤링 결과 데이터 없음."
+                self.logger.error(error_msg)
+                return {
+                    'site_key': crawler_key,
+                    'status': 'error',
+                    'error_message': '크롤링 결과 없음',
+                    'new_count': 0,
+                    'total_crawled': 0
+                }
+
             # 데이터 유효성 검증
             if not crawler.validate_data(new_data):
                 error_msg = f"  [ERROR] {site_name}: 크롤링된 데이터가 유효하지 않습니다."
@@ -216,17 +244,6 @@ class CrawlingService:
                     'site_key': crawler_key,
                     'status': 'error',
                     'error_message': '데이터 유효성 검증 실패',
-                    'new_count': 0,
-                    'total_crawled': 0
-                }
-            
-            if new_data.empty:
-                error_msg = f"  [WARN] {site_name}: 크롤링 결과 데이터 없음."
-                self.logger.error(error_msg)
-                return {
-                    'site_key': crawler_key,
-                    'status': 'error',
-                    'error_message': '크롤링 결과 없음',
                     'new_count': 0,
                     'total_crawled': 0
                 }
@@ -409,6 +426,34 @@ class CrawlingService:
             except Exception as e:
                 stats[crawler_key] = {"error": str(e)}
         return stats
+
+    def _build_crawl_kwargs(
+        self,
+        crawler: CrawlerInterface,
+        existing_data: pd.DataFrame,
+        key_column: str
+    ) -> Dict[str, Any]:
+        """크롤러별 최적화 파라미터 구성."""
+        kwargs: Dict[str, Any] = {}
+
+        if getattr(crawler, "supports_numeric_stop", False) and not existing_data.empty:
+            max_key = self._get_max_numeric_key(existing_data, key_column)
+            if max_key is not None:
+                kwargs["stop_at_key"] = max_key
+                self.logger.info(f"{crawler.get_site_name()}: 기존 최대 {key_column}={max_key} 이후만 확인")
+
+        return kwargs
+
+    def _get_max_numeric_key(self, data: pd.DataFrame, key_column: str) -> Optional[int]:
+        """문자열/숫자 혼재 키 컬럼에서 최대 정수 키 추출."""
+        if key_column not in data.columns:
+            return None
+
+        numeric_keys = pd.to_numeric(data[key_column], errors="coerce").dropna()
+        if numeric_keys.empty:
+            return None
+
+        return int(numeric_keys.max())
     
     def get_monitoring_summary(self) -> str:
         """전체 모니터링 현황 요약 반환"""
@@ -476,7 +521,8 @@ class CrawlingService:
                 "nts_precedent": "문서번호",
                 "moef": "문서번호",
                 "mois": "문서번호",
-                "bai": "문서번호"
+                "bai": "문서번호",
+                "scourt_major_decisions": "번호"
             }
             
             key_column = key_column_mapping.get(site_key, "문서번호")
@@ -488,7 +534,7 @@ class CrawlingService:
                     data_id = str(row.get(key_column, "unknown"))
                     data_title = str(row.get("제목", ""))[:200]  # 제목 길이 제한
                     data_category = str(row.get("세목", ""))
-                    data_date = str(row.get("생산일자", row.get("결정일자", row.get("회신일자", ""))))
+                    data_date = str(row.get("생산일자", row.get("결정일자", row.get("회신일자", row.get("작성일", "")))))
                     
                     # 데이터 요약 생성
                     data_summary = self._create_data_summary(row, site_key)
@@ -563,6 +609,8 @@ class CrawlingService:
                 return f"{row.get('세목', '')} 유권해석 ({row.get('생산일자', '')})"
             elif site_key == "bai":
                 return f"{row.get('청구분야', '')} 심사 ({row.get('결정일자', '')})"
+            elif site_key == "scourt_major_decisions":
+                return f"{row.get('법원', '')} 주요판결 ({row.get('작성일', '')})"
             else:
                 return str(row.get("제목", ""))[:100]
         except Exception:
@@ -616,7 +664,8 @@ class CrawlingService:
                 "nts_precedent": "문서번호",
                 "moef": "문서번호",
                 "mois": "문서번호",
-                "bai": "문서번호"
+                "bai": "문서번호",
+                "scourt_major_decisions": "번호"
             }
             
             key_column = key_column_mapping.get(site_key, "문서번호")

@@ -940,7 +940,8 @@ class SchedulerService:
                 "nts_precedent": "국세청(판례)",
                 "moef": "기획재정부",
                 "mois": "행정안전부", 
-                "bai": "감사원"
+                "bai": "감사원",
+                "scourt_major_decisions": "전국법원 주요판결"
             }
             
             # crawl_result에서 상세 정보 추출

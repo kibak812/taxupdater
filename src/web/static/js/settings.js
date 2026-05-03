@@ -13,7 +13,8 @@ class ExpertSettings {
             'nts_precedent': '#D97706',
             'moef': '#8B5CF6',
             'mois': '#DC2626',
-            'bai': '#6B7280'
+            'bai': '#6B7280',
+            'scourt_major_decisions': '#0F766E'
         };
         
         this.siteNames = {
@@ -22,7 +23,8 @@ class ExpertSettings {
             'nts_precedent': '국세청(판례)',
             'moef': '기획재정부',
             'mois': '행정안전부',
-            'bai': '감사원'
+            'bai': '감사원',
+            'scourt_major_decisions': '전국법원 주요판결'
         };
         
         this.defaultSettings = {

@@ -16,6 +16,16 @@ from src.config.logging_config import get_logger
 
 class DatabaseMigration:
     """데이터베이스 마이그레이션 관리 클래스"""
+
+    DEFAULT_SCHEDULES = [
+        ("tax_tribunal", "조세심판원", "0 0 */8 * *"),
+        ("nts_authority", "국세청 유권해석", "0 0 */6 * *"),
+        ("nts_precedent", "국세청 판례", "0 0 */12 * *"),
+        ("moef", "기획재정부", "0 0 */6 * *"),
+        ("mois", "행정안전부", "0 0 */8 * *"),
+        ("bai", "감사원", "0 0 */12 * *"),
+        ("scourt_major_decisions", "전국법원 주요판결", "0 0 */6 * *"),
+    ]
     
     def __init__(self, db_path: str = "data/tax_data.db"):
         self.db_path = db_path
@@ -381,17 +391,7 @@ class DatabaseMigration:
     
     def _insert_default_data(self, cursor: sqlite3.Cursor):
         """기본 데이터 삽입"""
-        # 사이트별 기본 스케줄 생성
-        default_schedules = [
-            ("tax_tribunal", "조세심판원", "0 0 */8 * *"),      # 8시간마다
-            ("nts_authority", "국세청 유권해석", "0 0 */6 * *"),  # 6시간마다
-            ("nts_precedent", "국세청 판례", "0 0 */12 * *"),    # 12시간마다
-            ("moef", "기획재정부", "0 0 */6 * *"),               # 6시간마다
-            ("mois", "행정안전부", "0 0 */8 * *"),               # 8시간마다
-            ("bai", "감사원", "0 0 */12 * *")                   # 12시간마다
-        ]
-        
-        for site_key, site_name, cron_expr in default_schedules:
+        for site_key, site_name, cron_expr in self.DEFAULT_SCHEDULES:
             try:
                 cursor.execute("""
                     INSERT OR IGNORE INTO crawl_schedules 
@@ -410,13 +410,28 @@ class DatabaseMigration:
                 self.logger.warning(f"기본 데이터 삽입 실패 ({site_key}): {e}")
         
         self.logger.info("  ✓ 기본 데이터 삽입 완료")
+
+    def ensure_default_monitoring_rows(self) -> bool:
+        """이미 마이그레이션된 DB에도 새 기본 사이트 rows를 보강합니다."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                self._insert_default_data(cursor)
+                conn.commit()
+
+            self.logger.info("기본 모니터링 rows 확인 완료")
+            return True
+        except Exception as e:
+            self.logger.error(f"기본 모니터링 rows 확인 실패: {e}")
+            return False
     
     def _create_backup(self) -> str:
         """데이터베이스 백업 생성"""
         if not os.path.exists(self.db_path):
             return ""
         
-        backup_dir = "data/backups"
+        db_dir = os.path.dirname(self.db_path) or "data"
+        backup_dir = os.path.join(db_dir, "backups")
         if not os.path.exists(backup_dir):
             os.makedirs(backup_dir)
         

@@ -38,6 +38,7 @@ from src.repositories.sqlite_repository import SQLiteRepository
 from src.crawlers.tax_tribunal_crawler import TaxTribunalCrawler
 from src.crawlers.nts_authority_crawler import NTSAuthorityCrawler
 from src.crawlers.nts_precedent_crawler import NTSPrecedentCrawler
+from src.crawlers.scourt_major_decision_crawler import ScourtMajorDecisionCrawler
 from src.config.settings import GUI_CONFIG
 from src.config.logging_config import setup_logging, get_logger
 from src.config.sites import get_choice_by_key
@@ -130,6 +131,7 @@ crawlers = {
     "tax_tribunal": TaxTribunalCrawler(),
     "nts_authority": NTSAuthorityCrawler(),
     "nts_precedent": NTSPrecedentCrawler(),
+    "scourt_major_decisions": ScourtMajorDecisionCrawler(),
 }
 
 # 레거시 크롤러들 (LegacyCrawlerAdapter 사용)
@@ -180,6 +182,8 @@ try:
     if migration_status['migration_needed']:
         logger.warning("모니터링 시스템 테이블 누락 감지 - 자동 마이그레이션 실행")
         migration.migrate_to_monitoring_system()
+
+    migration.ensure_default_monitoring_rows()
     
     # 서비스 초기화 (WebSocket 매니저 전달)
     scheduler_service = SchedulerService(db_path=repository.db_path, crawling_service=crawling_service)
@@ -199,7 +203,8 @@ BASE_SITE_INFO = {
     "moef": {"name": "기획재정부", "color": "#8B5CF6"},
     "nts_precedent": {"name": "국세청 판례", "color": "#F59E0B"},
     "mois": {"name": "행정안전부", "color": "#EF4444"},
-    "bai": {"name": "감사원", "color": "#6B7280"}
+    "bai": {"name": "감사원", "color": "#6B7280"},
+    "scourt_major_decisions": {"name": "전국법원 주요판결", "color": "#0F766E"}
 }
 
 # 실제 사용 가능한 크롤러만 포함
