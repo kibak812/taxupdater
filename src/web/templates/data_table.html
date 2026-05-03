@@ -43,24 +43,37 @@
             color: var(--color-gray-900);
             font-size: var(--font-size-xl);
             font-weight: 600;
+            line-height: 1.35;
+            overflow-wrap: anywhere;
         }
         
         .filter-description {
             color: var(--color-gray-600);
+            line-height: 1.55;
             margin: 0;
+            overflow-wrap: anywhere;
         }
         
-        .data-controls {
+        .data-toolbar {
             display: flex;
-            justify-content: between;
             align-items: center;
+            justify-content: space-between;
             gap: var(--spacing-lg);
             margin-bottom: var(--spacing-lg);
+        }
+
+        .data-actions {
+            align-items: center;
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-sm);
+            justify-content: flex-end;
         }
         
         .search-box {
             flex: 1;
-            max-width: 400px;
+            max-width: 420px;
+            min-width: 260px;
         }
         
         .search-input {
@@ -82,18 +95,25 @@
             background: white;
             border-radius: var(--radius-xl);
             border: 1px solid var(--color-gray-200);
-            overflow: hidden;
+            overflow-x: auto;
+            overflow-y: hidden;
             box-shadow: var(--shadow-md);
         }
         
         .data-table {
+            min-width: 100%;
+            table-layout: fixed;
             width: 100%;
             border-collapse: collapse;
+        }
+
+        .data-site-tax_tribunal .data-table {
+            min-width: 100%;
         }
         
         .data-table th {
             background: var(--color-gray-50);
-            padding: var(--spacing-md) var(--spacing-lg);
+            padding: var(--spacing-md);
             text-align: left;
             font-weight: 600;
             font-size: var(--font-size-sm);
@@ -129,10 +149,32 @@
         }
         
         .data-table td {
-            padding: var(--spacing-md) var(--spacing-lg);
+            padding: var(--spacing-md);
             border-bottom: 1px solid var(--color-gray-200);
             font-size: var(--font-size-sm);
             vertical-align: top;
+        }
+
+        .data-table th[data-column="tax_category"] {
+            width: 104px;
+        }
+
+        .data-table th[data-column="decision_type"] {
+            width: 88px;
+        }
+
+        .data-table th[data-column="claim_number"],
+        .data-table th[data-column="document_number"] {
+            width: 148px;
+        }
+
+        .data-table th[data-column="published_date"],
+        .data-table th[data-column="decision_date"] {
+            width: 116px;
+        }
+
+        .data-table th[data-column="collected_date"] {
+            width: 212px;
         }
         
         .data-table tr:hover {
@@ -143,25 +185,19 @@
             border-bottom: none;
         }
         
-        .organization-badge {
-            display: inline-block;
-            padding: var(--spacing-xs) var(--spacing-sm);
-            background: var(--badge-color, var(--color-gray-100));
-            color: var(--badge-text-color, var(--color-gray-700));
-            border-radius: var(--radius-sm);
-            font-size: var(--font-size-xs);
-            font-weight: 600;
-            white-space: nowrap;
-        }
-        
         .document-number {
+            display: inline-block;
             font-family: 'Courier New', monospace;
             font-weight: 600;
             color: var(--color-gray-900);
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: top;
+            white-space: nowrap;
         }
         
         .document-title {
-            max-width: 300px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -178,6 +214,8 @@
         
         .date-cell {
             color: var(--color-gray-600);
+            font-size: var(--font-size-xs);
+            font-variant-numeric: tabular-nums;
             white-space: nowrap;
         }
         
@@ -288,26 +326,50 @@
         }
         
         .filter-toggle {
-            display: flex;
             align-items: center;
+            background: white;
+            border: 1px solid var(--color-gray-300);
+            border-radius: var(--radius-md);
             gap: var(--spacing-sm);
             color: var(--color-primary);
             cursor: pointer;
+            display: inline-flex;
             font-size: var(--font-size-sm);
-            font-weight: 500;
-            margin-bottom: var(--spacing-md);
+            font-weight: 600;
+            min-height: 34px;
+            padding: var(--spacing-xs) var(--spacing-sm);
+            transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
         }
         
         .filter-toggle:hover {
+            background: var(--color-gray-50);
+            border-color: var(--color-gray-400);
+            color: var(--color-primary-dark);
+        }
+
+        .filter-toggle.active {
+            background: rgba(79, 70, 229, 0.08);
+            border-color: rgba(79, 70, 229, 0.35);
             color: var(--color-primary-dark);
         }
         
-        .filter-toggle svg {
+        .filter-chevron {
             transition: transform 0.2s;
         }
         
-        .filter-toggle.active svg {
+        .filter-toggle.active .filter-chevron {
             transform: rotate(180deg);
+        }
+
+        .btn-ghost {
+            background: var(--color-gray-100);
+            border: 1px solid transparent;
+            color: var(--color-gray-700);
+        }
+
+        .btn-ghost:hover {
+            background: var(--color-gray-200);
+            color: var(--color-gray-900);
         }
         
         .tax-category, .decision-type {
@@ -354,26 +416,79 @@
         }
         
         @media (max-width: 768px) {
-            .data-controls {
+            .data-page .dashboard-header .header-content {
+                align-items: flex-start;
+            }
+
+            .data-page .dashboard-header .header-left,
+            .data-page .dashboard-header .header-actions {
+                min-width: 0;
+                width: 100%;
+            }
+
+            .data-page .header-text {
+                flex: 1;
+                min-width: 0;
+            }
+
+            .data-page .header-text h1,
+            .data-page .header-text p {
+                overflow-wrap: anywhere;
+            }
+
+            .filter-status h2,
+            .filter-description {
+                max-width: 30ch;
+            }
+
+            .data-toolbar {
                 flex-direction: column;
                 align-items: stretch;
+                gap: var(--spacing-md);
             }
-            
-            .data-table-container {
-                overflow-x: auto;
+
+            .search-box {
+                max-width: none;
+                min-width: 0;
             }
-            
-            .data-table {
-                min-width: 800px;
+
+            .data-actions {
+                justify-content: flex-start;
             }
             
             .filter-content {
                 grid-template-columns: 1fr;
             }
+
+            .data-table {
+                min-width: 980px;
+            }
+
+            .data-site-tax_tribunal .data-table {
+                min-width: 1120px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .data-page .dashboard-header .header-left {
+                align-items: center;
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .data-page .header-text {
+                max-width: 100%;
+            }
+
+            .data-actions .btn,
+            .filter-toggle {
+                justify-content: center;
+                width: 100%;
+            }
         }
     </style>
 </head>
-<body class="dashboard-body">
+<body class="dashboard-body data-page data-site-{{ site_key }}">
     <!-- Header -->
     <header class="dashboard-header">
         <div class="container">
@@ -419,20 +534,20 @@
             </div>
 
             <!-- Data Controls -->
-            <div class="data-controls">
+            <div class="data-toolbar">
                 <div class="search-box">
                     <input type="text" class="search-input" id="searchInput" placeholder="문서번호, 제목, 내용으로 검색...">
                 </div>
-                <div class="section-actions">
-                    <div class="filter-toggle" id="filterToggle">
+                <div class="data-actions">
+                    <button type="button" class="filter-toggle" id="filterToggle" aria-expanded="false" aria-controls="filterPanel">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M19 14l-3 3-3-3m0 0V4m6 6H10m4 10l-3-3-3 3m0 0V10m6 6H4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M4 7h16M7 12h10M10 17h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                         필터
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <svg class="filter-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                    </div>
+                    </button>
                     <button class="btn btn-outline btn-sm" id="exportBtn">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -475,7 +590,6 @@
                 <table class="data-table" id="dataTable">
                     <thead>
                         <tr>
-                            <th class="sortable" data-column="organization">기관</th>
                             <th class="sortable" data-column="document_number">문서번호</th>
                             <th class="sortable" data-column="title">제목</th>
                             <th class="sortable" data-column="published_date">게시일</th>

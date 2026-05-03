@@ -285,8 +285,6 @@ class ExpertDataTable {
     
     getSortValue(item, column) {
         switch (column) {
-            case 'organization':
-                return this.siteName;
             case 'document_number':
                 return item['문서번호'] || item['판례번호'] || item['청구번호'] || '';
             case 'title':
@@ -316,7 +314,6 @@ class ExpertDataTable {
         if (this.siteKey === 'tax_tribunal') {
             // 조세심판원: 세목, 유형, 청구번호, 제목, 결정일, 수집일
             thead.innerHTML = `
-                <th class="sortable" data-column="organization">기관</th>
                 <th class="sortable" data-column="tax_category">세목</th>
                 <th class="sortable" data-column="decision_type">유형</th>
                 <th class="sortable" data-column="claim_number">청구번호</th>
@@ -327,7 +324,6 @@ class ExpertDataTable {
         } else if (this.siteKey === 'nts_authority') {
             // 국세청 유권해석: 세목 컬럼 추가
             thead.innerHTML = `
-                <th class="sortable" data-column="organization">기관</th>
                 <th class="sortable" data-column="tax_category">세목</th>
                 <th class="sortable" data-column="document_number">문서번호</th>
                 <th class="sortable" data-column="title">제목</th>
@@ -337,7 +333,6 @@ class ExpertDataTable {
         } else if (this.siteKey === 'mois') {
             // 행정안전부: 세목 컬럼 추가
             thead.innerHTML = `
-                <th class="sortable" data-column="organization">기관</th>
                 <th class="sortable" data-column="tax_category">세목</th>
                 <th class="sortable" data-column="document_number">문서번호</th>
                 <th class="sortable" data-column="title">제목</th>
@@ -347,7 +342,6 @@ class ExpertDataTable {
         } else {
             // 기타 사이트: 기존 헤더 유지
             thead.innerHTML = `
-                <th class="sortable" data-column="organization">기관</th>
                 <th class="sortable" data-column="document_number">문서번호</th>
                 <th class="sortable" data-column="title">제목</th>
                 <th class="sortable" data-column="published_date">게시일</th>
@@ -471,11 +465,6 @@ class ExpertDataTable {
             
             row.innerHTML = `
                 <td>
-                    <span class="organization-badge" style="background: ${this.siteColor}; color: white;">
-                        ${this.siteName}
-                    </span>
-                </td>
-                <td>
                     <span class="tax-category">${taxCategory}</span>
                 </td>
                 <td>
@@ -504,11 +493,6 @@ class ExpertDataTable {
             
             row.innerHTML = `
                 <td>
-                    <span class="organization-badge" style="background: ${this.siteColor}; color: white;">
-                        ${this.siteName}
-                    </span>
-                </td>
-                <td>
                     <span class="tax-category">${taxCategory}</span>
                 </td>
                 <td>
@@ -534,11 +518,6 @@ class ExpertDataTable {
             
             row.innerHTML = `
                 <td>
-                    <span class="organization-badge" style="background: ${this.siteColor}; color: white;">
-                        ${this.siteName}
-                    </span>
-                </td>
-                <td>
                     <span class="tax-category">${taxCategory}</span>
                 </td>
                 <td>
@@ -562,11 +541,6 @@ class ExpertDataTable {
             const link = item['링크'] || item['원문링크'] || '#';
             
             row.innerHTML = `
-                <td>
-                    <span class="organization-badge" style="background: ${this.siteColor}; color: white;">
-                        ${this.siteName}
-                    </span>
-                </td>
                 <td>
                     <span class="document-number">${documentNumber}</span>
                 </td>
@@ -831,9 +805,11 @@ class ExpertDataTable {
         if (panel.style.display === 'none' || !panel.style.display) {
             panel.style.display = 'block';
             toggle.classList.add('active');
+            toggle.setAttribute('aria-expanded', 'true');
         } else {
             panel.style.display = 'none';
             toggle.classList.remove('active');
+            toggle.setAttribute('aria-expanded', 'false');
         }
     }
     
