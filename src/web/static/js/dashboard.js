@@ -41,7 +41,6 @@ class ExpertDashboard {
         this.connectWebSocket();
         this.loadInitialData();
         this.startAutoRefresh();
-        this.restoreCollapseState();
         
         console.log('전문가 대시보드 초기화 완료');
     }
@@ -63,27 +62,6 @@ class ExpertDashboard {
         document.getElementById('settingsBtn')?.addEventListener('click', () => {
             window.location.href = '/settings';
         });
-        
-        // Refresh button
-        document.getElementById('refreshUpdatesBtn')?.addEventListener('click', () => {
-            this.loadLatestUpdates();
-        });
-        
-        // Clear history button
-        document.getElementById('clearHistoryBtn')?.addEventListener('click', () => {
-            this.clearJobHistory();
-        });
-        
-        // Instant crawl button
-        document.getElementById('instantCrawlBtn')?.addEventListener('click', () => {
-            this.startInstantCrawling();
-        });
-        
-        // Collapse toggle button
-        document.getElementById('collapseToggle')?.addEventListener('click', () => {
-            this.toggleCollapseSection();
-        });
-        
         
         // 페이지 가시성 추적
         document.addEventListener('visibilitychange', () => {
@@ -166,17 +144,13 @@ class ExpertDashboard {
                 });
                 
                 this.loadStatusCards(); // 데이터 새로고침
-                this.loadLatestUpdates(); // 타임라인 새로고침
                 break;
             case 'crawl_complete':
                 this.showToast('크롤링 완료', 'success', '데이터 수집이 성공적으로 완료되었습니다');
                 this.loadStatusCards();
-                this.loadLatestUpdates();
-                this.restoreInstantCrawlButton(); // 크롤링 완료 시 버튼 복원
                 break;
             case 'crawl_error':
                 this.showToast('크롤링 오류', 'error', `오류: ${message.error}`);
-                this.restoreInstantCrawlButton(); // 크롤링 에러 시 버튼 복원
                 break;
         }
     }
@@ -186,8 +160,7 @@ class ExpertDashboard {
         
         try {
             await Promise.all([
-                this.loadStatusCards(),
-                this.loadLatestUpdates()
+                this.loadStatusCards()
             ]);
         } catch (error) {
             console.error('초기 데이터 로드 실패:', error);
@@ -309,247 +282,6 @@ class ExpertDashboard {
         return card;
     }
     
-    async loadLatestUpdates() {
-        try {
-            const response = await fetch('/api/job-history?limit=10');
-            const data = await response.json();
-            
-            this.renderLatestUpdates(data.job_history || []);
-        } catch (error) {
-            console.error('Failed to load crawling progress:', error);
-            this.showToast('로드 오류', 'error', '크롤링 현황 로드에 실패했습니다');
-        }
-    }
-    
-    async clearJobHistory() {
-        if (!confirm('크롤링 진행현황을 모두 삭제하시겠습니까?')) {
-            return;
-        }
-        
-        try {
-            const response = await fetch('/api/job-history', {
-                method: 'DELETE'
-            });
-            
-            const data = await response.json();
-            
-            if (response.ok) {
-                this.showToast('삭제 완료', 'success', data.message);
-                this.loadLatestUpdates(); // 목록 새로고침
-            } else {
-                this.showToast('삭제 실패', 'error', data.detail || '진행현황 삭제에 실패했습니다');
-            }
-        } catch (error) {
-            console.error('Failed to clear job history:', error);
-            this.showToast('삭제 실패', 'error', '진행현황 삭제 중 오류가 발생했습니다');
-        }
-    }
-    
-    async startInstantCrawling() {
-        try {
-            console.log('즉시 탐색 시작');
-            
-            // 버튼 비활성화
-            const btn = document.getElementById('instantCrawlBtn');
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = `
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                        <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    탐색 중...
-                `;
-            }
-            
-            const response = await fetch('/api/crawl/all', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            if (!response.ok) throw new Error('즉시 탐색 시작 실패');
-            
-            const result = await response.json();
-            this.showToast('즉시 탐색 시작', 'success', '전체 사이트 크롤링을 시작했습니다. 진행상황을 확인하세요.');
-            
-        } catch (error) {
-            console.error('즉시 탐색 오류:', error);
-            this.showToast('탐색 실패', 'error', '즉시 탐색 시작에 실패했습니다.');
-            // 에러 발생 시에만 즉시 복원
-            this.restoreInstantCrawlButton();
-        }
-    }
-    
-    restoreInstantCrawlButton() {
-        const btn = document.getElementById('instantCrawlBtn');
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                즉시 탐색
-            `;
-        }
-    }
-    
-    renderLatestUpdates(jobHistory) {
-        const container = document.getElementById('updatesTimeline');
-        if (!container) return;
-        
-        container.innerHTML = '';
-        
-        if (jobHistory.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">-</div>
-                    <div class="empty-state-title">크롤링 이력 없음</div>
-                    <div class="empty-state-description">최근 실행된 크롤링 작업이 없습니다.</div>
-                </div>
-            `;
-            return;
-        }
-        
-        jobHistory.forEach(job => {
-            const item = this.createJobTimelineItem(job);
-            container.appendChild(item);
-        });
-    }
-    
-    createJobTimelineItem(job) {
-        const item = document.createElement('div');
-        item.className = 'timeline-item';
-        
-        const startTime = new Date(job.start_time);
-        const relativeTime = this.formatRelativeTime(startTime);
-        const siteKey = job.site_key;
-        const badgeColor = this.siteColors[siteKey] || '#6B7280';
-        
-        // 상태에 따른 아이콘과 색상
-        let statusIcon = '◯';
-        let statusClass = 'status-running';
-        let statusText = '실행 중';
-        
-        if (job.status === 'completed' || job.status === 'success') {
-            statusIcon = '●';
-            statusClass = 'status-success';
-            statusText = '완료';
-        } else if (job.status === 'failed') {
-            statusIcon = '×';
-            statusClass = 'status-error';
-            statusText = '실패';
-        } else if (job.status === 'partial_success') {
-            statusIcon = '!';
-            statusClass = 'status-warning';
-            statusText = '부분 성공';
-        } else if (job.status === 'running') {
-            statusIcon = '◯';
-            statusClass = 'status-running';
-            statusText = '실행 중';
-        }
-        
-        // 실행 시간 계산
-        let duration = '';
-        if (job.end_time) {
-            const endTime = new Date(job.end_time);
-            const durationMs = endTime - startTime;
-            const seconds = Math.round(durationMs / 1000);
-            duration = `${seconds}초`;
-        }
-        
-        // 결과 정보 - 상세 크롤링 통계 표시
-        let resultInfo = '';
-        if (job.total_crawled !== undefined || job.new_count !== undefined) {
-            const parts = [];
-            if (job.total_crawled !== undefined) {
-                parts.push(`${job.total_crawled}개 수집`);
-            }
-            if (job.new_count !== undefined) {
-                parts.push(`${job.new_count}개 신규`);
-            }
-            if (job.existing_count !== undefined && job.total_crawled !== undefined) {
-                const duplicates = job.total_crawled - job.new_count;
-                if (duplicates > 0) {
-                    parts.push(`${duplicates}개 중복`);
-                }
-            }
-            if (parts.length > 0) {
-                resultInfo = parts.join(', ');
-            }
-        }
-        
-        item.innerHTML = `
-            <div class="timeline-header">
-                <h4 class="timeline-title">
-                    ${statusIcon} ${this.getSiteName(siteKey)} 크롤링 ${statusText}
-                </h4>
-                <div class="timeline-meta">
-                    <span class="organization-badge" style="--badge-color: ${badgeColor}; --badge-text-color: white; background: ${badgeColor};">
-                        ${this.getSiteName(siteKey)}
-                    </span>
-                    <span class="job-status ${statusClass}">${statusText}</span>
-                    <span>${relativeTime}</span>
-                </div>
-            </div>
-            <div class="timeline-description">
-                실행 시간: ${startTime.toLocaleString('ko-KR')}
-                ${duration ? ` (소요시간: ${duration})` : ''}
-                ${resultInfo ? ` | ${resultInfo}` : ''}
-                ${job.error_message ? `<br><span class="error-message">오류: ${job.error_message}</span>` : ''}
-            </div>
-        `;
-        
-        return item;
-    }
-    
-    createTimelineItem(notification) {
-        const item = document.createElement('div');
-        item.className = 'timeline-item';
-        
-        const relativeTime = this.formatRelativeTime(new Date(notification.created_at));
-        const siteKey = this.extractSiteKeyFromNotification(notification);
-        const badgeColor = this.siteColors[siteKey] || '#6B7280';
-        
-        item.innerHTML = `
-            <div class="timeline-header">
-                <h4 class="timeline-title">${notification.title}</h4>
-                <div class="timeline-meta">
-                    ${siteKey ? `<span class="organization-badge" style="--badge-color: ${badgeColor}; --badge-text-color: white; background: ${badgeColor};">${this.getSiteName(siteKey)}</span>` : ''}
-                    <span>${relativeTime}</span>
-                </div>
-            </div>
-            <div class="timeline-description">${notification.message}</div>
-        `;
-        
-        return item;
-    }
-    
-    extractSiteKeyFromNotification(notification) {
-        // Try to extract site key from notification context
-        if (notification.metadata) {
-            try {
-                const metadata = typeof notification.metadata === 'string' ? 
-                    JSON.parse(notification.metadata) : notification.metadata;
-                return metadata.site_key;
-            } catch (e) {
-                // Ignore parsing errors
-            }
-        }
-        
-        // Fallback: try to match site names in the message
-        const message = notification.message.toLowerCase();
-        for (const [siteKey, color] of Object.entries(this.siteColors)) {
-            const siteName = this.getSiteName(siteKey).toLowerCase();
-            if (message.includes(siteName)) {
-                return siteKey;
-            }
-        }
-        
-        return null;
-    }
-    
     getSiteName(siteKey) {
         const siteNames = {
             'tax_tribunal': '조세심판원',
@@ -649,42 +381,6 @@ class ExpertDashboard {
         }, 5000);
     }
     
-    toggleCollapseSection() {
-        const toggle = document.getElementById('collapseToggle');
-        const content = document.getElementById('updatesTimeline');
-        
-        if (!toggle || !content) return;
-        
-        const isCollapsed = content.classList.contains('collapsed');
-        
-        if (isCollapsed) {
-            // Expand
-            content.classList.remove('collapsed');
-            toggle.classList.remove('collapsed');
-        } else {
-            // Collapse
-            content.classList.add('collapsed');
-            toggle.classList.add('collapsed');
-        }
-        
-        // Save state to localStorage
-        localStorage.setItem('crawlingStatusCollapsed', !isCollapsed);
-    }
-    
-    restoreCollapseState() {
-        const isCollapsed = localStorage.getItem('crawlingStatusCollapsed') === 'true';
-        
-        if (isCollapsed) {
-            const toggle = document.getElementById('collapseToggle');
-            const content = document.getElementById('updatesTimeline');
-            
-            if (toggle && content) {
-                content.classList.add('collapsed');
-                toggle.classList.add('collapsed');
-            }
-        }
-    }
-    
     showLoading(show) {
         const overlay = document.getElementById('loadingOverlay');
         if (overlay) {
@@ -700,7 +396,6 @@ class ExpertDashboard {
         // Refresh data every 5 minutes
         this.refreshInterval = setInterval(() => {
             this.loadStatusCards();
-            this.loadLatestUpdates();
         }, 5 * 60 * 1000);
     }
     

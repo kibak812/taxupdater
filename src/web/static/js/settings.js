@@ -5,6 +5,8 @@
 
 class ExpertSettings {
     constructor() {
+        this.jobHistoryLimit = 30;
+        this.visibleJobHistoryCount = 10;
         this.siteColors = {
             'tax_tribunal': '#4F46E5',
             'nts_authority': '#059669',
@@ -64,6 +66,22 @@ class ExpertSettings {
         document.getElementById('toggleSchedulerBtn')?.addEventListener('click', () => {
             this.toggleScheduler();
         });
+
+        document.getElementById('refreshUpdatesBtn')?.addEventListener('click', () => {
+            this.loadLatestUpdates();
+        });
+
+        document.getElementById('clearHistoryBtn')?.addEventListener('click', () => {
+            this.clearJobHistory();
+        });
+
+        document.getElementById('instantCrawlBtn')?.addEventListener('click', () => {
+            this.startInstantCrawling();
+        });
+
+        document.getElementById('collapseToggle')?.addEventListener('click', () => {
+            this.toggleCollapseSection();
+        });
         
         // 브라우저 알림 토글
         document.getElementById('browserNotificationToggle')?.addEventListener('change', (e) => {
@@ -100,17 +118,6 @@ class ExpertSettings {
             this.refreshTunnelStatus();
         });
         
-        // LocalTunnel 제어
-        document.getElementById('localtunnel-start')?.addEventListener('click', () => {
-            this.controlTunnel('localtunnel', 'start');
-        });
-        document.getElementById('localtunnel-stop')?.addEventListener('click', () => {
-            this.controlTunnel('localtunnel', 'stop');
-        });
-        document.getElementById('localtunnel-copy')?.addEventListener('click', () => {
-            this.copyTunnelUrl('localtunnel');
-        });
-        
         // ngrok 제어
         document.getElementById('ngrok-start')?.addEventListener('click', () => {
             this.controlTunnel('ngrok', 'start');
@@ -136,7 +143,8 @@ class ExpertSettings {
                 this.loadSystemStatus(),
                 this.loadSiteSchedules(),
                 this.loadSettings(),
-                this.loadTunnelStatus()
+                this.loadTunnelStatus(),
+                this.loadLatestUpdates()
             ]);
         } catch (error) {
             console.error('Failed to load initial data:', error);
@@ -506,6 +514,235 @@ class ExpertSettings {
             this.markAsChanged();
             this.showToast('설정 초기화', 'info', '설정이 기본값으로 초기화되었습니다');
         }
+    }
+
+    async loadLatestUpdates() {
+        try {
+            const response = await fetch(`/api/job-history?limit=${this.jobHistoryLimit}`);
+            const data = await response.json();
+
+            this.renderLatestUpdates(data.job_history || []);
+        } catch (error) {
+            console.error('Failed to load crawling progress:', error);
+            this.showToast('로드 오류', 'error', '크롤링 현황 로드에 실패했습니다');
+        }
+    }
+
+    async clearJobHistory() {
+        if (!confirm('크롤링 진행현황을 모두 삭제하시겠습니까?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/job-history', {
+                method: 'DELETE'
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                this.showToast('삭제 완료', 'success', data.message);
+                this.loadLatestUpdates();
+            } else {
+                this.showToast('삭제 실패', 'error', data.detail || '진행현황 삭제에 실패했습니다');
+            }
+        } catch (error) {
+            console.error('Failed to clear job history:', error);
+            this.showToast('삭제 실패', 'error', '진행현황 삭제 중 오류가 발생했습니다');
+        }
+    }
+
+    async startInstantCrawling() {
+        const btn = document.getElementById('instantCrawlBtn');
+
+        try {
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '탐색 시작 중...';
+            }
+
+            const response = await fetch('/api/crawl/all', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('크롤링 시작 실패');
+            }
+
+            this.showToast('즉시 탐색 시작', 'success', '전체 사이트 크롤링을 시작했습니다.');
+            setTimeout(() => this.loadLatestUpdates(), 1500);
+        } catch (error) {
+            console.error('Failed to start instant crawling:', error);
+            this.showToast('탐색 실패', 'error', '즉시 탐색 시작에 실패했습니다.');
+        } finally {
+            this.restoreInstantCrawlButton();
+        }
+    }
+
+    restoreInstantCrawlButton() {
+        const btn = document.getElementById('instantCrawlBtn');
+        if (!btn) return;
+
+        btn.disabled = false;
+        btn.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            즉시 탐색
+        `;
+    }
+
+    renderLatestUpdates(jobHistory) {
+        const container = document.getElementById('updatesTimeline');
+        if (!container) return;
+
+        container.innerHTML = '';
+        container.classList.remove('scrollable');
+        container.style.removeProperty('--timeline-visible-height');
+
+        if (jobHistory.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">-</div>
+                    <div class="empty-state-title">크롤링 이력 없음</div>
+                    <div class="empty-state-description">최근 실행된 크롤링 작업이 없습니다.</div>
+                </div>
+            `;
+            return;
+        }
+
+        jobHistory.forEach(job => {
+            const item = this.createJobTimelineItem(job);
+            container.appendChild(item);
+        });
+
+        requestAnimationFrame(() => {
+            this.updateTimelineScrollLimit(container, jobHistory.length);
+        });
+    }
+
+    updateTimelineScrollLimit(container, itemCount) {
+        if (itemCount <= this.visibleJobHistoryCount) return;
+
+        const visibleItems = Array.from(container.querySelectorAll('.timeline-item'))
+            .slice(0, this.visibleJobHistoryCount);
+        const visibleHeight = visibleItems.reduce((height, item) => height + item.offsetHeight, 0);
+
+        if (visibleHeight > 0) {
+            container.style.setProperty('--timeline-visible-height', `${visibleHeight}px`);
+            container.classList.add('scrollable');
+        }
+    }
+
+    createJobTimelineItem(job) {
+        const item = document.createElement('div');
+        item.className = 'timeline-item';
+
+        const startTime = new Date(job.start_time);
+        const relativeTime = this.formatRelativeTime(startTime);
+        const siteKey = job.site_key;
+        const badgeColor = this.siteColors[siteKey] || '#6B7280';
+
+        let statusIcon = '◯';
+        let statusClass = 'status-running';
+        let statusText = '실행 중';
+
+        if (job.status === 'completed' || job.status === 'success') {
+            statusIcon = '●';
+            statusClass = 'status-success';
+            statusText = '완료';
+        } else if (job.status === 'failed') {
+            statusIcon = '×';
+            statusClass = 'status-error';
+            statusText = '실패';
+        } else if (job.status === 'partial_success') {
+            statusIcon = '!';
+            statusClass = 'status-warning';
+            statusText = '부분 성공';
+        }
+
+        let duration = '';
+        if (job.end_time) {
+            const endTime = new Date(job.end_time);
+            const durationMs = endTime - startTime;
+            const seconds = Math.round(durationMs / 1000);
+            duration = `${seconds}초`;
+        }
+
+        let resultInfo = '';
+        if (job.total_crawled !== undefined || job.new_count !== undefined) {
+            const parts = [];
+            if (job.total_crawled !== undefined) {
+                parts.push(`${job.total_crawled}개 수집`);
+            }
+            if (job.new_count !== undefined) {
+                parts.push(`${job.new_count}개 신규`);
+            }
+            if (job.new_count !== undefined && job.total_crawled !== undefined) {
+                const duplicates = job.total_crawled - job.new_count;
+                if (duplicates > 0) {
+                    parts.push(`${duplicates}개 중복`);
+                }
+            }
+            resultInfo = parts.join(', ');
+        }
+
+        item.innerHTML = `
+            <div class="timeline-header">
+                <h4 class="timeline-title">
+                    ${statusIcon} ${this.getSiteName(siteKey)} 크롤링 ${statusText}
+                </h4>
+                <div class="timeline-meta">
+                    <span class="organization-badge" style="--badge-color: ${badgeColor}; --badge-text-color: white; background: ${badgeColor};">
+                        ${this.getSiteName(siteKey)}
+                    </span>
+                    <span class="job-status ${statusClass}">${statusText}</span>
+                    <span>${relativeTime}</span>
+                </div>
+            </div>
+            <div class="timeline-description">
+                실행 시간: ${startTime.toLocaleString('ko-KR')}
+                ${duration ? ` (소요시간: ${duration})` : ''}
+                ${resultInfo ? ` | ${resultInfo}` : ''}
+                ${job.error_message ? `<br><span class="error-message">오류: ${job.error_message}</span>` : ''}
+            </div>
+        `;
+
+        return item;
+    }
+
+    getSiteName(siteKey) {
+        return this.siteNames[siteKey] || siteKey;
+    }
+
+    formatRelativeTime(date) {
+        const now = new Date();
+        const diffInMinutes = Math.floor((now - date) / (1000 * 60));
+
+        if (diffInMinutes < 1) return '방금 전';
+        if (diffInMinutes < 60) return `${diffInMinutes}분 전`;
+
+        const diffInHours = Math.floor(diffInMinutes / 60);
+        if (diffInHours < 24) return `${diffInHours}시간 전`;
+
+        const diffInDays = Math.floor(diffInHours / 24);
+        if (diffInDays < 7) return `${diffInDays}일 전`;
+
+        return date.toLocaleDateString('ko-KR');
+    }
+
+    toggleCollapseSection() {
+        const toggle = document.getElementById('collapseToggle');
+        const content = document.getElementById('updatesTimeline');
+
+        if (!toggle || !content) return;
+
+        const isCollapsed = content.classList.contains('collapsed');
+        content.classList.toggle('collapsed', !isCollapsed);
+        toggle.classList.toggle('collapsed', !isCollapsed);
     }
     
     markAsChanged() {
@@ -908,44 +1145,9 @@ class ExpertSettings {
     }
 
     updateTunnelUI(status) {
-        // LocalTunnel UI 업데이트
-        const ltStatus = document.getElementById('localtunnel-status');
-        const ltUrl = document.getElementById('localtunnel-url');
-        const ltStart = document.getElementById('localtunnel-start');
-        const ltStop = document.getElementById('localtunnel-stop');
-        const ltCopy = document.getElementById('localtunnel-copy');
-
-        if (ltStatus) {
-            const ltData = status.localtunnel;
-            if (ltData.status === 'active') {
-                ltStatus.textContent = '실행 중';
-                ltStatus.style.color = '#059669';
-                if (ltData.url) {
-                    ltUrl.textContent = ltData.url;
-                    ltUrl.style.display = 'block';
-                    ltCopy.style.display = 'inline-block';
-                }
-                ltStart.style.display = 'none';
-                ltStop.style.display = 'inline-block';
-            } else if (ltData.status === 'connecting') {
-                ltStatus.textContent = '연결 중';
-                ltStatus.style.color = '#D97706';
-                ltUrl.style.display = 'none';
-                ltCopy.style.display = 'none';
-                ltStart.style.display = 'none';
-                ltStop.style.display = 'inline-block';
-            } else {
-                ltStatus.textContent = '중지됨';
-                ltStatus.style.color = '#DC2626';
-                ltUrl.style.display = 'none';
-                ltCopy.style.display = 'none';
-                ltStart.style.display = 'inline-block';
-                ltStop.style.display = 'none';
-            }
-        }
-
         // ngrok UI 업데이트
         const ngrokStatus = document.getElementById('ngrok-status');
+        const ngrokConfiguredUrl = document.getElementById('ngrok-configured-url');
         const ngrokUrl = document.getElementById('ngrok-url');
         const ngrokStart = document.getElementById('ngrok-start');
         const ngrokStop = document.getElementById('ngrok-stop');
@@ -953,11 +1155,33 @@ class ExpertSettings {
 
         if (ngrokStatus) {
             const ngrokData = status.ngrok;
+            if (ngrokConfiguredUrl) {
+                if (ngrokData.configured_url) {
+                    ngrokConfiguredUrl.textContent = `고정 URL: ${ngrokData.configured_url}`;
+                    ngrokConfiguredUrl.style.display = 'block';
+                } else {
+                    ngrokConfiguredUrl.textContent = '고정 URL 미설정';
+                    ngrokConfiguredUrl.style.display = 'block';
+                }
+            }
+
             if (ngrokData.status === 'active') {
-                ngrokStatus.textContent = '실행 중';
+                ngrokStatus.textContent = ngrokData.is_static ? '실행 중 (고정 URL)' : '실행 중';
                 ngrokStatus.style.color = '#059669';
                 if (ngrokData.url) {
-                    ngrokUrl.textContent = ngrokData.url;
+                    ngrokUrl.textContent = `현재 URL: ${ngrokData.url}`;
+                    ngrokUrl.dataset.copyUrl = ngrokData.url;
+                    ngrokUrl.style.display = 'block';
+                    ngrokCopy.style.display = 'inline-block';
+                }
+                ngrokStart.style.display = 'none';
+                ngrokStop.style.display = 'inline-block';
+            } else if (ngrokData.status === 'active_dynamic') {
+                ngrokStatus.textContent = '실행 중 (임시 URL)';
+                ngrokStatus.style.color = '#D97706';
+                if (ngrokData.url) {
+                    ngrokUrl.textContent = `현재 URL: ${ngrokData.url}`;
+                    ngrokUrl.dataset.copyUrl = ngrokData.url;
                     ngrokUrl.style.display = 'block';
                     ngrokCopy.style.display = 'inline-block';
                 }
@@ -970,6 +1194,13 @@ class ExpertSettings {
                 ngrokCopy.style.display = 'none';
                 ngrokStart.style.display = 'none';
                 ngrokStop.style.display = 'inline-block';
+            } else if (ngrokData.status === 'static_unconfigured') {
+                ngrokStatus.textContent = '고정 URL 미설정';
+                ngrokStatus.style.color = '#D97706';
+                ngrokUrl.style.display = 'none';
+                ngrokCopy.style.display = 'none';
+                ngrokStart.style.display = 'inline-block';
+                ngrokStop.style.display = 'none';
             } else {
                 ngrokStatus.textContent = '중지됨';
                 ngrokStatus.style.color = '#DC2626';
@@ -1013,7 +1244,8 @@ class ExpertSettings {
     copyTunnelUrl(tunnelType) {
         const urlElement = document.getElementById(`${tunnelType}-url`);
         if (urlElement && urlElement.textContent) {
-            navigator.clipboard.writeText(urlElement.textContent)
+            const url = urlElement.dataset.copyUrl || urlElement.textContent;
+            navigator.clipboard.writeText(url)
                 .then(() => {
                     this.showToast('URL 복사됨', 'success', '터널 URL이 클립보드에 복사되었습니다');
                 })
