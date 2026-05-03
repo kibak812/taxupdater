@@ -277,6 +277,16 @@ class SQLiteRepository(DataRepositoryInterface):
             
             with sqlite3.connect(self.db_path) as conn:
                 if is_incremental:
+                    updated_count = self._update_existing_columns(
+                        conn,
+                        table_name,
+                        key_column,
+                        data,
+                        ["결론"]
+                    )
+                    if updated_count > 0:
+                        conn.commit()
+
                     # 증분 저장: 새로운 데이터만 INSERT
                     new_entries = self.compare_and_get_new_entries(site_key, data, key_column)
                     
@@ -309,6 +319,8 @@ class SQLiteRepository(DataRepositoryInterface):
                         self.logger.info(f"[SQLite] {site_key}: {len(new_entries)}개 신규 항목 저장 완료")
                     else:
                         self.logger.info(f"[SQLite] {site_key}: 새로운 데이터 없음")
+                        if updated_count > 0:
+                            self._update_metadata(conn, site_key, 0)
                 else:
                     # 전체 교체
                     # 표준화된 타임스탬프 형식 적용
@@ -335,6 +347,52 @@ class SQLiteRepository(DataRepositoryInterface):
         except Exception as e:
             self.logger.error(f"데이터 저장 실패 ({site_key}): {e}")
             return False
+
+    def _update_existing_columns(
+        self,
+        conn: sqlite3.Connection,
+        table_name: str,
+        key_column: str,
+        data: pd.DataFrame,
+        columns: List[str]
+    ) -> int:
+        """증분 저장 중 기존 행에 새로 수집된 보조 컬럼을 반영"""
+        update_columns = [col for col in columns if col in data.columns]
+        if not update_columns or key_column not in data.columns:
+            return 0
+
+        cursor = conn.cursor()
+        cursor.execute(f"PRAGMA table_info([{table_name}])")
+        existing_columns = {row[1] for row in cursor.fetchall()}
+        update_columns = [col for col in update_columns if col in existing_columns]
+        if not update_columns:
+            return 0
+
+        updated_count = 0
+        for column in update_columns:
+            rows = [
+                (row[column], row[key_column])
+                for _, row in data[[key_column, column]].fillna("").iterrows()
+                if row[key_column] and row[column]
+            ]
+            if not rows:
+                continue
+
+            cursor.executemany(
+                f"""
+                UPDATE [{table_name}]
+                SET [{column}] = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE [{key_column}] = ?
+                  AND (COALESCE([{column}], '') = '' OR [{column}] <> ?)
+                """,
+                [(value, key, value) for value, key in rows]
+            )
+            updated_count += cursor.rowcount
+
+        if updated_count > 0:
+            self.logger.info(f"[SQLite] {table_name}: 기존 항목 보조 컬럼 {updated_count}개 갱신")
+
+        return updated_count
     
     def compare_and_get_new_entries(self, site_key: str, new_data: pd.DataFrame, key_column: str) -> pd.DataFrame:
         """신규 데이터 추출 (SQL 최적화)"""

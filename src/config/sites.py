@@ -48,7 +48,7 @@ SITE_CATALOG: Dict[str, SiteDefinition] = {
         key="nts_precedent",
         url="https://taxlaw.nts.go.kr/pd/USEPDI001M.do",
         key_column="문서번호",
-        data_columns=("세목", "생산일자", "문서번호", "제목", "링크")
+        data_columns=("세목", "생산일자", "문서번호", "제목", "결론", "링크")
     ),
     "moef": SiteDefinition(
         key="moef",

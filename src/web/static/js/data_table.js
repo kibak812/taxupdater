@@ -58,11 +58,13 @@ class ExpertDataTable {
         // 필터 상태
         this.filters = {
             taxCategory: '',
-            decisionType: ''
+            decisionType: '',
+            conclusion: ''
         };
         this.availableFilters = {
             taxCategory: new Set(),
-            decisionType: new Set()
+            decisionType: new Set(),
+            conclusion: new Set()
         };
         this.isFiltered = false;
         
@@ -134,6 +136,11 @@ class ExpertDataTable {
         
         document.getElementById('decisionTypeSelect')?.addEventListener('change', (e) => {
             this.filters.decisionType = e.target.value;
+            this.applyFilters();
+        });
+
+        document.getElementById('conclusionSelect')?.addEventListener('change', (e) => {
+            this.filters.conclusion = e.target.value;
             this.applyFilters();
         });
         
@@ -302,6 +309,8 @@ class ExpertDataTable {
                 return item['세목'] || '';
             case 'decision_type':
                 return item['유형'] || '';
+            case 'conclusion':
+                return item['결론'] || '';
             case 'claim_number':
                 return item['청구번호'] || '';
             case 'decision_date':
@@ -332,6 +341,16 @@ class ExpertDataTable {
                 <th class="sortable" data-column="document_number">문서번호</th>
                 <th class="sortable" data-column="title">제목</th>
                 <th class="sortable" data-column="published_date">게시일</th>
+                <th class="sortable" data-column="collected_date">수집일</th>
+            `;
+        } else if (this.siteKey === 'nts_precedent') {
+            // 국세청 판례: 세목, 결론 컬럼 추가
+            thead.innerHTML = `
+                <th class="sortable" data-column="tax_category">세목</th>
+                <th class="sortable" data-column="document_number">문서번호</th>
+                <th class="sortable" data-column="title">제목</th>
+                <th class="sortable" data-column="conclusion">결론</th>
+                <th class="sortable" data-column="published_date">생산일자</th>
                 <th class="sortable" data-column="collected_date">수집일</th>
             `;
         } else if (this.siteKey === 'mois') {
@@ -399,6 +418,9 @@ class ExpertDataTable {
             if (this.filters.decisionType) {
                 activeFilters.push(`유형: ${this.filters.decisionType}`);
             }
+            if (this.filters.conclusion) {
+                activeFilters.push(`결론: ${this.filters.conclusion}`);
+            }
             
             if (activeFilters.length > 0) {
                 title += ` (${activeFilters.join(', ')})`;
@@ -465,6 +487,7 @@ class ExpertDataTable {
             // 조세심판원: 세목, 유형, 청구번호, 제목, 결정일 표시
             const taxCategory = item['세목'] || '-';
             const decisionType = item['유형'] || '-';
+            const decisionTypeClass = this.getDecisionTypeClass(decisionType);
             const claimNumber = item['청구번호'] || '-';
             const title = item['제목'] || '-';
             const decisionDate = this.formatDate(item['결정일']);
@@ -476,7 +499,7 @@ class ExpertDataTable {
                     <span class="tax-category">${taxCategory}</span>
                 </td>
                 <td>
-                    <span class="decision-type">${decisionType}</span>
+                    <span class="decision-type ${decisionTypeClass}">${decisionType}</span>
                 </td>
                 <td>
                     <span class="document-number">${claimNumber}</span>
@@ -511,6 +534,36 @@ class ExpertDataTable {
                         `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
                         `<span title="${title}">${title}</span>`
                     }
+                </td>
+                <td class="date-cell">${publishedDate}</td>
+                <td class="date-cell">${collectedDate}</td>
+            `;
+        } else if (this.siteKey === 'nts_precedent') {
+            // 국세청 판례: 세목, 결론 컬럼 포함
+            const taxCategory = item['세목'] || '-';
+            const documentNumber = item['문서번호'] || '-';
+            const title = item['제목'] || '-';
+            const conclusion = item['결론'] || '-';
+            const conclusionClass = this.getConclusionClass(conclusion);
+            const publishedDate = this.formatDate(item['생산일자']);
+            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
+            const link = item['링크'] || '#';
+            
+            row.innerHTML = `
+                <td>
+                    <span class="tax-category">${taxCategory}</span>
+                </td>
+                <td>
+                    <span class="document-number">${documentNumber}</span>
+                </td>
+                <td class="document-title">
+                    ${link !== '#' ? 
+                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
+                        `<span title="${title}">${title}</span>`
+                    }
+                </td>
+                <td>
+                    <span class="conclusion-badge ${conclusionClass}">${conclusion}</span>
                 </td>
                 <td class="date-cell">${publishedDate}</td>
                 <td class="date-cell">${collectedDate}</td>
@@ -564,6 +617,41 @@ class ExpertDataTable {
         }
         
         return row;
+    }
+
+    getDecisionTypeClass(decisionType) {
+        const value = String(decisionType || '').trim();
+        const taxpayerUnfavorable = new Set(['기각', '각하']);
+        const taxpayerFavorable = new Set(['취소', '경정']);
+
+        if (taxpayerUnfavorable.has(value)) {
+            return 'decision-unfavorable';
+        }
+        if (taxpayerFavorable.has(value)) {
+            return 'decision-favorable';
+        }
+        if (value === '재조사') {
+            return 'decision-neutral';
+        }
+        return 'decision-neutral';
+    }
+
+    getConclusionClass(conclusion) {
+        const value = String(conclusion || '').trim();
+        const taxpayerUnfavorable = new Set(['국승', '기각', '각하', '불채택']);
+        const taxpayerFavorable = new Set(['국패', '인용', '채택']);
+        const taxpayerPartial = new Set(['일부국패', '일부인용']);
+
+        if (taxpayerUnfavorable.has(value)) {
+            return 'conclusion-unfavorable';
+        }
+        if (taxpayerFavorable.has(value)) {
+            return 'conclusion-favorable';
+        }
+        if (taxpayerPartial.has(value)) {
+            return 'conclusion-partial';
+        }
+        return 'conclusion-neutral';
     }
     
     formatDate(dateString) {
@@ -826,6 +914,7 @@ class ExpertDataTable {
         const panel = document.getElementById('filterPanel');
         const taxCategoryFilter = document.getElementById('taxCategoryFilter');
         const decisionTypeFilter = document.getElementById('decisionTypeFilter');
+        const conclusionFilter = document.getElementById('conclusionFilter');
         const filterToggle = document.getElementById('filterToggle');
         
         if (this.siteKey === 'tax_tribunal') {
@@ -833,12 +922,21 @@ class ExpertDataTable {
             this.populateFilterOptions();
             taxCategoryFilter.style.display = 'block';
             decisionTypeFilter.style.display = 'block';
+            conclusionFilter.style.display = 'none';
             filterToggle.style.display = 'flex';
         } else if (this.siteKey === 'nts_authority') {
             // 국세청 유권해석: 세목 필터만 표시
             this.populateFilterOptions();
             taxCategoryFilter.style.display = 'block';
             decisionTypeFilter.style.display = 'none';
+            conclusionFilter.style.display = 'none';
+            filterToggle.style.display = 'flex';
+        } else if (this.siteKey === 'nts_precedent') {
+            // 국세청 판례: 세목, 결론 필터 표시
+            this.populateFilterOptions();
+            taxCategoryFilter.style.display = 'block';
+            decisionTypeFilter.style.display = 'none';
+            conclusionFilter.style.display = 'block';
             filterToggle.style.display = 'flex';
         } else {
             // 기타 사이트: 필터 숨김
@@ -850,8 +948,9 @@ class ExpertDataTable {
     populateFilterOptions() {
         const taxCategorySelect = document.getElementById('taxCategorySelect');
         const decisionTypeSelect = document.getElementById('decisionTypeSelect');
+        const conclusionSelect = document.getElementById('conclusionSelect');
         
-        if (!taxCategorySelect || !decisionTypeSelect) return;
+        if (!taxCategorySelect || !decisionTypeSelect || !conclusionSelect) return;
         
         // 기존 옵션 제거 (첫 번째 옵션 제외)
         while (taxCategorySelect.options.length > 1) {
@@ -860,10 +959,14 @@ class ExpertDataTable {
         while (decisionTypeSelect.options.length > 1) {
             decisionTypeSelect.remove(1);
         }
+        while (conclusionSelect.options.length > 1) {
+            conclusionSelect.remove(1);
+        }
         
         // 사용 가능한 필터 값 수집
         this.availableFilters.taxCategory.clear();
         this.availableFilters.decisionType.clear();
+        this.availableFilters.conclusion.clear();
         
         const sourceData = this.isFiltered ? this.allData : this.rawData;
         sourceData.forEach(item => {
@@ -872,6 +975,9 @@ class ExpertDataTable {
             }
             if (item['유형']) {
                 this.availableFilters.decisionType.add(item['유형']);
+            }
+            if (item['결론']) {
+                this.availableFilters.conclusion.add(item['결론']);
             }
         });
         
@@ -890,11 +996,19 @@ class ExpertDataTable {
             option.textContent = type;
             decisionTypeSelect.appendChild(option);
         });
+
+        // 결론 옵션 추가
+        Array.from(this.availableFilters.conclusion).sort().forEach(conclusion => {
+            const option = document.createElement('option');
+            option.value = conclusion;
+            option.textContent = conclusion;
+            conclusionSelect.appendChild(option);
+        });
     }
     
     applyFilters() {
         // 필터 적용 여부 확인
-        const hasFilters = this.filters.taxCategory || this.filters.decisionType;
+        const hasFilters = this.filters.taxCategory || this.filters.decisionType || this.filters.conclusion;
         
         if (!hasFilters) {
             // 필터가 없으면 일반 페이지 모드로 전환
@@ -926,6 +1040,13 @@ class ExpertDataTable {
         if (this.filters.decisionType) {
             filteredData = filteredData.filter(item => 
                 item['유형'] === this.filters.decisionType
+            );
+        }
+
+        // 결론 필터 적용
+        if (this.filters.conclusion) {
+            filteredData = filteredData.filter(item => 
+                item['결론'] === this.filters.conclusion
             );
         }
         
@@ -968,12 +1089,15 @@ class ExpertDataTable {
     clearFilters() {
         this.filters.taxCategory = '';
         this.filters.decisionType = '';
+        this.filters.conclusion = '';
         
         const taxCategorySelect = document.getElementById('taxCategorySelect');
         const decisionTypeSelect = document.getElementById('decisionTypeSelect');
+        const conclusionSelect = document.getElementById('conclusionSelect');
         
         if (taxCategorySelect) taxCategorySelect.value = '';
         if (decisionTypeSelect) decisionTypeSelect.value = '';
+        if (conclusionSelect) conclusionSelect.value = '';
         
         this.applyFilters();
     }

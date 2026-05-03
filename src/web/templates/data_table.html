@@ -163,6 +163,10 @@
             width: 88px;
         }
 
+        .data-table th[data-column="conclusion"] {
+            width: 96px;
+        }
+
         .data-table th[data-column="claim_number"],
         .data-table th[data-column="document_number"] {
             width: 148px;
@@ -372,7 +376,7 @@
             color: var(--color-gray-900);
         }
         
-        .tax-category, .decision-type {
+        .tax-category, .decision-type, .conclusion-badge {
             display: inline-block;
             padding: var(--spacing-xs) var(--spacing-sm);
             background: var(--color-gray-100);
@@ -384,6 +388,30 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+
+        .conclusion-badge {
+            font-weight: 700;
+        }
+
+        .conclusion-unfavorable, .decision-unfavorable {
+            background: rgba(220, 38, 38, 0.10);
+            color: #991B1B;
+        }
+
+        .conclusion-favorable, .decision-favorable {
+            background: rgba(5, 150, 105, 0.12);
+            color: #047857;
+        }
+
+        .conclusion-partial {
+            background: rgba(16, 185, 129, 0.18);
+            color: #065F46;
+        }
+
+        .conclusion-neutral, .decision-neutral {
+            background: var(--color-gray-100);
+            color: var(--color-gray-700);
         }
         
         .active-filters {
@@ -579,6 +607,12 @@
                     <div class="filter-group" id="decisionTypeFilter" style="display: none;">
                         <label for="decisionTypeSelect">유형</label>
                         <select id="decisionTypeSelect" class="filter-select">
+                            <option value="">전체</option>
+                        </select>
+                    </div>
+                    <div class="filter-group" id="conclusionFilter" style="display: none;">
+                        <label for="conclusionSelect">결론</label>
+                        <select id="conclusionSelect" class="filter-select">
                             <option value="">전체</option>
                         </select>
                     </div>

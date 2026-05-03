@@ -56,8 +56,9 @@ class NTSBaseCrawler(BaseCrawler, ICrawler):
             const productionDate = item.querySelector("ul.subs_detail li span.num").textContent.trim();
             const docNumber = item.querySelector("ul.subs_detail li strong").textContent.trim();
             const title = item.querySelector("a.subs_title strong").textContent.trim();
+            const conclusion = item.querySelector("a.subs_title em")?.textContent?.trim() || "";
 
-            return {taxLabel, productionDate, docNumber, title};
+            return {taxLabel, productionDate, docNumber, title, conclusion};
         } catch (e) {
             return {error: e.toString()};
         }
@@ -266,13 +267,18 @@ class NTSBaseCrawler(BaseCrawler, ICrawler):
                 # Hook Method 호출: 서브클래스에서 구현
                 link = self._generate_link(doc_number)
 
-                data.append({
+                row = {
                     "세목": item.get('taxLabel', ''),
                     "생산일자": item.get('productionDate', ''),
                     "문서번호": doc_number,
                     "제목": item.get('title', ''),
                     "링크": link or ''
-                })
+                }
+
+                if "결론" in self.data_columns:
+                    row["결론"] = item.get('conclusion', '')
+
+                data.append(row)
 
         df = pd.DataFrame(data, columns=self.data_columns)
 
