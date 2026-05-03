@@ -6,7 +6,7 @@
 class ExpertSettings {
     constructor() {
         this.jobHistoryLimit = 30;
-        this.visibleJobHistoryCount = 10;
+        this.visibleJobHistoryCount = 5;
         this.siteColors = {
             'tax_tribunal': '#4F46E5',
             'nts_authority': '#059669',
@@ -29,12 +29,13 @@ class ExpertSettings {
             defaultInterval: 6,
             maxRetries: 3,
             timeout: 30,
-            realtimeNotifications: true,
             notificationThreshold: 1
         };
         
         this.currentSettings = { ...this.defaultSettings };
         this.siteSchedules = {};
+        this.systemStatus = null;
+        this.jobHistory = [];
         
         // 브라우저 알림 관련 설정
         this.browserNotificationEnabled = this.loadNotificationSetting();
@@ -79,10 +80,6 @@ class ExpertSettings {
             this.startInstantCrawling();
         });
 
-        document.getElementById('collapseToggle')?.addEventListener('click', () => {
-            this.toggleCollapseSection();
-        });
-        
         // 브라우저 알림 토글
         document.getElementById('browserNotificationToggle')?.addEventListener('change', (e) => {
             this.toggleBrowserNotifications(e.target.checked);
@@ -144,6 +141,7 @@ class ExpertSettings {
                 this.loadSiteSchedules(),
                 this.loadSettings(),
                 this.loadTunnelStatus(),
+                this.loadEmailSettings(),
                 this.loadLatestUpdates()
             ]);
         } catch (error) {
@@ -156,13 +154,16 @@ class ExpertSettings {
         try {
             const response = await fetch('/api/system-status');
             const data = await response.json();
+            this.systemStatus = data;
             
             const isRunning = data.scheduler_status?.scheduler_running || false;
             this.updateSchedulerStatus(isRunning);
+            this.updateOperationsSummary();
             
         } catch (error) {
             console.error('Failed to load system status:', error);
             this.updateSchedulerStatus(false);
+            this.updateOperationsSummary();
         }
     }
     
@@ -201,10 +202,12 @@ class ExpertSettings {
             }
             
             this.renderSiteList();
+            this.updateOperationsSummary();
             
         } catch (error) {
             console.error('Failed to load site schedules:', error);
             this.renderSiteList(); // Render with empty data
+            this.updateOperationsSummary();
         }
     }
     
@@ -214,8 +217,19 @@ class ExpertSettings {
         
         container.innerHTML = '';
         
-        // Get all available sites from colors mapping
-        Object.keys(this.siteColors).forEach(siteKey => {
+        const siteKeys = Object.keys(this.siteColors);
+
+        if (siteKeys.length === 0) {
+            container.innerHTML = `
+                <div class="source-empty">
+                    <div class="empty-state-title">사용 가능한 소스 없음</div>
+                    <div class="empty-state-description">현재 등록된 크롤링 소스가 없습니다.</div>
+                </div>
+            `;
+            return;
+        }
+
+        siteKeys.forEach(siteKey => {
             const schedule = this.siteSchedules[siteKey];
             const siteItem = this.createSiteItem(siteKey, schedule);
             container.appendChild(siteItem);
@@ -252,7 +266,7 @@ class ExpertSettings {
 
     createSiteItem(siteKey, schedule) {
         const item = document.createElement('div');
-        item.className = 'settings-toggle-row';
+        item.className = 'source-tile';
         
         const siteName = this.siteNames[siteKey] || siteKey;
         const siteColor = this.siteColors[siteKey] || '#6B7280';
@@ -261,26 +275,42 @@ class ExpertSettings {
         const isEnabled = schedule?.enabled || false;
         const cronExpression = schedule?.cron_expression || this.generateCronExpression(this.currentSettings.defaultInterval);
         const nextRun = schedule?.scheduler_status?.next_run;
+        const isRunning = schedule?.scheduler_status?.running || false;
         
-        let statusText = '스케줄 없음';
+        let nextRunText = '스케줄 없음';
         if (isEnabled) {
-            statusText = nextRun ? 
-                `다음 실행: ${new Date(nextRun).toLocaleString('ko-KR')}` : 
+            nextRunText = nextRun ?
+                this.formatDateTime(nextRun) :
                 `스케줄됨: ${cronExpression}`;
         }
+
+        const statusInfo = this.getSourceStatus(schedule, isEnabled, isRunning);
         
         item.innerHTML = `
-            <div class="settings-row-main">
-                <div class="site-indicator"></div>
-                <div class="settings-row-copy">
-                    <div class="settings-row-title">${siteName}</div>
-                    <div class="settings-row-description">${statusText}</div>
+            <div class="source-tile-header">
+                <div class="source-name-cell">
+                    <div class="site-indicator"></div>
+                    <div class="settings-row-copy">
+                        <div class="settings-row-title">${siteName}</div>
+                        <div class="settings-row-description">${isEnabled ? '자동 모니터링' : '일시 중지'}</div>
+                    </div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" class="toggle-input site-toggle" data-site-key="${siteKey}" ${isEnabled ? 'checked' : ''}>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div class="source-tile-body">
+                <div class="source-metric">
+                    <span class="source-label">다음 실행</span>
+                    <span class="source-next-run">${nextRunText}</span>
+                </div>
+                <div class="source-metric">
+                    <span class="source-label">최근 상태</span>
+                    <span class="source-status ${statusInfo.className}">${statusInfo.text}</span>
+                    <span class="source-meta">${statusInfo.meta}</span>
                 </div>
             </div>
-            <label class="toggle-switch">
-                <input type="checkbox" class="toggle-input site-toggle" data-site-key="${siteKey}" ${isEnabled ? 'checked' : ''}>
-                <span class="toggle-slider"></span>
-            </label>
         `;
         
         // Add event listener for toggle
@@ -290,6 +320,29 @@ class ExpertSettings {
         });
         
         return item;
+    }
+
+    getSourceStatus(schedule, isEnabled, isRunning) {
+        if (!isEnabled) {
+            return { text: '비활성', className: 'is-muted', meta: '자동 실행 안 함' };
+        }
+
+        if (isRunning) {
+            return { text: '실행 중', className: 'is-running', meta: '현재 크롤링 중' };
+        }
+
+        const lastFailure = schedule?.last_failure ? new Date(schedule.last_failure) : null;
+        const lastSuccess = schedule?.last_success ? new Date(schedule.last_success) : null;
+
+        if (lastFailure && (!lastSuccess || lastFailure > lastSuccess)) {
+            return { text: '최근 실패', className: 'is-error', meta: this.formatRelativeTime(lastFailure) };
+        }
+
+        if (lastSuccess) {
+            return { text: '정상', className: 'is-success', meta: this.formatRelativeTime(lastSuccess) };
+        }
+
+        return { text: '대기', className: 'is-warning', meta: '아직 실행 이력 없음' };
     }
     
     async handleSiteToggle(siteKey, enabled) {
@@ -410,22 +463,34 @@ class ExpertSettings {
     }
     
     applySettingsToForm() {
-        // Apply settings to form fields
-        document.getElementById('defaultInterval').value = this.currentSettings.defaultInterval;
-        document.getElementById('maxRetries').value = this.currentSettings.maxRetries;
-        document.getElementById('timeout').value = this.currentSettings.timeout;
-        document.getElementById('realtimeNotifications').checked = this.currentSettings.realtimeNotifications;
-        document.getElementById('notificationThreshold').value = this.currentSettings.notificationThreshold;
+        this.setInputValue('defaultInterval', this.currentSettings.defaultInterval);
+        this.setInputValue('maxRetries', this.currentSettings.maxRetries);
+        this.setInputValue('timeout', this.currentSettings.timeout);
+        this.setInputValue('notificationThreshold', this.currentSettings.notificationThreshold);
     }
     
     getSettingsFromForm() {
         return {
-            defaultInterval: parseInt(document.getElementById('defaultInterval').value),
-            maxRetries: parseInt(document.getElementById('maxRetries').value),
-            timeout: parseInt(document.getElementById('timeout').value),
-            realtimeNotifications: document.getElementById('realtimeNotifications').checked,
-            notificationThreshold: parseInt(document.getElementById('notificationThreshold').value)
+            defaultInterval: this.getNumberInputValue('defaultInterval', this.defaultSettings.defaultInterval),
+            maxRetries: this.getNumberInputValue('maxRetries', this.currentSettings.maxRetries),
+            timeout: this.getNumberInputValue('timeout', this.currentSettings.timeout),
+            notificationThreshold: this.getNumberInputValue('notificationThreshold', this.defaultSettings.notificationThreshold)
         };
+    }
+
+    setInputValue(id, value) {
+        const element = document.getElementById(id);
+        if (element) {
+            element.value = value;
+        }
+    }
+
+    getNumberInputValue(id, fallback) {
+        const element = document.getElementById(id);
+        if (!element) return fallback;
+
+        const value = parseInt(element.value, 10);
+        return Number.isNaN(value) ? fallback : value;
     }
     
     async saveSettings() {
@@ -505,6 +570,7 @@ class ExpertSettings {
         
         // Reload schedules to reflect changes in UI
         await this.loadSiteSchedules();
+        this.updateOperationsSummary();
         this.showToast('스케줄 업데이트', 'success', `${enabledSites.length}개 사이트의 스케줄이 업데이트되었습니다`);
     }
     
@@ -522,7 +588,9 @@ class ExpertSettings {
             const response = await fetch(`/api/job-history?limit=${this.jobHistoryLimit}`);
             const data = await response.json();
 
-            this.renderLatestUpdates(data.job_history || []);
+            this.jobHistory = data.job_history || [];
+            this.renderLatestUpdates(this.jobHistory);
+            this.updateOperationsSummary();
         } catch (error) {
             console.error('Failed to load crawling progress:', error);
             this.showToast('로드 오류', 'error', '크롤링 현황 로드에 실패했습니다');
@@ -543,7 +611,9 @@ class ExpertSettings {
 
             if (response.ok) {
                 this.showToast('삭제 완료', 'success', data.message);
-                this.loadLatestUpdates();
+                this.jobHistory = [];
+                this.renderLatestUpdates([]);
+                this.updateOperationsSummary();
             } else {
                 this.showToast('삭제 실패', 'error', data.detail || '진행현황 삭제에 실패했습니다');
             }
@@ -592,7 +662,7 @@ class ExpertSettings {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            즉시 탐색
+            전체 즉시 탐색
         `;
     }
 
@@ -615,7 +685,7 @@ class ExpertSettings {
             return;
         }
 
-        jobHistory.forEach(job => {
+        jobHistory.slice(0, this.jobHistoryLimit).forEach(job => {
             const item = this.createJobTimelineItem(job);
             container.appendChild(item);
         });
@@ -721,6 +791,83 @@ class ExpertSettings {
         return this.siteNames[siteKey] || siteKey;
     }
 
+    updateOperationsSummary() {
+        const schedules = Object.values(this.siteSchedules || {});
+        const enabledSchedules = schedules.filter(schedule => Boolean(schedule.enabled));
+
+        const activeSourcesCount = document.getElementById('activeSourcesCount');
+        if (activeSourcesCount) {
+            activeSourcesCount.textContent = `${enabledSchedules.length} / ${Object.keys(this.siteColors).length}`;
+        }
+
+        const nextRunSummary = document.getElementById('nextRunSummary');
+        if (nextRunSummary) {
+            const nextRun = enabledSchedules
+                .map(schedule => ({
+                    siteKey: schedule.site_key,
+                    date: schedule.scheduler_status?.next_run ? new Date(schedule.scheduler_status.next_run) : null
+                }))
+                .filter(item => item.date && !Number.isNaN(item.date.getTime()))
+                .sort((a, b) => a.date - b.date)[0];
+
+            nextRunSummary.textContent = nextRun
+                ? `${this.getSiteName(nextRun.siteKey)} ${this.formatDateTime(nextRun.date)}`
+                : '예정 없음';
+        }
+
+        const latestRunStatus = document.getElementById('latestRunStatus');
+        const latestRunMeta = document.getElementById('latestRunMeta');
+        if (latestRunStatus && latestRunMeta) {
+            const latestJob = this.jobHistory
+                .slice()
+                .sort((a, b) => new Date(b.start_time) - new Date(a.start_time))[0];
+
+            if (!latestJob) {
+                latestRunStatus.textContent = '이력 없음';
+                latestRunStatus.className = 'operation-value';
+                latestRunMeta.textContent = '-';
+                return;
+            }
+
+            const statusInfo = this.getJobStatusInfo(latestJob.status);
+            latestRunStatus.textContent = `${this.getSiteName(latestJob.site_key)} ${statusInfo.text}`;
+            latestRunStatus.className = `operation-value ${statusInfo.className}`;
+            latestRunMeta.textContent = `${this.formatRelativeTime(new Date(latestJob.start_time))} · ${this.formatJobResult(latestJob)}`;
+        }
+    }
+
+    getJobStatusInfo(status) {
+        if (status === 'completed' || status === 'success') {
+            return { text: '완료', className: 'is-success' };
+        }
+        if (status === 'failed') {
+            return { text: '실패', className: 'is-error' };
+        }
+        if (status === 'partial_success') {
+            return { text: '부분 성공', className: 'is-warning' };
+        }
+        return { text: '실행 중', className: 'is-running' };
+    }
+
+    formatJobResult(job) {
+        const parts = [];
+        if (job.total_crawled !== undefined) parts.push(`${job.total_crawled}개 수집`);
+        if (job.new_count !== undefined) parts.push(`${job.new_count}개 신규`);
+        return parts.length ? parts.join(', ') : '결과 집계 전';
+    }
+
+    formatDateTime(value) {
+        const date = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(date.getTime())) return '-';
+
+        return date.toLocaleString('ko-KR', {
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
     formatRelativeTime(date) {
         const now = new Date();
         const diffInMinutes = Math.floor((now - date) / (1000 * 60));
@@ -737,17 +884,6 @@ class ExpertSettings {
         return date.toLocaleDateString('ko-KR');
     }
 
-    toggleCollapseSection() {
-        const toggle = document.getElementById('collapseToggle');
-        const content = document.getElementById('updatesTimeline');
-
-        if (!toggle || !content) return;
-
-        const isCollapsed = content.classList.contains('collapsed');
-        content.classList.toggle('collapsed', !isCollapsed);
-        toggle.classList.toggle('collapsed', !isCollapsed);
-    }
-    
     markAsChanged() {
         // Visual feedback that settings have changed
         const saveBtn = document.getElementById('saveBtn');
@@ -899,13 +1035,16 @@ class ExpertSettings {
     // 이메일 설정 관련 메서드들
     toggleEmailSettings(enabled) {
         const detailsElement = document.getElementById('emailSettingsDetails');
-        if (detailsElement) {
-            detailsElement.hidden = !enabled;
-        }
         
         if (enabled) {
+            if (detailsElement) detailsElement.open = true;
             this.loadEmailSettings();
         }
+
+        this.updateEmailSummary({
+            is_active: enabled,
+            email_address: document.getElementById('email_address')?.value || ''
+        });
     }
     
     handleSmtpServerChange(serverValue) {
@@ -959,10 +1098,14 @@ class ExpertSettings {
                     
                     // 이메일 토글 활성화
                     document.getElementById('emailNotificationToggle').checked = setting.is_active;
+                    this.updateEmailSummary(setting);
+                } else {
+                    this.updateEmailSummary(null);
                 }
             }
         } catch (error) {
             console.error('이메일 설정 로드 실패:', error);
+            this.updateEmailSummary(null);
         }
     }
     
@@ -1013,6 +1156,7 @@ class ExpertSettings {
                 const result = await response.json();
                 this.showStatusMessage(statusElement, 'success', '이메일 설정이 저장되었습니다.');
                 this.showToast('설정 저장', 'success', '이메일 알림 설정이 저장되었습니다.');
+                this.updateEmailSummary(formData);
             } else {
                 const error = await response.json();
                 throw new Error(error.detail || '설정 저장에 실패했습니다.');
@@ -1026,6 +1170,25 @@ class ExpertSettings {
             // 버튼 활성화
             saveBtn.disabled = false;
             saveBtn.textContent = '설정 저장';
+        }
+    }
+
+    updateEmailSummary(setting) {
+        const summary = document.getElementById('emailSummaryStatus');
+        if (!summary) return;
+
+        if (!setting || !setting.email_address) {
+            summary.textContent = 'SMTP 상세 설정이 필요합니다';
+            summary.className = 'settings-row-description is-warning';
+            return;
+        }
+
+        if (setting.is_active) {
+            summary.textContent = `${setting.email_address} · 활성화됨`;
+            summary.className = 'settings-row-description is-success';
+        } else {
+            summary.textContent = `${setting.email_address} · 비활성`;
+            summary.className = 'settings-row-description';
         }
     }
     
