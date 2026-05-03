@@ -37,35 +37,39 @@ python -m uvicorn src.web.app:app --host 0.0.0.0 --port 8001 --reload
 
 # 웹 인터페이스 접속
 # 로컬: http://localhost:8001
-# 외부: https://taxupdater-monitor.loca.lt (LocalTunnel 고정 URL)
+# 외부: $NGROK_URL (ngrok Dev Domain 고정 URL)
 ```
 
-### LocalTunnel/ngrok 터널 설정
+### ngrok Dev Domain 터널 설정
 ```bash
-# LocalTunnel 자동 설정 (한 번만 실행)
-./scripts/setup/setup_localtunnel.sh
+# 고정 URL로 ngrok 실행
+./scripts/setup/start_ngrok_dev_domain.sh
 
-# ngrok 설정 (선택)
-./setup_ngrok.sh
+# 현재 외부 URL 확인
+./scripts/setup/status_ngrok_dev_domain.sh
 
-# 서비스 관리
-systemctl --user status taxupdater localtunnel    # 상태 확인
-systemctl --user restart taxupdater localtunnel   # 재시작
-systemctl --user stop taxupdater localtunnel      # 중지
+# 터널 중지
+./scripts/setup/stop_ngrok_dev_domain.sh
+
+# 로그인 시 ngrok 자동 시작 등록
+./scripts/setup/install_ngrok_login_agent.sh
+
+# 웹 서버 자동 실행 상태 확인
+launchctl print gui/$(id -u)/taxupdater-web       # 웹 서버 상태 확인
 ```
 
 ## 최신 업데이트
 
 ### 🧹 프로젝트 정리 (2026.04.30)
 - Docker/Railway/Fly 설정과 이전 테스트 파일 제거
-- 현재 운영 경로는 FastAPI + SQLite + LocalTunnel/ngrok 터널링 중심으로 단순화
+- 현재 운영 경로는 FastAPI + SQLite + ngrok Dev Domain 터널링 중심으로 단순화
 - 오래된 구현은 필요한 항목만 `archive/legacy/`에 보존
 
-### 🚀 LocalTunnel 완전 자동화 시스템 (2025.07.07)
-- **고정 URL**: `https://taxupdater-monitor.loca.lt` (절대 변경되지 않음)
-- **완전 자동화**: 재부팅 후 자동으로 동일한 URL로 복구
-- **북마크 가능**: URL이 고정이므로 브라우저 북마크 저장 가능
-- **관리 불필요**: URL 확인, 복사, 모니터링 등 모든 번거로운 작업 제거
+### 🚀 ngrok Dev Domain 고정 URL 운영
+- **고정 URL**: `NGROK_URL`에 설정한 ngrok Dev Domain 사용
+- **단순 운영**: 웹 서버는 macOS `launchctl`로 유지하고, 터널은 명령 하나로 실행
+- **북마크 가능**: 회사 등 외부 네트워크에서 같은 URL로 접속
+- **관리 단순화**: 설정 화면에서 현재 ngrok URL과 고정 URL 일치 여부 확인
 
 ### 📁 프로젝트 구조 정리 (2025.07.06)
 - **체계적 분류**: 루트 디렉토리 파일들을 성격별로 분류 및 정리

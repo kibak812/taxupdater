@@ -114,6 +114,7 @@ updated_cases/
 *.xlsx
 *.csv
 *.log
+*.pid
 *.db
 
 # IDE

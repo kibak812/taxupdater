@@ -1,60 +1,79 @@
 import os
-import tempfile
+import shutil
 from pathlib import Path
+from typing import Optional
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.common.exceptions import WebDriverException
 
 from src.config.settings import SELENIUM_OPTIONS
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CHROME_BINARY = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+
+def _find_chromedriver() -> Optional[str]:
+    """Prefer an explicit/local driver so Selenium Manager is not spawned on macOS."""
+    configured_path = os.environ.get("CHROMEDRIVER_PATH")
+    if configured_path and Path(configured_path).is_file():
+        return configured_path
+
+    path_driver = shutil.which("chromedriver")
+    if path_driver:
+        return path_driver
+
+    candidates = []
+    for cache_root in (
+        PROJECT_ROOT / ".selenium-cache" / "chromedriver",
+        Path.home() / ".cache" / "selenium" / "chromedriver",
+    ):
+        if cache_root.exists():
+            candidates.extend(cache_root.glob("**/chromedriver"))
+
+    executable_candidates = [path for path in candidates if path.is_file() and os.access(path, os.X_OK)]
+    if not executable_candidates:
+        return None
+
+    return str(max(executable_candidates, key=lambda path: path.stat().st_mtime))
 
 
 def create_chrome_driver() -> webdriver.Chrome:
-    """Create a Chrome driver with writable cache/profile paths.
-
-    Selenium Manager defaults to ~/.cache/selenium and Chrome defaults to a
-    shared user profile. Both can fail in constrained runners, so keep runtime
-    files inside the project unless the caller overrides them with env vars.
-    """
-    selenium_cache = Path(os.environ.get("SE_CACHE_PATH", PROJECT_ROOT / ".selenium-cache"))
-    chrome_profiles = Path(os.environ.get("CHROME_PROFILE_ROOT", PROJECT_ROOT / ".chrome-profile"))
-    selenium_cache.mkdir(parents=True, exist_ok=True)
-    chrome_profiles.mkdir(parents=True, exist_ok=True)
-
-    os.environ.setdefault("SE_CACHE_PATH", str(selenium_cache))
-    os.environ.setdefault("XDG_CACHE_HOME", str(PROJECT_ROOT / ".cache"))
-
+    """Create a Chrome driver with stable macOS-friendly defaults."""
     options = Options()
+
     chrome_binary = os.environ.get("CHROME_BINARY_PATH")
     if chrome_binary:
         options.binary_location = chrome_binary
+    elif Path(DEFAULT_CHROME_BINARY).exists():
+        options.binary_location = DEFAULT_CHROME_BINARY
 
     configured = set()
     for option in SELENIUM_OPTIONS:
-        options.add_argument(option)
-        configured.add(option.split("=")[0])
+        if option == "--headless":
+            options.add_argument("--headless=new")
+            configured.add("--headless")
+            configured.add("--headless=new")
+        else:
+            options.add_argument(option)
+            configured.add(option.split("=")[0])
 
-    # Modern Chrome is happier with the new headless backend.
-    if "--headless" in configured and "--headless=new" not in SELENIUM_OPTIONS:
-        # Remove is not supported by Selenium Options, but Chrome accepts both
-        # and the later flag wins.
-        options.add_argument("--headless=new")
-
-    for option in [
+    for option in (
         "--disable-dev-shm-usage",
         "--disable-extensions",
         "--disable-background-networking",
-        "--remote-debugging-port=0",
-    ]:
+        "--remote-debugging-pipe",
+    ):
         if option.split("=")[0] not in configured:
             options.add_argument(option)
 
-    profile_dir = tempfile.mkdtemp(prefix="chrome-profile-", dir=str(chrome_profiles))
-    options.add_argument(f"--user-data-dir={profile_dir}")
+    driver_path = _find_chromedriver()
+    if not driver_path:
+        raise WebDriverException(
+            "chromedriver를 찾을 수 없습니다. CHROMEDRIVER_PATH를 설정하거나 chromedriver를 PATH에 추가해주세요."
+        )
 
-    driver_path = os.environ.get("CHROMEDRIVER_PATH")
-    service = Service(executable_path=driver_path) if driver_path else Service()
+    service = Service(executable_path=driver_path)
     return webdriver.Chrome(options=options, service=service)

@@ -251,7 +251,7 @@ class SchedulerService:
             # 중복 실행 방지
             if site_key in self.running_jobs:
                 self.logger.warning(f"크롤링 이미 실행 중: {site_key}")
-                return
+                return {"status": "skipped", "reason": "already_running", "site_key": site_key}
             
             self.running_jobs.add(site_key)
             self.logger.info(f"크롤링 작업 시작: {site_key} (세션: {session_id})")
@@ -335,6 +335,7 @@ class SchedulerService:
             
             success_count = 0
             failed_count = 0
+            skipped_count = 0
             
             for site_key, site_name in sites:
                 try:
@@ -370,6 +371,13 @@ class SchedulerService:
                                 "site_name": site_name
                             }
                             failed_count += 1
+                    elif crawl_result and crawl_result.get('status') == 'skipped':
+                        site_results[site_key] = {
+                            "status": "skipped",
+                            "reason": crawl_result.get('reason', 'already_running'),
+                            "site_name": site_name
+                        }
+                        skipped_count += 1
                     else:
                         # 크롤링 결과가 없는 경우
                         site_results[site_key] = {
@@ -389,7 +397,7 @@ class SchedulerService:
                     failed_count += 1
             
             # 최종 상태 결정
-            if failed_count == 0:
+            if failed_count == 0 and skipped_count == 0:
                 final_status = "success"
             elif success_count > 0:
                 final_status = "partial_success"
@@ -415,7 +423,7 @@ class SchedulerService:
                 ))
                 conn.commit()
             
-            self.logger.info(f"전체 크롤링 완료: 성공 {success_count}, 실패 {failed_count}, "
+            self.logger.info(f"전체 크롤링 완료: 성공 {success_count}, 건너뜀 {skipped_count}, 실패 {failed_count}, "
                            f"신규 데이터 {total_new_count}개 (소요시간: {duration}초)")
             
             # 신규 데이터가 있으면 알림 발송

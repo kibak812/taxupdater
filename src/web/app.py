@@ -50,6 +50,30 @@ from src.services.notification_service import NotificationService
 setup_logging(log_level="INFO", log_to_file=True)
 logger = get_logger(__name__)
 
+
+def get_configured_ngrok_url() -> str:
+    """Return the configured static ngrok URL, if one is available."""
+    configured_url = os.environ.get("NGROK_URL", "").strip()
+    if configured_url:
+        return configured_url
+
+    if sys.platform == "darwin":
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["launchctl", "getenv", "NGROK_URL"],
+                capture_output=True,
+                text=True,
+                timeout=3
+            )
+            configured_url = result.stdout.strip()
+            if configured_url:
+                return configured_url
+        except Exception:
+            pass
+
+    return ""
+
 # 웹 환경용 레거시 크롤러들 import (tkinter 의존성 없음)
 try:
     from src.crawlers.web_legacy_crawlers import (
@@ -1145,46 +1169,21 @@ async def run_crawling_task(choice: str):
 
 @app.get("/api/tunnel-status")
 async def get_tunnel_status():
-    """터널 상태 조회 (LocalTunnel/ngrok)"""
+    """터널 상태 조회 (ngrok 고정 Dev Domain 중심)"""
     try:
         import requests
         import subprocess
-        import shutil
         
+        configured_ngrok_url = get_configured_ngrok_url()
         tunnel_status = {
-            "localtunnel": {"status": "unknown", "url": None},
-            "ngrok": {"status": "unknown", "url": None}
+            "ngrok": {
+                "status": "unknown",
+                "url": None,
+                "configured_url": configured_ngrok_url or None,
+                "is_static": False
+            }
         }
-        
-        # LocalTunnel 상태 확인
-        try:
-            if shutil.which('systemctl'):
-                result = subprocess.run(['systemctl', '--user', 'is-active', 'localtunnel'], 
-                                      capture_output=True, text=True, timeout=5)
-                if result.returncode == 0 and result.stdout.strip() == 'active':
-                    tunnel_status["localtunnel"]["status"] = "active"
-                    tunnel_status["localtunnel"]["url"] = "https://taxupdater-monitor.loca.lt"
-                else:
-                    tunnel_status["localtunnel"]["status"] = "inactive"
-            else:
-                result = subprocess.run(['pgrep', '-f', 'localtunnel.*--port 8001|lt.*--port 8001'],
-                                      capture_output=True, text=True, timeout=5)
-                if result.returncode == 0:
-                    localtunnel_url = "https://taxupdater-monitor.loca.lt"
-                    try:
-                        response = requests.head(localtunnel_url, timeout=3, allow_redirects=True)
-                        if response.status_code < 500:
-                            tunnel_status["localtunnel"]["status"] = "active"
-                            tunnel_status["localtunnel"]["url"] = localtunnel_url
-                        else:
-                            tunnel_status["localtunnel"]["status"] = "connecting"
-                    except requests.RequestException:
-                        tunnel_status["localtunnel"]["status"] = "connecting"
-                else:
-                    tunnel_status["localtunnel"]["status"] = "inactive"
-        except Exception as e:
-            tunnel_status["localtunnel"]["status"] = f"error: {str(e)}"
-        
+
         # ngrok 상태 확인
         try:
             result = subprocess.run(['pgrep', '-x', 'ngrok'], 
@@ -1197,11 +1196,17 @@ async def get_tunnel_status():
                     if response.status_code == 200:
                         tunnels = response.json().get('tunnels', [])
                         if tunnels:
-                            tunnel_status["ngrok"]["url"] = tunnels[0].get('public_url')
+                            public_url = tunnels[0].get('public_url')
+                            tunnel_status["ngrok"]["url"] = public_url
+                            tunnel_status["ngrok"]["is_static"] = bool(
+                                configured_ngrok_url and public_url == configured_ngrok_url
+                            )
+                            if configured_ngrok_url and public_url != configured_ngrok_url:
+                                tunnel_status["ngrok"]["status"] = "active_dynamic"
                 except:
                     pass
             else:
-                tunnel_status["ngrok"]["status"] = "inactive"
+                tunnel_status["ngrok"]["status"] = "static_unconfigured" if not configured_ngrok_url else "inactive"
         except Exception as e:
             tunnel_status["ngrok"]["status"] = f"error: {str(e)}"
         
@@ -1212,35 +1217,12 @@ async def get_tunnel_status():
 
 @app.post("/api/tunnel/start/{tunnel_type}")
 async def start_tunnel(tunnel_type: str):
-    """터널 시작 (localtunnel/ngrok)"""
+    """터널 시작 (ngrok)"""
     try:
         import subprocess
         import shutil
         
-        if tunnel_type == "localtunnel":
-            if shutil.which('systemctl'):
-                result = subprocess.run(['systemctl', '--user', 'start', 'localtunnel'], 
-                                      capture_output=True, text=True, timeout=10)
-                if result.returncode == 0:
-                    return {"message": "LocalTunnel이 시작되었습니다", "success": True}
-                else:
-                    raise HTTPException(status_code=500, detail=f"LocalTunnel 시작 실패: {result.stderr}")
-            else:
-                if not shutil.which('npx'):
-                    raise HTTPException(status_code=500, detail="npx가 설치되어 있지 않아 LocalTunnel을 시작할 수 없습니다")
-                log_path = project_root / "logs" / "localtunnel.log"
-                log_path.parent.mkdir(exist_ok=True)
-                log_file = open(log_path, "a")
-                subprocess.Popen(
-                    ['npx', '--yes', 'localtunnel', '--port', '8001', '--subdomain', 'taxupdater-monitor'],
-                    stdout=log_file,
-                    stderr=log_file,
-                    cwd=str(project_root),
-                    start_new_session=True
-                )
-                return {"message": "LocalTunnel 시작 명령을 실행했습니다", "success": True}
-                
-        elif tunnel_type == "ngrok":
+        if tunnel_type == "ngrok":
             if shutil.which('systemctl'):
                 result = subprocess.run(['systemctl', '--user', 'start', 'ngrok'], 
                                       capture_output=True, text=True, timeout=10)
@@ -1254,8 +1236,12 @@ async def start_tunnel(tunnel_type: str):
                 log_path = project_root / "logs" / "ngrok.log"
                 log_path.parent.mkdir(exist_ok=True)
                 log_file = open(log_path, "a")
+                command = ['ngrok', 'http', '8001']
+                configured_ngrok_url = get_configured_ngrok_url()
+                if configured_ngrok_url:
+                    command.extend(['--url', configured_ngrok_url])
                 subprocess.Popen(
-                    ['ngrok', 'http', '8001'],
+                    command,
                     stdout=log_file,
                     stderr=log_file,
                     cwd=str(project_root),
@@ -1270,24 +1256,12 @@ async def start_tunnel(tunnel_type: str):
 
 @app.post("/api/tunnel/stop/{tunnel_type}")
 async def stop_tunnel(tunnel_type: str):
-    """터널 중지 (localtunnel/ngrok)"""
+    """터널 중지 (ngrok)"""
     try:
         import subprocess
         import shutil
         
-        if tunnel_type == "localtunnel":
-            if shutil.which('systemctl'):
-                result = subprocess.run(['systemctl', '--user', 'stop', 'localtunnel'], 
-                                      capture_output=True, text=True, timeout=10)
-            else:
-                result = subprocess.run(['pkill', '-f', 'localtunnel.*--port 8001|lt.*--port 8001'],
-                                      capture_output=True, text=True, timeout=10)
-            if result.returncode in (0, 1):
-                return {"message": "LocalTunnel이 중지되었습니다", "success": True}
-            else:
-                raise HTTPException(status_code=500, detail=f"LocalTunnel 중지 실패: {result.stderr}")
-                
-        elif tunnel_type == "ngrok":
+        if tunnel_type == "ngrok":
             if shutil.which('systemctl'):
                 result = subprocess.run(['systemctl', '--user', 'stop', 'ngrok'], 
                                       capture_output=True, text=True, timeout=10)

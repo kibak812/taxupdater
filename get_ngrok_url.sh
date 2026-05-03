@@ -4,11 +4,13 @@
 
 echo "ngrok 터널 URL 조회 중..."
 
+CONFIGURED_URL="${NGROK_URL:-https://minnie-unfloured-premorbidly.ngrok-free.dev}"
+
 # ngrok이 실행 중인지 확인
 if ! pgrep -x "ngrok" > /dev/null; then
     echo "ngrok이 실행되지 않았습니다."
     echo "다음 명령어로 ngrok을 시작하세요:"
-    echo "systemctl --user start ngrok"
+    echo "  ./scripts/setup/start_ngrok_dev_domain.sh"
     exit 1
 fi
 
@@ -26,6 +28,10 @@ if [ -n "$URL" ]; then
     echo "========================================"
     echo "  ngrok 터널 URL:"
     echo "  $URL"
+    if [ -n "$CONFIGURED_URL" ]; then
+        echo "  configured static URL:"
+        echo "  $CONFIGURED_URL"
+    fi
     echo "========================================"
     echo ""
     echo "이 URL로 외부에서 접속할 수 있습니다."
@@ -34,5 +40,5 @@ else
     echo "ngrok이 제대로 시작되지 않았을 수 있습니다."
     echo ""
     echo "상태 확인:"
-    echo "systemctl --user status ngrok"
+    echo "curl -s http://localhost:4040/api/tunnels"
 fi
