@@ -177,13 +177,13 @@ class ExpertSettings {
         }
         
         if (text) {
-            text.textContent = isRunning ? 
-                '스케줄러 실행 중 - 자동 모니터링 활성' : 
-                '스케줄러 중지 - 모니터링 일시 중지';
+            text.textContent = isRunning ?
+                '실행 중' :
+                '중지됨';
         }
         
         if (button) {
-            button.textContent = isRunning ? '스케줄러 중지' : '스케줄러 시작';
+            button.textContent = isRunning ? '중지' : '시작';
             button.disabled = false;
             button.className = `btn btn-sm ${isRunning ? 'btn-danger-outline' : 'btn-success'}`;
         }
@@ -201,6 +201,7 @@ class ExpertSettings {
                 });
             }
             
+            this.syncSettingsFromSchedules();
             this.renderSiteList();
             this.updateOperationsSummary();
             
@@ -264,6 +265,74 @@ class ExpertSettings {
         }
     }
 
+    getIntervalHoursFromCron(cronExpression) {
+        if (!cronExpression || typeof cronExpression !== 'string') return null;
+
+        const parts = cronExpression.trim().split(/\s+/);
+        if (parts.length !== 5) return null;
+
+        const [minute, hour, day] = parts;
+        if (minute !== '0') return null;
+
+        if (hour === '*') return 1;
+
+        const hourlyMatch = hour.match(/^\*\/(\d+)$/);
+        if (hourlyMatch) {
+            return parseInt(hourlyMatch[1], 10);
+        }
+
+        const dailyMatch = day.match(/^\*\/(\d+)$/);
+        if (hour === '0' && dailyMatch) {
+            return parseInt(dailyMatch[1], 10) * 24;
+        }
+
+        return null;
+    }
+
+    syncSettingsFromSchedules() {
+        const enabledSchedules = Object.values(this.siteSchedules || {}).filter(schedule => schedule.enabled);
+        const intervalCounts = new Map();
+        const thresholdCounts = new Map();
+
+        enabledSchedules.forEach(schedule => {
+            const interval = this.getIntervalHoursFromCron(schedule.cron_expression);
+            if (interval) {
+                intervalCounts.set(interval, (intervalCounts.get(interval) || 0) + 1);
+            }
+
+            const threshold = Number(schedule.notification_threshold);
+            if (Number.isFinite(threshold)) {
+                thresholdCounts.set(threshold, (thresholdCounts.get(threshold) || 0) + 1);
+            }
+        });
+
+        const dominantInterval = this.getDominantSettingValue(intervalCounts);
+        if (dominantInterval) {
+            this.currentSettings.defaultInterval = dominantInterval;
+            this.setInputValue('defaultInterval', dominantInterval);
+        }
+
+        const dominantThreshold = this.getDominantSettingValue(thresholdCounts);
+        if (dominantThreshold) {
+            this.currentSettings.notificationThreshold = dominantThreshold;
+            this.setInputValue('notificationThreshold', dominantThreshold);
+        }
+    }
+
+    getDominantSettingValue(counts) {
+        let selectedValue = null;
+        let selectedCount = 0;
+
+        counts.forEach((count, value) => {
+            if (count > selectedCount || (count === selectedCount && value < selectedValue)) {
+                selectedValue = value;
+                selectedCount = count;
+            }
+        });
+
+        return selectedValue;
+    }
+
     createSiteItem(siteKey, schedule) {
         const item = document.createElement('div');
         item.className = 'source-tile';
@@ -295,10 +364,6 @@ class ExpertSettings {
                         <div class="settings-row-description">${isEnabled ? '자동 모니터링' : '일시 중지'}</div>
                     </div>
                 </div>
-                <label class="toggle-switch">
-                    <input type="checkbox" class="toggle-input site-toggle" data-site-key="${siteKey}" ${isEnabled ? 'checked' : ''}>
-                    <span class="toggle-slider"></span>
-                </label>
             </div>
             <div class="source-tile-body">
                 <div class="source-metric">
@@ -311,6 +376,10 @@ class ExpertSettings {
                     <span class="source-meta">${statusInfo.meta}</span>
                 </div>
             </div>
+            <label class="toggle-switch source-toggle-cell">
+                <input type="checkbox" class="toggle-input site-toggle" data-site-key="${siteKey}" ${isEnabled ? 'checked' : ''}>
+                <span class="toggle-slider"></span>
+            </label>
         `;
         
         // Add event listener for toggle
