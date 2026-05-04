@@ -7,6 +7,7 @@ import os
 import sqlite3
 import asyncio
 import json
+import threading
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -47,6 +48,8 @@ class SchedulerService:
         # 실행 중인 작업 추적
         self.running_jobs = set()
         self.job_results = {}
+        self.crawl_lock = threading.RLock()
+        self._crawl_context = threading.local()
         
         # ThreadPoolExecutor for async operations
         self.executor = ThreadPoolExecutor(max_workers=3)
@@ -88,6 +91,30 @@ class SchedulerService:
     def is_running(self) -> bool:
         """스케줄러 실행 상태 확인"""
         return self.scheduler.running
+
+    def _is_full_crawl_context(self) -> bool:
+        """현재 스레드가 전체 크롤링 내부에서 실행 중인지 확인."""
+        return getattr(self._crawl_context, "full_crawl", False)
+
+    def _acquire_crawl_lock(self, label: str) -> Optional[bool]:
+        """전역 크롤링 락 획득.
+
+        전체 크롤링 내부에서 호출되는 개별 사이트 크롤링은 이미 같은 실행 흐름이
+        락을 보유하고 있으므로 추가 획득 없이 진행한다.
+        """
+        if self._is_full_crawl_context():
+            return False
+
+        if not self.crawl_lock.acquire(blocking=False):
+            self.logger.warning(f"다른 크롤링 작업 실행 중 - 건너뜀: {label}")
+            return None
+
+        return True
+
+    def _release_crawl_lock(self, acquired: Optional[bool]) -> None:
+        """획득한 전역 크롤링 락 해제."""
+        if acquired:
+            self.crawl_lock.release()
     
     def add_crawl_schedule(self, site_key: str, cron_expression: str, 
                           enabled: bool = True, priority: int = 0,
@@ -246,6 +273,11 @@ class SchedulerService:
         """크롤링 작업 실행"""
         start_time = datetime.now()
         session_id = f"{site_key}_{start_time.strftime('%Y%m%d_%H%M%S')}"
+        lock_acquired = self._acquire_crawl_lock(site_key)
+        job_started = False
+
+        if lock_acquired is None:
+            return {"status": "skipped", "reason": "crawl_already_running", "site_key": site_key}
         
         try:
             # 중복 실행 방지
@@ -254,6 +286,7 @@ class SchedulerService:
                 return {"status": "skipped", "reason": "already_running", "site_key": site_key}
             
             self.running_jobs.add(site_key)
+            job_started = True
             self.logger.info(f"크롤링 작업 시작: {site_key} (세션: {session_id})")
             
             # 시스템 상태 업데이트
@@ -297,8 +330,10 @@ class SchedulerService:
             
         finally:
             # 실행 중 상태 제거
-            self.running_jobs.discard(site_key)
-            self._update_system_status(site_key, 'healthy')
+            if job_started:
+                self.running_jobs.discard(site_key)
+                self._update_system_status(site_key, 'healthy')
+            self._release_crawl_lock(lock_acquired)
     
     def _execute_all_sites_crawl(self):
         """전체 사이트 크롤링 실행 및 로그 기록"""
@@ -306,6 +341,13 @@ class SchedulerService:
         log_id = None
         site_results = {}
         total_new_count = 0
+        lock_acquired = self._acquire_crawl_lock("all_sites")
+
+        if lock_acquired is None:
+            return {"status": "skipped", "reason": "crawl_already_running"}
+
+        previous_full_crawl_context = self._is_full_crawl_context()
+        self._crawl_context.full_crawl = True
         
         try:
             # 크롤링 실행 로그 시작 기록
@@ -435,6 +477,17 @@ class SchedulerService:
                     ))
                 except Exception as e:
                     self.logger.warning(f"전체 크롤링 알림 발송 실패: {e}")
+
+            return {
+                "status": final_status,
+                "log_id": log_id,
+                "success_count": success_count,
+                "failed_count": failed_count,
+                "skipped_count": skipped_count,
+                "total_new_count": total_new_count,
+                "duration": duration,
+                "site_results": site_results,
+            }
                     
         except Exception as e:
             self.logger.error(f"전체 크롤링 실행 실패: {e}")
@@ -453,6 +506,12 @@ class SchedulerService:
                         WHERE log_id = ?
                     """, (end_time.isoformat(), str(e), duration, log_id))
                     conn.commit()
+
+            return {"status": "failed", "error": str(e), "log_id": log_id}
+
+        finally:
+            self._crawl_context.full_crawl = previous_full_crawl_context
+            self._release_crawl_lock(lock_acquired)
     
     def _get_site_data_count(self, site_key: str) -> int:
         """사이트의 현재 데이터 개수 조회"""

@@ -33,6 +33,12 @@ def create_crawl_router(context: WebAppContext) -> APIRouter:
                         try:
                             logger.info("전체 크롤링 시작 (동기)")
                             result = context.scheduler_service._execute_all_sites_crawl()
+                            if isinstance(result, dict) and result.get("status") in {"failed", "skipped"}:
+                                return {
+                                    "status": result["status"],
+                                    "error": result.get("error", "다른 크롤링 작업이 실행 중입니다."),
+                                    "result": result,
+                                }
                             logger.info("전체 크롤링 완료")
                             return {"status": "success", "result": result}
                         except Exception as e:
