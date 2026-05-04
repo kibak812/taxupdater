@@ -3,9 +3,54 @@
 이 문서는 예규판례 모니터링 시스템의 주요 개발 내역과 변경사항을 시간순으로 기록합니다.
 
 ## 목차
+- [2026년 5월](#2026년-5월)
 - [2025년 12월](#2025년-12월)
 - [2025년 7월](#2025년-7월)
 - [2025년 6월](#2025년-6월)
+
+---
+
+## 2026년 5월
+
+### 2026.05.05 - FastAPI 웹 앱 리팩토링 및 전체 크롤링 회귀 검증
+
+#### 리팩토링 목표
+- 기존 API, UI 동작, 데이터 형식, 에러 처리 흐름을 유지하면서 웹 앱 구조를 작게 분리
+- 거대한 `src/web/app.py`의 책임을 앱 팩토리, 컨텍스트, 라우터, 헬퍼로 나누어 가독성과 테스트 가능성 개선
+- SQLite 저장소와 크롤링 서비스의 중복 로직을 줄이고 핵심 동작을 단위 테스트로 보호
+
+#### 코드 변경사항
+- `src/web/app.py`: FastAPI 앱 진입점으로 축소
+- `src/web/context.py`: 저장소, 크롤러, 스케줄러, WebSocket manager 의존성 구성 분리
+- `src/web/factory.py`: `create_app()` 앱 팩토리 추가
+- `src/web/routes.py`: 라우터 등록 순서 명시, `/api/crawl/all`이 동적 경로보다 먼저 등록되도록 유지
+- `src/web/routers/`: 페이지, 데이터, 크롤링, 스케줄, 설정, 알림, 시스템, 터널, WebSocket 라우터 분리
+- `src/web/helpers.py`: 대시보드와 사이트 데이터 payload 생성 로직 분리
+- `src/repositories/sqlite_repository.py`: 메타데이터 컬럼, 테이블명, 시간 컬럼, timestamp 보정 로직 정리
+- `src/services/crawler_service.py`: 사이트 카탈로그 기반 key column 조회로 중복 매핑 제거
+- `src/services/scheduler_service.py`: 전체/개별 크롤링이 겹쳐 실행되지 않도록 전역 크롤링 락 추가
+
+#### 테스트 보강
+- `tests/test_web_refactor.py`: 앱 팩토리, 라우트 등록 순서, payload helper, WebSocket disconnect 동작 검증
+- `tests/test_sqlite_repository.py`: SQLite 저장/로드/비교/timestamp 보정/최근 카운트 검증
+- `tests/test_crawling_service.py`: key column 조회, 신규 데이터 요약/태그 생성 검증
+- `tests/test_scheduler_service.py`: 전체 크롤링 중 개별 크롤링 skip, 중복 실행 방지, 로그 요약 검증
+
+#### 실제 구동 검증
+- `localhost:8011`에서 실제 FastAPI 서버를 띄워 `/api/crawl/all` 전체 크롤링 실행
+- 결과: 8개 사이트 성공, 건너뜀 0, 실패 0, 신규 0건
+- 전체 크롤링 중 개별 `tax_tribunal` 크롤링 요청을 추가로 보내 전역 락이 중복 실행을 막는지 확인
+- 대시보드에서 카드 렌더링과 WebSocket `연결됨` 상태 확인
+- `/data/scourt_scheduled_decisions` 페이지에서 50개 행 렌더링 확인
+
+#### 운영 반영
+- `codex/refactor-web-api-tests` 브랜치를 `main`에 fast-forward merge
+- `localhost:8001` 운영 서버 재시작
+- `/health` 응답 확인: `healthy`, `database: connected`, `scheduler: running`
+
+#### 남은 주의사항
+- 락 충돌로 skip된 개별 작업은 현재 로그에는 남지만 별도의 실행 이력 row로 저장되지는 않음
+- 운영 감사 추적이 더 중요해지면 skip 결과도 job history에 남기도록 개선 가능
 
 ---
 
