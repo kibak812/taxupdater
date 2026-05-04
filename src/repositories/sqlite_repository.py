@@ -13,6 +13,9 @@ from src.config.settings import FILE_CONFIG, DATA_COLUMNS, KEY_COLUMNS
 from src.config.logging_config import get_logger
 
 
+METADATA_COLUMNS = ["created_at", "updated_at"]
+
+
 class SQLiteRepository(DataRepositoryInterface):
     """
     SQLite 기반 데이터 저장소
@@ -41,6 +44,36 @@ class SQLiteRepository(DataRepositoryInterface):
         except Exception as e:
             self.logger.error(f"SQLite 저장소 초기화 실패: {e}")
             raise
+
+    def _table_name(self, site_key: str) -> str:
+        """Return the SQLite table name for a site key."""
+        return f"{site_key}_data"
+
+    def _get_existing_columns(self, cursor: sqlite3.Cursor, table_name: str) -> set:
+        """Return the column names currently present in a table."""
+        cursor.execute(f"PRAGMA table_info([{table_name}])")
+        return {row[1] for row in cursor.fetchall()}
+
+    def _get_time_column(self, columns: set) -> Optional[str]:
+        """Choose the preferred timestamp column from a table column set."""
+        if "created_at" in columns:
+            return "created_at"
+        if "updated_at" in columns:
+            return "updated_at"
+        return None
+
+    def _current_timestamp(self) -> str:
+        """Return the repository's standard timestamp string."""
+        return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    def _ensure_timestamp_columns(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Add created_at/updated_at columns when they are absent."""
+        result = data.copy()
+        timestamp = self._current_timestamp()
+        for column in METADATA_COLUMNS:
+            if column not in result.columns:
+                result[column] = timestamp
+        return result
     
     def _initialize_database(self):
         """데이터베이스 및 테이블 초기화"""
@@ -74,7 +107,7 @@ class SQLiteRepository(DataRepositoryInterface):
     
     def _create_site_table(self, cursor: sqlite3.Cursor, site_key: str, columns: List[str]):
         """사이트별 테이블 생성 및 스키마 업데이트"""
-        table_name = f"{site_key}_data"
+        table_name = self._table_name(site_key)
         key_column = KEY_COLUMNS.get(site_key, "문서번호")
         
         # 기존 테이블 확인
@@ -126,13 +159,10 @@ class SQLiteRepository(DataRepositoryInterface):
         """기존 테이블 스키마 업데이트 (필요한 컬럼 추가)"""
         try:
             # 기존 컬럼 목록 확인
-            cursor.execute(f"PRAGMA table_info([{table_name}])")
-            existing_columns = {row[1] for row in cursor.fetchall()}
+            existing_columns = self._get_existing_columns(cursor, table_name)
             
             # 필요한 메타데이터 컬럼 추가
-            required_meta_columns = ['created_at', 'updated_at']
-            
-            for meta_col in required_meta_columns:
+            for meta_col in METADATA_COLUMNS:
                 if meta_col not in existing_columns:
                     try:
                         # SQLite 제약사항 회피: NULL 기본값으로 컬럼 추가 후 UPDATE
@@ -164,8 +194,7 @@ class SQLiteRepository(DataRepositoryInterface):
         """컬럼 존재 확인 후 안전한 인덱스 생성"""
         try:
             # 컬럼 존재 확인
-            cursor.execute(f"PRAGMA table_info([{table_name}])")
-            existing_columns = {row[1] for row in cursor.fetchall()}
+            existing_columns = self._get_existing_columns(cursor, table_name)
             
             # created_at 컬럼이 있는 경우에만 인덱스 생성
             if 'created_at' in existing_columns:
@@ -180,13 +209,12 @@ class SQLiteRepository(DataRepositoryInterface):
     def load_existing_data(self, site_key: str, include_metadata: bool = False) -> pd.DataFrame:
         """기존 데이터 로드"""
         try:
-            table_name = f"{site_key}_data"
+            table_name = self._table_name(site_key)
             
             with sqlite3.connect(self.db_path) as conn:
                 # 컬럼 존재 확인
                 cursor = conn.cursor()
-                cursor.execute(f"PRAGMA table_info([{table_name}])")
-                existing_columns = {row[1] for row in cursor.fetchall()}
+                existing_columns = self._get_existing_columns(cursor, table_name)
                 
                 # created_at 컬럼이 있으면 정렬, 없으면 기본 정렬
                 if 'created_at' in existing_columns:
@@ -203,8 +231,7 @@ class SQLiteRepository(DataRepositoryInterface):
                 
                 # 메타데이터 컬럼 제거 (선택적)
                 if not include_metadata:
-                    meta_columns = ['created_at', 'updated_at']
-                    df = df.drop(columns=[col for col in meta_columns if col in df.columns])
+                    df = df.drop(columns=[col for col in METADATA_COLUMNS if col in df.columns])
                 
                 self.logger.info(f"[SQLite] {site_key} 기존 데이터 로드: {len(df)}개")
                 return df
@@ -216,22 +243,20 @@ class SQLiteRepository(DataRepositoryInterface):
     def load_filtered_data(self, site_key: str, recent_days: int = None, start_date: str = None, end_date: str = None) -> pd.DataFrame:
         """필터링된 데이터 로드 (시간 기반)"""
         try:
-            table_name = f"{site_key}_data"
+            table_name = self._table_name(site_key)
             
             with sqlite3.connect(self.db_path) as conn:
                 # 컬럼 존재 확인
                 cursor = conn.cursor()
-                cursor.execute(f"PRAGMA table_info([{table_name}])")
-                existing_columns = {row[1] for row in cursor.fetchall()}
+                existing_columns = self._get_existing_columns(cursor, table_name)
                 
                 # 기본 쿼리
                 base_query = f"SELECT * FROM [{table_name}]"
                 where_conditions = []
                 
                 # 시간 필터 적용
-                if 'created_at' in existing_columns or 'updated_at' in existing_columns:
-                    time_column = 'created_at' if 'created_at' in existing_columns else 'updated_at'
-                    
+                time_column = self._get_time_column(existing_columns)
+                if time_column:
                     if recent_days:
                         # 최근 N일 필터
                         where_conditions.append(f"{time_column} >= datetime('now', '-{recent_days} days')")
@@ -249,10 +274,8 @@ class SQLiteRepository(DataRepositoryInterface):
                     query = base_query
                 
                 # 정렬 추가
-                if 'created_at' in existing_columns:
-                    query += " ORDER BY created_at DESC"
-                elif 'updated_at' in existing_columns:
-                    query += " ORDER BY updated_at DESC"
+                if time_column:
+                    query += f" ORDER BY {time_column} DESC"
                 
                 df = pd.read_sql_query(query, conn)
                 
@@ -272,7 +295,7 @@ class SQLiteRepository(DataRepositoryInterface):
                 self.logger.info(f"[SQLite] {site_key}: 저장할 데이터가 없음")
                 return True
             
-            table_name = f"{site_key}_data"
+            table_name = self._table_name(site_key)
             key_column = KEY_COLUMNS.get(site_key, "문서번호")
             
             with sqlite3.connect(self.db_path) as conn:
@@ -292,12 +315,7 @@ class SQLiteRepository(DataRepositoryInterface):
                     
                     if not new_entries.empty:
                         # 표준화된 타임스탬프 형식 적용
-                        from datetime import datetime
-                        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                        if 'created_at' not in new_entries.columns:
-                            new_entries['created_at'] = timestamp
-                        if 'updated_at' not in new_entries.columns:
-                            new_entries['updated_at'] = timestamp
+                        new_entries = self._ensure_timestamp_columns(new_entries)
                         
                         # INSERT OR IGNORE 방식으로 중복 키 에러 방지
                         # 배치 저장으로 SQLite 변수 개수 제한(999개) 회피
@@ -324,12 +342,7 @@ class SQLiteRepository(DataRepositoryInterface):
                 else:
                     # 전체 교체
                     # 표준화된 타임스탬프 형식 적용
-                    from datetime import datetime
-                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    if 'created_at' not in data.columns:
-                        data['created_at'] = timestamp
-                    if 'updated_at' not in data.columns:
-                        data['updated_at'] = timestamp
+                    data = self._ensure_timestamp_columns(data)
 
                     # 배치 저장으로 SQLite 변수 개수 제한 회피
                     batch_size = 500
@@ -362,8 +375,7 @@ class SQLiteRepository(DataRepositoryInterface):
             return 0
 
         cursor = conn.cursor()
-        cursor.execute(f"PRAGMA table_info([{table_name}])")
-        existing_columns = {row[1] for row in cursor.fetchall()}
+        existing_columns = self._get_existing_columns(cursor, table_name)
         update_columns = [col for col in update_columns if col in existing_columns]
         if not update_columns:
             return 0
@@ -400,7 +412,7 @@ class SQLiteRepository(DataRepositoryInterface):
             if new_data.empty:
                 return new_data
             
-            table_name = f"{site_key}_data"
+            table_name = self._table_name(site_key)
             
             # 새 데이터를 임시 테이블로 생성
             temp_table = f"temp_{site_key}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -469,7 +481,7 @@ class SQLiteRepository(DataRepositoryInterface):
     def get_statistics(self, site_key: str) -> Dict[str, Any]:
         """데이터 통계 정보 반환"""
         try:
-            table_name = f"{site_key}_data"
+            table_name = self._table_name(site_key)
             
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -490,12 +502,11 @@ class SQLiteRepository(DataRepositoryInterface):
                 actual_last_updated = None
                 if total_count > 0:
                     # 컬럼 존재 확인
-                    cursor.execute(f"PRAGMA table_info([{table_name}])")
-                    existing_columns = {row[1] for row in cursor.fetchall()}
+                    existing_columns = self._get_existing_columns(cursor, table_name)
                     
                     # created_at 또는 updated_at 컬럼에서 최신 시간 조회
-                    if 'created_at' in existing_columns or 'updated_at' in existing_columns:
-                        time_column = 'created_at' if 'created_at' in existing_columns else 'updated_at'
+                    time_column = self._get_time_column(existing_columns)
+                    if time_column:
                         cursor.execute(f"SELECT MAX({time_column}) FROM [{table_name}]")
                         actual_last_updated = cursor.fetchone()[0]
                 
@@ -510,8 +521,7 @@ class SQLiteRepository(DataRepositoryInterface):
                 # 최신/오래된 데이터 조회 (created_at 컬럼이 있는 경우에만)
                 if total_count > 0:
                     # 컬럼 존재 확인
-                    cursor.execute(f"PRAGMA table_info([{table_name}])")
-                    existing_columns = {row[1] for row in cursor.fetchall()}
+                    existing_columns = self._get_existing_columns(cursor, table_name)
                     
                     if 'created_at' in existing_columns:
                         cursor.execute(f"""
@@ -626,7 +636,7 @@ class SQLiteRepository(DataRepositoryInterface):
                 
                 # 각 사이트별로 최근 데이터 개수 조회
                 for site_key in DATA_COLUMNS.keys():
-                    table_name = f"{site_key}_data"
+                    table_name = self._table_name(site_key)
                     
                     # 테이블 존재 확인
                     cursor.execute(f"""
@@ -639,13 +649,11 @@ class SQLiteRepository(DataRepositoryInterface):
                         continue
                     
                     # 컬럼 존재 확인
-                    cursor.execute(f"PRAGMA table_info([{table_name}])")
-                    existing_columns = {row[1] for row in cursor.fetchall()}
+                    existing_columns = self._get_existing_columns(cursor, table_name)
                     
                     # 시간 컬럼이 있는 경우만 필터링
-                    if 'created_at' in existing_columns or 'updated_at' in existing_columns:
-                        time_column = 'created_at' if 'created_at' in existing_columns else 'updated_at'
-                        
+                    time_column = self._get_time_column(existing_columns)
+                    if time_column:
                         # 최근 N시간 데이터 개수 조회
                         query = f"""
                             SELECT COUNT(*) FROM [{table_name}]
@@ -676,7 +684,7 @@ class SQLiteRepository(DataRepositoryInterface):
                 
                 # 각 사이트별 테이블 업데이트
                 for site_key, columns in DATA_COLUMNS.items():
-                    table_name = f"{site_key}_data"
+                    table_name = self._table_name(site_key)
                     self.logger.info(f"  {table_name} 스키마 업데이트 중...")
                     
                     # 테이블 존재 확인

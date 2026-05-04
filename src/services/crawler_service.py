@@ -10,7 +10,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.interfaces.crawler_interface import CrawlerInterface, DataRepositoryInterface
 from src.services.legacy_notification_service import NotificationService as LegacyNotificationService
 from src.config.logging_config import get_logger
-from src.config.sites import get_key_by_choice
+from src.config.sites import get_key_by_choice, get_site
 import sqlite3
 from datetime import datetime
 import json
@@ -507,6 +507,13 @@ class CrawlingService:
     def _show_message(self, message: str) -> None:
         """메시지 표시 (웹 환경 전용)"""
         self.logger.info(f"[알림] 크롤링 완료: {message}")
+
+    def _get_key_column_for_site(self, site_key: str) -> str:
+        """사이트 카탈로그에서 중복 판정 키 컬럼을 조회."""
+        try:
+            return get_site(site_key).key_column
+        except KeyError:
+            return "문서번호"
     
     def log_new_data_and_notify(self, site_key: str, new_entries: pd.DataFrame, session_id: str = None) -> None:
         """새로운 데이터를 로그에 기록하고 알림 발송"""
@@ -514,19 +521,7 @@ class CrawlingService:
             return
         
         try:
-            # 사이트별 키 컬럼 매핑
-            key_column_mapping = {
-                "tax_tribunal": "청구번호",
-                "nts_authority": "문서번호", 
-                "nts_precedent": "문서번호",
-                "moef": "문서번호",
-                "mois": "문서번호",
-                "bai": "문서번호",
-                "scourt_major_decisions": "번호",
-                "scourt_scheduled_decisions": "고유키"
-            }
-            
-            key_column = key_column_mapping.get(site_key, "문서번호")
+            key_column = self._get_key_column_for_site(site_key)
             current_time = datetime.now()
             
             # new_data_log 테이블에 개별 데이터 기록
@@ -677,19 +672,7 @@ class CrawlingService:
             return []
         
         try:
-            # 사이트별 키 컬럼 매핑
-            key_column_mapping = {
-                "tax_tribunal": "청구번호",
-                "nts_authority": "문서번호", 
-                "nts_precedent": "문서번호",
-                "moef": "문서번호",
-                "mois": "문서번호",
-                "bai": "문서번호",
-                "scourt_major_decisions": "번호",
-                "scourt_scheduled_decisions": "고유키"
-            }
-            
-            key_column = key_column_mapping.get(site_key, "문서번호")
+            key_column = self._get_key_column_for_site(site_key)
             samples = []
             
             # 제한된 수만큼 샘플 생성
