@@ -25,6 +25,7 @@ class DatabaseMigration:
         ("mois", "행정안전부", "0 0 */8 * *"),
         ("bai", "감사원", "0 0 */12 * *"),
         ("scourt_major_decisions", "전국법원 주요판결", "0 0 */6 * *"),
+        ("scourt_scheduled_decisions", "대법원 선고예정 판결", "0 0 */6 * *"),
     ]
     
     def __init__(self, db_path: str = "data/tax_data.db"):

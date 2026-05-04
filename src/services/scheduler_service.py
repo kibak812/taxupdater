@@ -941,7 +941,8 @@ class SchedulerService:
                 "moef": "기획재정부",
                 "mois": "행정안전부", 
                 "bai": "감사원",
-                "scourt_major_decisions": "전국법원 주요판결"
+                "scourt_major_decisions": "전국법원 주요판결",
+                "scourt_scheduled_decisions": "대법원 선고예정 판결"
             }
             
             # crawl_result에서 상세 정보 추출

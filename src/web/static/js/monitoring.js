@@ -539,10 +539,30 @@ class MonitoringApp {
                 data.sites.forEach(site => {
                     this.siteInfo[site.site_key] = site;
                 });
+                this.populateSiteFilters();
             }
             
         } catch (error) {
             console.error('사이트 정보 로드 실패:', error);
+        }
+    }
+
+    populateSiteFilters() {
+        const newDataSiteFilter = document.getElementById('newDataSiteFilter');
+        if (!newDataSiteFilter) return;
+
+        const selectedValue = newDataSiteFilter.value;
+        newDataSiteFilter.innerHTML = '<option value="">모든 사이트</option>';
+
+        Object.values(this.siteInfo).forEach(site => {
+            const option = document.createElement('option');
+            option.value = site.site_key;
+            option.textContent = site.site_name;
+            newDataSiteFilter.appendChild(option);
+        });
+
+        if (selectedValue && this.siteInfo[selectedValue]) {
+            newDataSiteFilter.value = selectedValue;
         }
     }
     

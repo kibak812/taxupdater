@@ -14,7 +14,8 @@ class ExpertSettings {
             'moef': '#8B5CF6',
             'mois': '#DC2626',
             'bai': '#6B7280',
-            'scourt_major_decisions': '#0F766E'
+            'scourt_major_decisions': '#0F766E',
+            'scourt_scheduled_decisions': '#B45309'
         };
         
         this.siteNames = {
@@ -24,7 +25,8 @@ class ExpertSettings {
             'moef': '기획재정부',
             'mois': '행정안전부',
             'bai': '감사원',
-            'scourt_major_decisions': '전국법원 주요판결'
+            'scourt_major_decisions': '전국법원 주요판결',
+            'scourt_scheduled_decisions': '대법원 선고예정 판결'
         };
         
         this.defaultSettings = {

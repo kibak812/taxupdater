@@ -522,7 +522,8 @@ class CrawlingService:
                 "moef": "문서번호",
                 "mois": "문서번호",
                 "bai": "문서번호",
-                "scourt_major_decisions": "번호"
+                "scourt_major_decisions": "번호",
+                "scourt_scheduled_decisions": "고유키"
             }
             
             key_column = key_column_mapping.get(site_key, "문서번호")
@@ -532,9 +533,15 @@ class CrawlingService:
             with sqlite3.connect(self.repository.db_path) as conn:
                 for _, row in new_entries.iterrows():
                     data_id = str(row.get(key_column, "unknown"))
-                    data_title = str(row.get("제목", ""))[:200]  # 제목 길이 제한
-                    data_category = str(row.get("세목", ""))
-                    data_date = str(row.get("생산일자", row.get("결정일자", row.get("회신일자", row.get("작성일", "")))))
+                    data_title = str(row.get("제목", row.get("사건명", "")))[:200]  # 제목 길이 제한
+                    data_category = str(row.get("세목", row.get("조세관련", "")))
+                    data_date = str(row.get(
+                        "생산일자",
+                        row.get(
+                            "결정일자",
+                            row.get("회신일자", row.get("작성일", row.get("선고일자", "")))
+                        )
+                    ))
                     
                     # 데이터 요약 생성
                     data_summary = self._create_data_summary(row, site_key)
@@ -611,6 +618,11 @@ class CrawlingService:
                 return f"{row.get('청구분야', '')} 심사 ({row.get('결정일자', '')})"
             elif site_key == "scourt_major_decisions":
                 return f"{row.get('법원', '')} 주요판결 ({row.get('작성일', '')})"
+            elif site_key == "scourt_scheduled_decisions":
+                tax_status = row.get("조세관련", "")
+                keywords = row.get("관련키워드", "")
+                suffix = f" - {keywords}" if keywords else ""
+                return f"{row.get('선고일자', '')} 선고예정 ({tax_status}){suffix}"
             else:
                 return str(row.get("제목", ""))[:100]
         except Exception:
@@ -636,9 +648,17 @@ class CrawlingService:
             # 시간 태그
             current_time = datetime.now()
             tags.append(f"발견:{current_time.strftime('%Y-%m')}")
+
+            if site_key == "scourt_scheduled_decisions":
+                tax_status = str(row.get("조세관련", ""))
+                if tax_status:
+                    tags.append(tax_status)
+                keywords = str(row.get("관련키워드", ""))
+                for keyword in [value.strip() for value in keywords.split(",") if value.strip()]:
+                    tags.append(f"키워드:{keyword}")
             
             # 중요도 태그 (제목에 특정 키워드가 있는 경우)
-            title = str(row.get("제목", "")).lower()
+            title = str(row.get("제목", row.get("사건명", ""))).lower()
             important_keywords = ["긴급", "중요", "신설", "개정", "폐지", "특례"]
             
             for keyword in important_keywords:
@@ -665,7 +685,8 @@ class CrawlingService:
                 "moef": "문서번호",
                 "mois": "문서번호",
                 "bai": "문서번호",
-                "scourt_major_decisions": "번호"
+                "scourt_major_decisions": "번호",
+                "scourt_scheduled_decisions": "고유키"
             }
             
             key_column = key_column_mapping.get(site_key, "문서번호")
@@ -675,7 +696,7 @@ class CrawlingService:
             for i in range(min(limit, len(new_entries))):
                 row = new_entries.iloc[i]
                 key_value = str(row.get(key_column, "unknown"))
-                title = str(row.get("제목", ""))[:50]  # 제목 50자 제한
+                title = str(row.get("제목", row.get("사건명", "")))[:50]  # 제목 50자 제한
                 
                 if title:
                     sample = f"{key_value} ({title}...)"

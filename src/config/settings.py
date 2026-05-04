@@ -23,7 +23,8 @@ URLS = {
     "moef": "https://www.moef.go.kr/lw/intrprt/TaxLawIntrPrtCaseList.do",
     "mois": "https://www.olta.re.kr/explainInfo/authoInterpretationList.do?menuNo=9020000&upperMenuId=9000000",
     "bai": "https://www.bai.go.kr/bai/exClaims/exClaims/list/",
-    "scourt_major_decisions": "https://www.scourt.go.kr"
+    "scourt_major_decisions": "https://www.scourt.go.kr",
+    "scourt_scheduled_decisions": "https://www.scourt.go.kr"
 }
 
 # 크롤링 설정
@@ -69,7 +70,11 @@ DATA_COLUMNS = {
     "moef": ["문서번호", "회신일자", "제목", "링크"],
     "mois": ["세목", "문서번호", "생산일자", "제목", "링크"],
     "bai": ["청구분야", "문서번호", "결정일자", "제목"],
-    "scourt_major_decisions": ["번호", "작성일", "법원", "제목", "링크"]
+    "scourt_major_decisions": ["번호", "작성일", "법원", "제목", "링크"],
+    "scourt_scheduled_decisions": [
+        "고유키", "선고일자", "재판부", "사건종류", "사건번호", "사건명",
+        "조세관련", "관련키워드", "쟁점PDF", "보도자료링크"
+    ]
 }
 
 # 사이트별 키 컬럼 정의
@@ -80,7 +85,8 @@ KEY_COLUMNS = {
     "moef": "문서번호",
     "mois": "문서번호",
     "bai": "문서번호",
-    "scourt_major_decisions": "번호"
+    "scourt_major_decisions": "번호",
+    "scourt_scheduled_decisions": "고유키"
 }
 
 # GUI 설정
@@ -94,7 +100,8 @@ GUI_CONFIG = {
         "5. 행정안전부",
         "6. 감사원",
         "7. 모두 크롤링",
-        "8. 전국법원 주요판결"
+        "8. 전국법원 주요판결",
+        "9. 대법원 선고예정 판결"
     ],
     "default_interval": 60  # 기본 주기 (분)
 }

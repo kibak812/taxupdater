@@ -55,7 +55,8 @@ class NotificationService:
             "moef": "기획재정부",
             "mois": "행정안전부",
             "bai": "감사원",
-            "scourt_major_decisions": "전국법원 주요판결"
+            "scourt_major_decisions": "전국법원 주요판결",
+            "scourt_scheduled_decisions": "대법원 선고예정 판결"
         }
         
         # 알림 설정
@@ -662,7 +663,8 @@ class NotificationService:
                 "moef": "moef_tax_interpretations",
                 "mois": "mois_interpretations",
                 "bai": "bai_audit_claims",
-                "scourt_major_decisions": "scourt_major_decisions_data"
+                "scourt_major_decisions": "scourt_major_decisions_data",
+                "scourt_scheduled_decisions": "scourt_scheduled_decisions_data"
             }
             
             table_name = table_mapping.get(site_key)
@@ -699,7 +701,8 @@ class NotificationService:
                 "moef": "moef_tax_interpretations",
                 "mois": "mois_interpretations",
                 "bai": "bai_audit_claims",
-                "scourt_major_decisions": "scourt_major_decisions_data"
+                "scourt_major_decisions": "scourt_major_decisions_data",
+                "scourt_scheduled_decisions": "scourt_scheduled_decisions_data"
             }
             
             table_name = table_mapping.get(site_key)

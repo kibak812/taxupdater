@@ -38,6 +38,10 @@ class ExpertDataTable {
             'scourt_major_decisions': {
                 documentColumn: '번호',
                 dateColumn: '작성일'
+            },
+            'scourt_scheduled_decisions': {
+                documentColumn: '사건번호',
+                dateColumn: '선고일자'
             }
         };
         
@@ -297,11 +301,11 @@ class ExpertDataTable {
     getSortValue(item, column) {
         switch (column) {
             case 'document_number':
-                return item['문서번호'] || item['판례번호'] || item['청구번호'] || item['번호'] || '';
+                return item['문서번호'] || item['판례번호'] || item['청구번호'] || item['번호'] || item['사건번호'] || '';
             case 'title':
-                return item['제목'] || item['심판내용'] || '';
+                return item['제목'] || item['심판내용'] || item['사건명'] || '';
             case 'published_date':
-                return item['게시일'] || item['작성일'] || item['선고일'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자'] || '';
+                return item['게시일'] || item['작성일'] || item['선고일'] || item['선고일자'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자'] || '';
             case 'collected_date':
                 return item['updated_at'] || item['created_at'] || '';
             // 조세심판원 전용 컬럼
@@ -315,6 +319,10 @@ class ExpertDataTable {
                 return item['청구번호'] || '';
             case 'decision_date':
                 return item['결정일'] || '';
+            case 'tax_status':
+                return item['조세관련'] || '';
+            case 'tax_keywords':
+                return item['관련키워드'] || '';
             default:
                 return '';
         }
@@ -360,6 +368,16 @@ class ExpertDataTable {
                 <th class="sortable" data-column="document_number">문서번호</th>
                 <th class="sortable" data-column="title">제목</th>
                 <th class="sortable" data-column="published_date">게시일</th>
+                <th class="sortable" data-column="collected_date">수집일</th>
+            `;
+        } else if (this.siteKey === 'scourt_scheduled_decisions') {
+            // 대법원 선고예정 판결: 조세 후보 판정 컬럼 포함
+            thead.innerHTML = `
+                <th class="sortable" data-column="published_date">선고일자</th>
+                <th class="sortable" data-column="document_number">사건번호</th>
+                <th class="sortable" data-column="title">사건명</th>
+                <th class="sortable" data-column="tax_status">조세관련</th>
+                <th class="sortable" data-column="tax_keywords">관련키워드</th>
                 <th class="sortable" data-column="collected_date">수집일</th>
             `;
         } else {
@@ -593,11 +611,41 @@ class ExpertDataTable {
                 <td class="date-cell">${publishedDate}</td>
                 <td class="date-cell">${collectedDate}</td>
             `;
+        } else if (this.siteKey === 'scourt_scheduled_decisions') {
+            // 대법원 선고예정 판결: 선고일자, 사건번호, 사건명, 조세 후보 표시
+            const decisionDate = this.formatDate(item['선고일자']);
+            const caseNumber = item['사건번호'] || '-';
+            const title = item['사건명'] || '-';
+            const taxStatus = item['조세관련'] || '-';
+            const taxStatusClass = this.getTaxStatusClass(taxStatus);
+            const taxKeywords = item['관련키워드'] || '-';
+            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
+            const link = item['쟁점PDF'] || item['보도자료링크'] || '#';
+
+            row.innerHTML = `
+                <td class="date-cell">${decisionDate}</td>
+                <td>
+                    <span class="document-number">${caseNumber}</span>
+                </td>
+                <td class="document-title">
+                    ${link !== '#' ?
+                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` :
+                        `<span title="${title}">${title}</span>`
+                    }
+                </td>
+                <td>
+                    <span class="conclusion-badge ${taxStatusClass}">${taxStatus}</span>
+                </td>
+                <td>
+                    <span class="tax-category">${taxKeywords}</span>
+                </td>
+                <td class="date-cell">${collectedDate}</td>
+            `;
         } else {
             // 기타 사이트: 기존 공통 포맷
-            const documentNumber = item['문서번호'] || item['판례번호'] || item['청구번호'] || item['번호'] || '-';
-            const title = item['제목'] || item['심판내용'] || '-';
-            const publishedDate = this.formatDate(item['게시일'] || item['작성일'] || item['선고일'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자']);
+            const documentNumber = item['문서번호'] || item['판례번호'] || item['청구번호'] || item['번호'] || item['사건번호'] || '-';
+            const title = item['제목'] || item['심판내용'] || item['사건명'] || '-';
+            const publishedDate = this.formatDate(item['게시일'] || item['작성일'] || item['선고일'] || item['선고일자'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자']);
             const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
             const link = item['링크'] || item['원문링크'] || '#';
             
@@ -649,6 +697,14 @@ class ExpertDataTable {
             return 'conclusion-favorable';
         }
         if (taxpayerPartial.has(value)) {
+            return 'conclusion-partial';
+        }
+        return 'conclusion-neutral';
+    }
+
+    getTaxStatusClass(status) {
+        const value = String(status || '').trim();
+        if (value === '조세후보') {
             return 'conclusion-partial';
         }
         return 'conclusion-neutral';

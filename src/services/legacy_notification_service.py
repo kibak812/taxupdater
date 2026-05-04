@@ -24,7 +24,8 @@ class NotificationService:
             "moef": "기획재정부",
             "mois": "행정안전부",
             "bai": "감사원",
-            "scourt_major_decisions": "전국법원 주요판결"
+            "scourt_major_decisions": "전국법원 주요판결",
+            "scourt_scheduled_decisions": "대법원 선고예정 판결"
         }
     
     def create_new_data_alert(self, site_key: str, new_entries: pd.DataFrame, 
@@ -216,6 +217,11 @@ class NotificationService:
                 key_info = f"{row.get('문서번호', 'N/A')} - {row.get('제목', 'N/A')[:50]}"
             elif site_key == "scourt_major_decisions":
                 key_info = f"{row.get('번호', 'N/A')} - {row.get('제목', 'N/A')[:50]}"
+            elif site_key == "scourt_scheduled_decisions":
+                key_info = (
+                    f"{row.get('선고일자', 'N/A')} {row.get('사건번호', 'N/A')} "
+                    f"- {row.get('사건명', 'N/A')[:50]} ({row.get('조세관련', 'N/A')})"
+                )
             else:
                 # 기본적으로 첫 번째와 마지막 컬럼 사용
                 cols = list(row.index)
@@ -274,7 +280,8 @@ class NotificationService:
             "moef": "문서번호",
             "mois": "문서번호",
             "bai": "문서번호",
-            "scourt_major_decisions": "번호"
+            "scourt_major_decisions": "번호",
+            "scourt_scheduled_decisions": "고유키"
         }
         
         key_column = key_column_mapping.get(site_key, "문서번호")
