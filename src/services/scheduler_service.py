@@ -8,6 +8,7 @@ import sqlite3
 import asyncio
 import json
 import threading
+from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -48,6 +49,7 @@ class SchedulerService:
         # 실행 중인 작업 추적
         self.running_jobs = set()
         self.job_results = {}
+        self.site_job_ids = {}
         self.crawl_lock = threading.RLock()
         self._crawl_context = threading.local()
         
@@ -121,33 +123,16 @@ class SchedulerService:
                           notification_threshold: int = 1) -> bool:
         """크롤링 스케줄 추가"""
         try:
-            # 데이터베이스에 스케줄 저장
             self._save_schedule_to_db(site_key, cron_expression, enabled, 
                                     priority, notification_threshold)
-            
+
+            if self.scheduler.running:
+                self._load_schedules_from_db()
+
             if enabled:
-                # APScheduler에 작업 추가
-                job_id = f"crawl_{site_key}"
-                
-                # 기존 작업 제거
-                if self.scheduler.get_job(job_id):
-                    self.scheduler.remove_job(job_id)
-                
-                # 새 작업 추가
-                trigger = CronTrigger.from_crontab(cron_expression, timezone=self.timezone)
-                
-                self.scheduler.add_job(
-                    func=self._execute_crawl_job,
-                    trigger=trigger,
-                    id=job_id,
-                    args=[site_key],
-                    name=f"크롤링: {site_key}",
-                    replace_existing=True,
-                    max_instances=1,  # 동시 실행 방지
-                    misfire_grace_time=3600  # 1시간 지연 허용
-                )
-                
                 self.logger.info(f"크롤링 스케줄 추가: {site_key} ({cron_expression})")
+            else:
+                self.logger.info(f"크롤링 스케줄 비활성화: {site_key}")
             
             return True
             
@@ -171,6 +156,9 @@ class SchedulerService:
                     SET enabled = 0, updated_at = CURRENT_TIMESTAMP
                     WHERE site_key = ?
                 """, (site_key,))
+
+            if self.scheduler.running:
+                self._load_schedules_from_db()
             
             self.logger.info(f"크롤링 스케줄 제거: {site_key}")
             return True
@@ -196,7 +184,7 @@ class SchedulerService:
                         schedule_data = dict(zip(columns, row))
                         
                         # APScheduler 작업 상태 추가
-                        job_id = f"crawl_{site_key}"
+                        job_id = getattr(self, "site_job_ids", {}).get(site_key, f"crawl_{site_key}")
                         job = self.scheduler.get_job(job_id)
                         schedule_data['scheduler_status'] = {
                             'active': job is not None,
@@ -220,7 +208,9 @@ class SchedulerService:
                         schedule_data = dict(zip(columns, row))
                         
                         # APScheduler 작업 상태 추가
-                        job_id = f"crawl_{schedule_data['site_key']}"
+                        job_id = getattr(self, "site_job_ids", {}).get(
+                            schedule_data['site_key'], f"crawl_{schedule_data['site_key']}"
+                        )
                         job = self.scheduler.get_job(job_id)
                         schedule_data['scheduler_status'] = {
                             'active': job is not None,
@@ -335,13 +325,14 @@ class SchedulerService:
                 self._update_system_status(site_key, 'healthy')
             self._release_crawl_lock(lock_acquired)
     
-    def _execute_all_sites_crawl(self):
+    def _execute_all_sites_crawl(self, site_keys: Optional[List[str]] = None):
         """전체 사이트 크롤링 실행 및 로그 기록"""
         start_time = datetime.now()
         log_id = None
         site_results = {}
         total_new_count = 0
-        lock_acquired = self._acquire_crawl_lock("all_sites")
+        target_label = "all_sites" if site_keys is None else ",".join(site_keys)
+        lock_acquired = self._acquire_crawl_lock(target_label)
 
         if lock_acquired is None:
             return {"status": "skipped", "reason": "crawl_already_running"}
@@ -353,26 +344,42 @@ class SchedulerService:
             # 크롤링 실행 로그 시작 기록
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT INTO crawl_execution_log 
-                    (execution_type, trigger_source, start_time, status, total_sites)
-                    VALUES ('scheduled', 'scheduler', ?, 'running', 
-                        (SELECT COUNT(*) FROM crawl_schedules WHERE enabled = 1))
-                """, (start_time.isoformat(),))
+                if site_keys is None:
+                    cursor.execute("""
+                        INSERT INTO crawl_execution_log 
+                        (execution_type, trigger_source, start_time, status, total_sites)
+                        VALUES ('scheduled', 'scheduler', ?, 'running', 
+                            (SELECT COUNT(*) FROM crawl_schedules WHERE enabled = 1))
+                    """, (start_time.isoformat(),))
+                else:
+                    cursor.execute("""
+                        INSERT INTO crawl_execution_log 
+                        (execution_type, trigger_source, start_time, status, total_sites)
+                        VALUES ('scheduled', 'scheduler', ?, 'running', ?)
+                    """, (start_time.isoformat(), len(site_keys)))
                 log_id = cursor.lastrowid
                 conn.commit()
             
             self.logger.info(f"전체 크롤링 시작 (로그 ID: {log_id})")
             
-            # 활성화된 모든 사이트 크롤링 실행
+            # 활성화된 대상 사이트 크롤링 실행
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT site_key, site_name 
-                    FROM crawl_schedules 
-                    WHERE enabled = 1 
-                    ORDER BY priority DESC
-                """)
+                if site_keys is None:
+                    cursor.execute("""
+                        SELECT site_key, site_name 
+                        FROM crawl_schedules 
+                        WHERE enabled = 1 
+                        ORDER BY priority DESC, site_key
+                    """)
+                else:
+                    placeholders = ",".join("?" for _ in site_keys)
+                    cursor.execute(f"""
+                        SELECT site_key, site_name 
+                        FROM crawl_schedules 
+                        WHERE enabled = 1 AND site_key IN ({placeholders})
+                        ORDER BY priority DESC, site_key
+                    """, site_keys)
                 sites = cursor.fetchall()
             
             success_count = 0
@@ -730,24 +737,43 @@ class SchedulerService:
         except Exception as e:
             self.logger.error(f"메타데이터 업데이트 실패: {e}")
     
+    def _remove_scheduled_crawl_jobs(self):
+        """APScheduler에 등록된 정기 크롤링 잡을 제거합니다."""
+        for job in list(self.scheduler.get_jobs()):
+            if job.id.startswith("crawl_"):
+                self.scheduler.remove_job(job.id)
+        self.site_job_ids = {}
+
     def _load_schedules_from_db(self):
-        """데이터베이스에서 개별 사이트 스케줄 로드 및 APScheduler에 등록"""
+        """데이터베이스에서 사이트 스케줄을 로드해 APScheduler에 등록합니다.
+
+        같은 cron_expression을 공유하는 사이트들은 하나의 배치 잡으로 묶어
+        순차 실행합니다. 매시 정각처럼 같은 시각에 여러 개별 잡이 동시에
+        발화하면 전역 크롤링 락 때문에 하나만 실행되고 나머지는 건너뛰는
+        문제가 생기기 때문입니다.
+        """
         try:
+            self._remove_scheduled_crawl_jobs()
+
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT site_key, cron_expression, enabled
+                    SELECT site_key, cron_expression
                     FROM crawl_schedules WHERE enabled = 1
+                    ORDER BY cron_expression, priority DESC, site_key
                 """)
 
                 loaded_count = 0
-                for row in cursor.fetchall():
-                    site_key, cron_expr, enabled = row
+                schedules_by_cron = defaultdict(list)
+                for site_key, cron_expr in cursor.fetchall():
+                    schedules_by_cron[cron_expr].append(site_key)
 
-                    if enabled:
+                for group_index, (cron_expr, site_keys) in enumerate(schedules_by_cron.items(), start=1):
+                    trigger = CronTrigger.from_crontab(cron_expr, timezone=self.timezone)
+
+                    if len(site_keys) == 1:
+                        site_key = site_keys[0]
                         job_id = f"crawl_{site_key}"
-                        trigger = CronTrigger.from_crontab(cron_expr, timezone=self.timezone)
-
                         self.scheduler.add_job(
                             func=self._execute_crawl_job,
                             trigger=trigger,
@@ -758,8 +784,27 @@ class SchedulerService:
                             max_instances=1,
                             misfire_grace_time=3600
                         )
-                        loaded_count += 1
+                        self.site_job_ids[site_key] = job_id
                         self.logger.info(f"스케줄 로드: {site_key} ({cron_expr})")
+                    else:
+                        job_id = f"crawl_group_{group_index}"
+                        self.scheduler.add_job(
+                            func=self._execute_all_sites_crawl,
+                            trigger=trigger,
+                            id=job_id,
+                            args=[site_keys],
+                            name=f"크롤링 그룹: {len(site_keys)}개 사이트",
+                            replace_existing=True,
+                            max_instances=1,
+                            misfire_grace_time=3600
+                        )
+                        for site_key in site_keys:
+                            self.site_job_ids[site_key] = job_id
+                        self.logger.info(
+                            f"스케줄 그룹 로드: {', '.join(site_keys)} ({cron_expr})"
+                        )
+
+                    loaded_count += len(site_keys)
 
                 if loaded_count > 0:
                     self.logger.info(f"총 {loaded_count}개 사이트 스케줄 등록 완료")
@@ -770,7 +815,7 @@ class SchedulerService:
     def _add_system_maintenance_jobs(self):
         """시스템 유지보수 작업 추가
 
-        Note: 크롤링 스케줄은 _load_schedules_from_db()에서 개별 사이트별로 등록됩니다.
+        Note: 크롤링 스케줄은 _load_schedules_from_db()에서 사이트별 또는 그룹별로 등록됩니다.
         여기서는 시스템 유지보수 작업만 등록합니다.
         """
         try:
