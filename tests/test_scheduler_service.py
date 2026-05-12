@@ -151,6 +151,63 @@ class SchedulerServiceLockTests(unittest.TestCase):
         self.assertEqual(service.running_jobs, set())
 
 
+class FakeNotificationService:
+    def __init__(self):
+        self.new_data_calls = []
+
+    async def send_new_data_notification(self, site_key, new_data_count, session_id):
+        self.new_data_calls.append((site_key, new_data_count, session_id))
+        return True
+
+
+class SchedulerServiceNotificationTests(unittest.TestCase):
+    def make_service_for_success_handling(self, full_crawl=False):
+        tmp = tempfile.NamedTemporaryFile(suffix=".db")
+        tmp.close()
+        with sqlite3.connect(tmp.name) as conn:
+            conn.execute("""
+                CREATE TABLE crawl_schedules (
+                    site_key TEXT PRIMARY KEY,
+                    last_run TIMESTAMP,
+                    last_success TIMESTAMP,
+                    success_count INTEGER DEFAULT 0,
+                    updated_at TIMESTAMP
+                )
+            """)
+            conn.execute("""
+                INSERT INTO crawl_schedules (site_key, success_count)
+                VALUES ('tax_tribunal', 0)
+            """)
+        self.addCleanup(lambda: os.remove(tmp.name))
+
+        service = make_scheduler_service()
+        service._handle_crawl_success = SchedulerService._handle_crawl_success.__get__(service, SchedulerService)
+        service.db_path = tmp.name
+        service.notification_service = FakeNotificationService()
+        service._crawl_context.full_crawl = full_crawl
+        service._check_new_data_count = lambda site_key, session_id: 3
+        service._save_crawl_execution_log = lambda *args, **kwargs: None
+        service._update_crawl_metadata = lambda *args, **kwargs: None
+        return service
+
+    def test_full_crawl_site_success_does_not_send_site_level_new_data_notification(self):
+        service = self.make_service_for_success_handling(full_crawl=True)
+
+        service._handle_crawl_success("tax_tribunal", "session-1", 1, False, {"status": "success"})
+
+        self.assertEqual(service.notification_service.new_data_calls, [])
+
+    def test_standalone_site_success_still_sends_new_data_notification(self):
+        service = self.make_service_for_success_handling(full_crawl=False)
+
+        service._handle_crawl_success("tax_tribunal", "session-1", 1, False, {"status": "success"})
+
+        self.assertEqual(
+            service.notification_service.new_data_calls,
+            [("tax_tribunal", 3, "session-1")],
+        )
+
+
 class SchedulerServiceScheduleLoadingTests(unittest.TestCase):
     def make_service_with_schedule_db(self):
         tmp = tempfile.NamedTemporaryFile(suffix=".db")

@@ -11,6 +11,7 @@
 - 행정안전부 유권해석 수집
 - 감사원 심사결정례 수집
 - 주기적 자동 크롤링
+- 새 사례 발견 시 ntfy 요약 알림
 - **웹 인터페이스 지원** (FastAPI 기반)
 
 ## 요구사항
@@ -39,6 +40,23 @@ python -m uvicorn src.web.app:app --host 0.0.0.0 --port 8001 --reload
 # 로컬: http://localhost:8001
 # 외부: $NGROK_URL (ngrok Dev Domain 고정 URL)
 ```
+
+### ntfy 알림 설정
+새 사례가 발견되면 ntfy 토픽으로 신규 건수와 최근 사례 요약을 보냅니다.
+
+```bash
+cp .env.example .env
+```
+
+`.env`에서 최소한 아래 값을 설정하세요.
+
+```dotenv
+NTFY_TOPIC=taxupdater_alerts
+DASHBOARD_URL=https://your-dashboard-url.example
+NTFY_CLICK_URL=https://your-dashboard-url.example/dashboard
+```
+
+기본 발송 서버는 `https://ntfy.sh`입니다. 자체 ntfy 서버를 쓰면 `NTFY_SERVER_URL`을 바꾸고, 보호된 토픽이면 `NTFY_TOKEN` 또는 `NTFY_USERNAME`/`NTFY_PASSWORD`를 추가하세요. `NTFY_ITEM_LIMIT`은 알림 본문에 개별 사례를 몇 건까지 요약해서 보여줄지 정합니다.
 
 ### ngrok Dev Domain 터널 설정
 ```bash

@@ -615,7 +615,9 @@ class SchedulerService:
             self._update_crawl_metadata(site_key, duration, success=True)
             
             # 알림 발송 (새로운 데이터가 있을 경우)
-            if new_data_count > 0:
+            # 전체 사이트 크롤링 내부에서는 사이클 종료 시 send_all_sites_notification()으로
+            # 한 번만 요약 알림을 보내므로 개별 사이트 알림은 중복 발송하지 않는다.
+            if new_data_count > 0 and not self._is_full_crawl_context():
                 try:
                     # ThreadPoolExecutor에서는 새 이벤트 루프 필요
                     asyncio.run(self.notification_service.send_new_data_notification(

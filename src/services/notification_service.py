@@ -7,14 +7,17 @@ import os
 import sqlite3
 import json
 import asyncio
+import base64
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass
 import sys
-import yagmail
+from email.header import Header
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
 import time
+
+import requests
 
 # 프로젝트 루트 경로 추가
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -61,7 +64,8 @@ class NotificationService:
         
         # 알림 설정
         self.notification_settings = {
-            'email_enabled': True,  # 이메일 알림
+            'email_enabled': self._env_bool('EMAIL_ENABLED', False),  # 레거시 이메일 알림
+            'ntfy_enabled': self._env_bool('NTFY_ENABLED', True),  # ntfy 알림
             'websocket_enabled': True,  # WebSocket 알림
             'push_enabled': True,  # 브라우저 푸시 알림
             'min_interval': 300,  # 최소 알림 간격 (초)
@@ -71,8 +75,9 @@ class NotificationService:
         # 최근 알림 캐시 (스팸 방지)
         self.recent_notifications = {}
         
-        # ThreadPoolExecutor for blocking email operations
-        self.email_executor = ThreadPoolExecutor(max_workers=3)
+        # ThreadPoolExecutor for blocking outbound notification operations
+        self.notification_executor = ThreadPoolExecutor(max_workers=3)
+        self.email_executor = self.notification_executor
         
         self.logger.info("알림 서비스 초기화 완료")
     
@@ -101,7 +106,7 @@ class NotificationService:
                 message=f"{site_name}에서 {new_data_count}개의 새로운 데이터가 발견되었습니다.",
                 urgency_level='normal' if new_data_count < 10 else 'high',
                 new_data_count=new_data_count,
-                delivery_channels=['websocket', 'push', 'email'],
+                delivery_channels=['websocket', 'push', 'ntfy'],
                 metadata={
                     'session_id': session_id,
                     'site_name': site_name
@@ -339,6 +344,11 @@ class NotificationService:
             if 'email' in channels and self.notification_settings['email_enabled']:
                 if await self._send_email_notification(notification, notification_id):
                     success_channels.append('email')
+
+            # ntfy 알림
+            if 'ntfy' in channels and self.notification_settings['ntfy_enabled']:
+                if await self._send_ntfy_notification(notification, notification_id):
+                    success_channels.append('ntfy')
             
             # 상태 업데이트
             status = 'sent' if success_channels else 'failed'
@@ -385,6 +395,220 @@ class NotificationService:
         except Exception as e:
             self.logger.error(f"WebSocket 알림 발송 실패: {e}")
             return False
+
+    async def _send_ntfy_notification(self, notification: NotificationData,
+                                      notification_id: int) -> bool:
+        """ntfy 알림 발송"""
+        try:
+            ntfy_url = self._get_ntfy_url()
+            if not ntfy_url:
+                self.logger.warning("NTFY_TOPIC 또는 NTFY_URL 환경 변수가 설정되지 않음")
+                return False
+
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                self.notification_executor,
+                self._sync_send_ntfy_with_retry,
+                ntfy_url,
+                self._create_ntfy_headers(notification),
+                self._create_ntfy_message_sync(notification),
+                notification_id
+            )
+
+        except Exception as e:
+            self.logger.error(f"ntfy 알림 발송 실패: {e}")
+            return False
+
+    def _sync_send_ntfy_with_retry(self, ntfy_url: str, headers: Dict[str, str],
+                                  message: str, notification_id: int,
+                                  max_retries: int = 3) -> bool:
+        """동기 ntfy 발송 (재시도 로직 포함)"""
+        payload = message.encode("utf-8")
+
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(
+                    ntfy_url,
+                    data=payload,
+                    headers=headers,
+                    timeout=float(os.getenv("NTFY_TIMEOUT_SECONDS", "10")),
+                )
+                response.raise_for_status()
+                self.logger.info(f"ntfy 알림 발송 성공: {notification_id}")
+                return True
+
+            except Exception as e:
+                self.logger.warning(f"ntfy 발송 시도 {attempt + 1}/{max_retries} 실패: {e}")
+
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** attempt
+                    self.logger.info(f"{wait_time}초 후 ntfy 재시도...")
+                    time.sleep(wait_time)
+                else:
+                    self.logger.error(f"ntfy 알림 발송 최종 실패 ({notification_id}): {e}")
+                    return False
+
+        return False
+
+    def _get_ntfy_url(self) -> Optional[str]:
+        """환경 변수에서 ntfy 발송 URL 구성"""
+        explicit_url = os.getenv("NTFY_URL")
+        if explicit_url:
+            return explicit_url.rstrip("/")
+
+        topic = os.getenv("NTFY_TOPIC")
+        if not topic:
+            return None
+
+        server_url = os.getenv("NTFY_SERVER_URL", "https://ntfy.sh").rstrip("/")
+        return f"{server_url}/{topic.strip('/')}"
+
+    def _create_ntfy_headers(self, notification: NotificationData) -> Dict[str, str]:
+        """ntfy 헤더 구성"""
+        headers = {
+            "Title": self._encode_ntfy_header(f"예규판례 모니터링 - {notification.title}"),
+            "Priority": self._ntfy_priority(notification.urgency_level),
+            "Tags": self._ntfy_tags(notification),
+            "Markdown": "yes",
+            "Content-Type": "text/markdown; charset=utf-8",
+        }
+
+        click_url = self._ntfy_click_url(notification)
+        if click_url:
+            headers["Click"] = click_url
+
+        auth_header = self._ntfy_auth_header()
+        if auth_header:
+            headers["Authorization"] = auth_header
+
+        return headers
+
+    def _create_ntfy_message_sync(self, notification: NotificationData) -> str:
+        """ntfy 메시지 본문 생성"""
+        lines = [
+            notification.message,
+            "",
+            f"- 발견 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"- 신규 건수: {notification.new_data_count}건",
+        ]
+
+        site_name = self.site_names.get(notification.site_key, notification.site_key)
+        if notification.site_key != "all_sites":
+            lines.insert(1, f"- 사이트: {site_name}")
+
+        if notification.metadata and notification.metadata.get("summary"):
+            lines.extend(["", notification.metadata["summary"]])
+
+        if notification.notification_type == "new_data":
+            new_data_items = self._get_recent_new_data_sync(
+                notification.site_key,
+                min(notification.new_data_count, self._ntfy_item_limit())
+            )
+
+            if new_data_items:
+                lines.append("")
+                lines.append("## 신규 사례 요약")
+                for index, item in enumerate(new_data_items, start=1):
+                    title = self._first_present(item, ["제목", "사건명", "data_title"], "제목 없음")
+                    identifier = self._first_present(
+                        item,
+                        ["문서번호", "청구번호", "사건번호", "번호", "고유키", "data_id"],
+                        ""
+                    )
+                    date = self._first_present(
+                        item,
+                        ["생산일자", "결정일", "결정일자", "회신일자", "작성일", "선고일자", "data_date"],
+                        ""
+                    )
+                    link = self._first_present(item, ["링크", "보도자료링크", "쟁점PDF"], "")
+
+                    detail_parts = [part for part in [identifier, date] if part]
+                    detail = f" ({' | '.join(detail_parts)})" if detail_parts else ""
+                    if link:
+                        lines.append(f"{index}. [{title}]({link}){detail}")
+                    else:
+                        lines.append(f"{index}. {title}{detail}")
+
+                remaining_count = notification.new_data_count - len(new_data_items)
+                if remaining_count > 0:
+                    lines.append(f"- 외 {remaining_count}건")
+
+        target_url = self._ntfy_target_url(notification)
+        lines.extend(["", f"[대시보드 열기]({target_url})"])
+
+        return "\n".join(lines)
+
+    def _ntfy_click_url(self, notification: NotificationData) -> str:
+        return self._ntfy_target_url(notification)
+
+    def _ntfy_target_url(self, notification: NotificationData) -> str:
+        explicit_url = os.getenv("NTFY_CLICK_URL")
+        if explicit_url:
+            return explicit_url.rstrip("/")
+
+        dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:8001").rstrip("/")
+        if notification.site_key == "all_sites":
+            return f"{dashboard_url}/dashboard"
+        return f"{dashboard_url}/data/{notification.site_key}"
+
+    def _ntfy_auth_header(self) -> Optional[str]:
+        token = os.getenv("NTFY_TOKEN")
+        if token:
+            if token.lower().startswith(("bearer ", "basic ")):
+                return token
+            return f"Bearer {token}"
+
+        username = os.getenv("NTFY_USERNAME")
+        password = os.getenv("NTFY_PASSWORD")
+        if username and password:
+            credentials = f"{username}:{password}".encode("utf-8")
+            return f"Basic {base64.b64encode(credentials).decode('ascii')}"
+
+        return None
+
+    def _ntfy_priority(self, urgency_level: str) -> str:
+        priority_map = {
+            "low": "low",
+            "normal": "default",
+            "high": "high",
+            "critical": "urgent",
+        }
+        return os.getenv("NTFY_PRIORITY", priority_map.get(urgency_level, "default"))
+
+    def _ntfy_tags(self, notification: NotificationData) -> str:
+        if notification.notification_type == "new_data":
+            return "newspaper,tax"
+        if notification.notification_type == "crawl_complete":
+            return "white_check_mark,tax"
+        if notification.notification_type == "error":
+            return "warning,tax"
+        return "bell,tax"
+
+    def _ntfy_item_limit(self) -> int:
+        try:
+            return max(1, int(os.getenv("NTFY_ITEM_LIMIT", "5")))
+        except ValueError:
+            return 5
+
+    def _encode_ntfy_header(self, value: str) -> str:
+        try:
+            value.encode("latin-1")
+            return value
+        except UnicodeEncodeError:
+            return Header(value, "utf-8", maxlinelen=1000).encode()
+
+    def _first_present(self, item: Dict[str, Any], keys: List[str], default: str) -> str:
+        for key in keys:
+            value = item.get(key)
+            if value is not None and str(value).strip():
+                return str(value).strip()
+        return default
+
+    def _env_bool(self, name: str, default: bool) -> bool:
+        value = os.getenv(name)
+        if value is None:
+            return default
+        return value.strip().lower() in {"1", "true", "yes", "on"}
     
     async def _send_email_notification(self, notification: NotificationData, 
                                      notification_id: int) -> bool:
@@ -655,21 +879,10 @@ class NotificationService:
     async def _get_recent_new_data(self, site_key: str, limit: int) -> List[Dict[str, Any]]:
         """최근 새로운 데이터 조회"""
         try:
-            # 사이트별 테이블명 매핑
-            table_mapping = {
-                "tax_tribunal": "tax_tribunal_cases",
-                "nts_authority": "nts_authority_interpretations",
-                "nts_precedent": "nts_precedent_cases",
-                "moef": "moef_tax_interpretations",
-                "mois": "mois_interpretations",
-                "bai": "bai_audit_claims",
-                "scourt_major_decisions": "scourt_major_decisions_data",
-                "scourt_scheduled_decisions": "scourt_scheduled_decisions_data"
-            }
-            
-            table_name = table_mapping.get(site_key)
-            if not table_name:
+            if site_key == "all_sites":
                 return []
+
+            table_name = f"{site_key}_data"
             
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -693,21 +906,10 @@ class NotificationService:
     def _get_recent_new_data_sync(self, site_key: str, limit: int) -> List[Dict[str, Any]]:
         """최근 새로운 데이터 조회 (동기 버전)"""
         try:
-            # 사이트별 테이블명 매핑
-            table_mapping = {
-                "tax_tribunal": "tax_tribunal_cases",
-                "nts_authority": "nts_authority_interpretations",
-                "nts_precedent": "nts_precedent_cases",
-                "moef": "moef_tax_interpretations",
-                "mois": "mois_interpretations",
-                "bai": "bai_audit_claims",
-                "scourt_major_decisions": "scourt_major_decisions_data",
-                "scourt_scheduled_decisions": "scourt_scheduled_decisions_data"
-            }
-            
-            table_name = table_mapping.get(site_key)
-            if not table_name:
+            if site_key == "all_sites":
                 return []
+
+            table_name = f"{site_key}_data"
             
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -955,7 +1157,7 @@ class NotificationService:
                 message=f"전체 크롤링이 완료되었습니다. {summary}",
                 urgency_level='normal' if total_new_count < 10 else 'high',
                 new_data_count=total_new_count,
-                delivery_channels=['websocket'],
+                delivery_channels=['websocket', 'ntfy'],
                 metadata={
                     'session_id': session_id,
                     'summary': summary,

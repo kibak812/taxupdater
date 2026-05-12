@@ -173,80 +173,32 @@
                     <div class="settings-toggle-row">
                         <div class="settings-row-main">
                             <div class="settings-row-copy">
-                                <div class="settings-row-title">이메일 알림</div>
-                                <div class="settings-row-description" id="emailSummaryStatus">상세 설정에서 SMTP 정보를 관리합니다</div>
+                                <div class="settings-row-title">ntfy 알림</div>
+                                <div class="settings-row-description" id="ntfySummaryStatus">환경 변수 설정을 확인 중입니다</div>
                             </div>
-                        </div>
-                        <div class="settings-row-actions">
-                            <label class="toggle-switch">
-                                <input type="checkbox" class="toggle-input" id="emailNotificationToggle">
-                                <span class="toggle-slider"></span>
-                            </label>
                         </div>
                     </div>
 
-                    <details class="settings-details" id="emailSettingsDetails">
-                        <summary>이메일 상세 설정</summary>
-                        <h4>이메일 설정</h4>
-                        
-                        <div class="settings-field">
-                            <label class="form-label" for="email_address">이메일 주소</label>
-                            <input type="email" id="email_address" class="form-input" placeholder="your-email@example.com" required>
-                        </div>
-                        
-                        <div class="settings-field">
-                            <label class="form-label" for="smtp_server">SMTP 서버</label>
-                            <select id="smtp_server" class="form-input">
-                                <option value="">직접 입력</option>
-                                <option value="smtp.gmail.com">Gmail (smtp.gmail.com)</option>
-                                <option value="smtp.naver.com">Naver (smtp.naver.com)</option>
-                                <option value="smtp-mail.outlook.com">Outlook (smtp-mail.outlook.com)</option>
-                            </select>
-                        </div>
-                        
-                        <div class="settings-form-row">
+                    <details class="settings-details" id="ntfySettingsDetails">
+                        <summary>ntfy 구성 상태</summary>
+                        <div class="settings-grid settings-grid-compact">
                             <div class="settings-field">
-                                <label class="form-label" for="smtp_server_custom">SMTP 서버 (직접 입력)</label>
-                                <input type="text" id="smtp_server_custom" class="form-input" placeholder="smtp.example.com">
+                                <label class="form-label">토픽</label>
+                                <div class="readonly-value" id="ntfyTopicValue">-</div>
                             </div>
                             <div class="settings-field">
-                                <label class="form-label" for="smtp_port">포트</label>
-                                <input type="number" id="smtp_port" class="form-input" value="587" min="1" max="65535">
+                                <label class="form-label">서버</label>
+                                <div class="readonly-value" id="ntfyServerValue">-</div>
+                            </div>
+                            <div class="settings-field">
+                                <label class="form-label">요약 개수</label>
+                                <div class="readonly-value" id="ntfyItemLimitValue">-</div>
+                            </div>
+                            <div class="settings-field">
+                                <label class="form-label">클릭 링크</label>
+                                <div class="readonly-value" id="ntfyDashboardValue">-</div>
                             </div>
                         </div>
-                        
-                        <div class="settings-field">
-                            <label class="form-label" for="smtp_username">SMTP 사용자명 (선택사항)</label>
-                            <input type="text" id="smtp_username" class="form-input" placeholder="비워두면 이메일 주소 사용">
-                        </div>
-                        
-                        <div class="settings-toggle-row">
-                            <div class="settings-row-main">
-                                <div class="settings-row-copy">
-                                    <div class="settings-row-title">TLS 사용</div>
-                                    <div class="settings-row-description">안전한 연결을 위해 TLS를 사용합니다 (권장)</div>
-                                </div>
-                            </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox" class="toggle-input" id="use_tls" checked>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                        
-                        <div class="settings-field">
-                            <label class="form-label" for="min_data_threshold">알림 임계값</label>
-                            <div class="input-group">
-                                <input type="number" id="min_data_threshold" class="form-input" value="1" min="1" max="100">
-                                <span class="input-unit">신규 항목 이상</span>
-                            </div>
-                        </div>
-                        
-                        <div class="form-actions">
-                            <button id="saveEmailSettingsBtn" class="btn btn-primary">설정 저장</button>
-                            <button id="testEmailBtn" class="btn btn-outline">테스트 이메일 발송</button>
-                        </div>
-                        
-                        <div id="emailSettingsStatus" class="status-message" hidden></div>
                     </details>
                 </div>
             </section>

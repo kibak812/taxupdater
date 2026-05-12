@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import sqlite3
 
@@ -10,6 +11,28 @@ from src.web.context import WebAppContext
 def create_settings_router(context: WebAppContext) -> APIRouter:
     router = APIRouter()
     logger = context.logger
+
+    @router.get("/api/ntfy-settings")
+    async def get_ntfy_settings():
+        try:
+            ntfy_url = context.notification_service._get_ntfy_url()
+            return {
+                "enabled": context.notification_service.notification_settings.get("ntfy_enabled", False),
+                "configured": bool(ntfy_url),
+                "topic": os.getenv("NTFY_TOPIC", ""),
+                "server_url": os.getenv("NTFY_SERVER_URL", "https://ntfy.sh"),
+                "explicit_url_configured": bool(os.getenv("NTFY_URL")),
+                "item_limit": context.notification_service._ntfy_item_limit(),
+                "dashboard_url": os.getenv("DASHBOARD_URL", "http://localhost:8001"),
+                "click_url": os.getenv("NTFY_CLICK_URL", ""),
+                "auth_configured": bool(
+                    os.getenv("NTFY_TOKEN")
+                    or (os.getenv("NTFY_USERNAME") and os.getenv("NTFY_PASSWORD"))
+                ),
+            }
+        except Exception as e:
+            logger.error(f"ntfy 설정 조회 실패: {e}")
+            raise HTTPException(status_code=500, detail=f"ntfy 설정 조회 실패: {str(e)}")
 
     @router.get("/api/email-settings")
     async def get_email_settings():

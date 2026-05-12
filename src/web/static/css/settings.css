@@ -332,6 +332,18 @@
     outline: none;
 }
 
+.readonly-value {
+    background: #fbfbfd;
+    border: 1px solid rgba(17, 24, 39, 0.1);
+    border-radius: 14px;
+    color: var(--color-gray-900);
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+    min-height: 42px;
+    overflow-wrap: anywhere;
+    padding: var(--spacing-sm) var(--spacing-md);
+}
+
 .input-group {
     align-items: center;
     display: flex;

@@ -80,6 +80,7 @@ EXPECTED_PUBLIC_ROUTES = [
     "/api/job-history",
     "/api/scheduler/start",
     "/api/scheduler/stop",
+    "/api/ntfy-settings",
     "/api/email-settings",
     "/api/email-settings",
     "/api/email-settings/test",
