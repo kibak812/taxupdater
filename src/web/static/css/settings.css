@@ -1,7 +1,7 @@
 /* Settings operations console */
 .settings-body .dashboard-main {
-    background: #f5f5f7;
-    padding: var(--spacing-xl) 0 var(--spacing-2xl);
+    background: var(--color-gray-50);
+    padding: 22px 0 56px;
 }
 
 .settings-body [hidden] {
@@ -14,11 +14,11 @@
 
 .settings-section {
     background: white;
-    border: 1px solid rgba(17, 24, 39, 0.08);
-    border-radius: 20px;
-    box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
-    margin-bottom: var(--spacing-lg);
-    padding: 28px;
+    border: 1px solid var(--color-gray-200);
+    border-radius: 8px;
+    box-shadow: var(--shadow-md);
+    margin-bottom: 16px;
+    padding: 18px;
 }
 
 .settings-section h3,
@@ -30,11 +30,11 @@
 }
 
 .settings-section h3 {
-    font-size: var(--font-size-lg);
+    font-size: 17px;
 }
 
 .settings-section h4 {
-    font-size: var(--font-size-base);
+    font-size: 15px;
 }
 
 .settings-section p {
@@ -48,7 +48,7 @@
     display: flex;
     gap: var(--spacing-md);
     justify-content: space-between;
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: 14px;
 }
 
 .section-header.compact {
@@ -66,17 +66,17 @@
 }
 
 .settings-section .btn {
-    border-radius: 999px;
+    border-radius: 8px;
     box-shadow: none;
     min-height: 36px;
-    padding-left: var(--spacing-md);
-    padding-right: var(--spacing-md);
+    padding-left: 12px;
+    padding-right: 12px;
 }
 
 .settings-section .btn-sm {
-    font-size: var(--font-size-xs);
+    font-size: 13px;
     min-height: 34px;
-    padding: 7px 14px;
+    padding: 7px 12px;
 }
 
 .operations-console .section-actions .btn {
@@ -98,18 +98,18 @@
 
 .operations-grid {
     display: grid;
-    gap: 10px;
+    gap: 12px;
     grid-template-columns: minmax(240px, 1.25fr) repeat(3, minmax(0, 1fr));
 }
 
 .operation-card {
-    background: #fbfbfd;
-    border: 1px solid rgba(17, 24, 39, 0.08);
-    border-radius: 16px;
+    background: #fbfcfd;
+    border: 1px solid var(--color-gray-200);
+    border-radius: 8px;
     display: grid;
     gap: 6px;
-    min-height: 104px;
-    padding: 18px;
+    min-height: 92px;
+    padding: 14px;
 }
 
 .operation-card.is-primary {
@@ -182,8 +182,8 @@
 }
 
 .source-monitor-grid {
-    border: 1px solid rgba(17, 24, 39, 0.08);
-    border-radius: 16px;
+    border: 1px solid var(--color-gray-200);
+    border-radius: 8px;
     display: grid;
     gap: 0;
     grid-template-columns: 1fr;
@@ -191,9 +191,9 @@
 }
 
 .source-tile {
-    background: #fbfbfd;
+    background: white;
     border: 0;
-    border-bottom: 1px solid rgba(17, 24, 39, 0.08);
+    border-bottom: 1px solid var(--color-gray-200);
     border-radius: 0;
     display: grid;
     gap: var(--spacing-md);
@@ -215,7 +215,7 @@
 }
 
 .source-tile:hover {
-    background: transparent;
+    background: var(--color-gray-50);
 }
 
 .source-tile-header {
@@ -315,9 +315,9 @@
 }
 
 .form-input {
-    background: #fbfbfd;
+    background: #fbfcfd;
     border: 1px solid var(--color-gray-300);
-    border-radius: 14px;
+    border-radius: 8px;
     color: var(--color-gray-900);
     font-size: var(--font-size-sm);
     max-width: 320px;
@@ -333,9 +333,9 @@
 }
 
 .readonly-value {
-    background: #fbfbfd;
-    border: 1px solid rgba(17, 24, 39, 0.1);
-    border-radius: 14px;
+    background: #fbfcfd;
+    border: 1px solid var(--color-gray-200);
+    border-radius: 8px;
     color: var(--color-gray-900);
     font-size: var(--font-size-sm);
     line-height: 1.4;
@@ -360,9 +360,9 @@
 .settings-toggle-row {
     align-items: center;
     background: white;
-    border: 1px solid rgba(17, 24, 39, 0.12);
-    border-radius: 16px;
-    box-shadow: 0 1px 2px rgba(17, 24, 39, 0.03);
+    border: 1px solid var(--color-gray-200);
+    border-radius: 8px;
+    box-shadow: none;
     display: flex;
     gap: var(--spacing-md);
     justify-content: space-between;
@@ -439,9 +439,9 @@
 
 .settings-details {
     background: white;
-    border: 1px solid rgba(17, 24, 39, 0.12);
-    border-radius: 16px;
-    box-shadow: 0 1px 2px rgba(17, 24, 39, 0.03);
+    border: 1px solid var(--color-gray-200);
+    border-radius: 8px;
+    box-shadow: none;
     padding: var(--spacing-md);
 }
 
@@ -473,7 +473,7 @@
 .advanced-panel {
     background: white;
     border: 1px solid var(--color-gray-200);
-    border-radius: var(--radius-md);
+    border-radius: 8px;
     display: grid;
     gap: var(--spacing-md);
     padding: var(--spacing-md);

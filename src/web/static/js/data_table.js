@@ -412,20 +412,17 @@ class ExpertDataTable {
         const descriptionElement = document.getElementById('filterDescription');
         
         if (titleElement && descriptionElement) {
-            let title = this.siteName;
-            let description = '';
+            const titleParts = [this.siteName];
+            const descriptionParts = [];
             
             // 시간 필터가 적용된 경우
             if (this.filterType === 'recent' && this.filterDays) {
                 const dayText = this.filterDays == 1 ? '24시간' : `${this.filterDays}일`;
-                title += ` - 최근 ${dayText} 신규 데이터`;
-                description = `최근 ${dayText} 동안 수집된 `;
+                titleParts.push(`최근 ${dayText}`);
             } else if (this.filterType === 'range' && this.filterStartDate && this.filterEndDate) {
-                title += ` - ${this.filterStartDate} ~ ${this.filterEndDate}`;
-                description = `${this.filterStartDate}부터 ${this.filterEndDate}까지 수집된 `;
+                titleParts.push(`${this.filterStartDate} ~ ${this.filterEndDate}`);
             } else {
-                title += ' - 전체 데이터';
-                description = '이 소스에서 수집된 ';
+                titleParts.push('전체');
             }
             
             // 필터 조건 추가
@@ -441,26 +438,25 @@ class ExpertDataTable {
             }
             
             if (activeFilters.length > 0) {
-                title += ` (${activeFilters.join(', ')})`;
-                description += `${activeFilters.join(', ')} 조건으로 필터링된 `;
+                titleParts.push(activeFilters.join(' · '));
             }
             
             // 검색 조건 추가
             if (this.searchQuery) {
-                title += ' (검색 결과)';
-                description += `"${this.searchQuery}"와 일치하는 `;
+                titleParts.push('검색 결과');
+                descriptionParts.push(`"${this.searchQuery}"`);
             }
             
-            description += `${this.totalCount.toLocaleString()}개 항목을 표시하고 있습니다`;
+            descriptionParts.push(`${this.totalCount.toLocaleString()}개 항목`);
             
-            titleElement.textContent = title;
-            descriptionElement.textContent = description;
+            titleElement.textContent = titleParts.join(' · ');
+            descriptionElement.textContent = descriptionParts.join(' · ');
             
             // 필터가 적용된 경우 "전체 데이터 보기" 링크 추가
             if (this.filterType || this.isFiltered) {
                 const viewAllLink = document.createElement('a');
                 viewAllLink.href = `/data/${this.siteKey}`;
-                viewAllLink.textContent = ' 전체 데이터 보기 →';
+                viewAllLink.textContent = ' 전체 보기';
                 viewAllLink.style.marginLeft = '10px';
                 viewAllLink.style.color = 'var(--color-primary)';
                 viewAllLink.style.textDecoration = 'none';

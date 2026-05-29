@@ -6,473 +6,764 @@
     <title>{{ site_name }} - 데이터 목록</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="stylesheet" href="/static/css/dashboard.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23667085'><path d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z'/></svg>">
     <style>
-        /* Additional styles specific to data table */
-        .breadcrumb {
-            display: flex;
+        .data-page {
+            --kami-brand: #1B365D;
+            --kami-brand-light: #2D5A8A;
+            --kami-parchment: #f7f8fa;
+            --kami-ivory: #ffffff;
+            --kami-sand: #f1f3f5;
+            --kami-border: #e7eaf0;
+            --kami-border-soft: #d8dee8;
+            --kami-ink: #141413;
+            --kami-dark-warm: #30343b;
+            --kami-olive: #545b66;
+            --kami-stone: #7a828d;
+            --color-primary: var(--kami-brand);
+            --color-primary-dark: #132947;
+            --color-primary-light: var(--kami-brand-light);
+            --color-success: #456B54;
+            --color-danger: #9A3E32;
+            --color-warning: #8A6A24;
+            --color-gray-50: var(--kami-parchment);
+            --color-gray-100: var(--kami-sand);
+            --color-gray-200: var(--kami-border);
+            --color-gray-300: var(--kami-border-soft);
+            --color-gray-500: var(--kami-stone);
+            --color-gray-600: var(--kami-olive);
+            --color-gray-700: var(--kami-dark-warm);
+            --color-gray-900: var(--kami-ink);
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", Arial, sans-serif;
+            background: var(--kami-parchment);
+            color: var(--kami-ink);
+            font-family: var(--font-family);
+            min-height: 100vh;
+        }
+
+        .data-page *,
+        .data-page *::before,
+        .data-page *::after {
+            letter-spacing: 0;
+        }
+
+        .data-page .container {
+            max-width: min(1280px, calc(100vw - 48px));
+            padding: 0;
+        }
+
+        .data-page .dashboard-header {
+            background: var(--kami-parchment);
+            border-bottom: 1px solid var(--kami-border);
+            box-shadow: none;
+            color: var(--kami-ink);
+            padding: 18px 0;
+        }
+
+        .data-page .header-content {
             align-items: center;
-            gap: var(--spacing-sm);
-            margin-bottom: var(--spacing-lg);
-            font-size: var(--font-size-sm);
-            color: var(--color-gray-600);
+            gap: 20px;
         }
-        
-        .breadcrumb a {
-            color: var(--color-primary);
-            text-decoration: none;
+
+        .data-page .header-left {
+            align-items: center;
+            flex: 1;
+            gap: 10px;
+            min-width: 0;
         }
-        
-        .breadcrumb a:hover {
-            text-decoration: underline;
+
+        .data-page .header-logo {
+            align-items: center;
+            background: var(--kami-ivory);
+            border: 1px solid var(--kami-border);
+            border-radius: 7px;
+            color: var(--kami-brand);
+            display: inline-flex;
+            flex: 0 0 34px;
+            height: 34px;
+            justify-content: center;
+            width: 34px;
         }
-        
-        .filter-status {
-            background: white;
-            padding: var(--spacing-lg);
-            border-radius: var(--radius-xl);
-            border: 1px solid var(--color-gray-200);
-            margin-bottom: var(--spacing-xl);
+
+        .data-page .header-logo svg {
+            color: currentColor;
+            height: 18px;
+            width: 18px;
         }
-        
-        .filter-status h2 {
-            margin: 0 0 var(--spacing-sm) 0;
-            color: var(--color-gray-900);
-            font-size: var(--font-size-xl);
-            font-weight: 600;
+
+        .search-label {
+            color: var(--kami-brand);
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
             line-height: 1.35;
-            overflow-wrap: anywhere;
+            margin: 0 0 6px;
         }
-        
-        .filter-description {
-            color: var(--color-gray-600);
-            line-height: 1.55;
+
+        .data-page .header-text h1 {
+            color: var(--kami-ink);
+            font-family: var(--font-family);
+            font-size: 22px;
+            font-weight: 650;
+            line-height: 1.25;
             margin: 0;
             overflow-wrap: anywhere;
         }
-        
-        .data-toolbar {
-            display: flex;
+
+        .data-page .header-right {
             align-items: center;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .data-page .dashboard-main {
+            padding: 22px 0 56px;
+        }
+
+        .breadcrumb {
+            align-items: center;
+            color: var(--kami-stone);
+            display: flex;
+            flex-wrap: wrap;
+            font-size: 13px;
+            gap: 8px;
+            margin-bottom: 18px;
+        }
+
+        .breadcrumb a {
+            color: var(--kami-brand);
+            text-decoration: none;
+        }
+
+        .breadcrumb a:hover {
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
+
+        .filter-status {
+            align-items: center;
+            background: var(--kami-ivory);
+            border: 1px solid var(--kami-border);
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(20, 20, 19, 0.035);
+            display: flex;
             justify-content: space-between;
-            gap: var(--spacing-lg);
-            margin-bottom: var(--spacing-lg);
+            margin-bottom: 16px;
+            padding: 16px 18px;
+        }
+
+        .filter-status h2 {
+            color: var(--kami-ink);
+            font-family: var(--font-family);
+            font-size: 17px;
+            font-weight: 650;
+            line-height: 1.35;
+            margin: 0 0 4px;
+            overflow-wrap: anywhere;
+        }
+
+        .filter-description {
+            color: var(--kami-olive);
+            font-size: 13px;
+            line-height: 1.45;
+            margin: 0;
+            max-width: 72ch;
+            overflow-wrap: anywhere;
+        }
+
+        .data-toolbar {
+            align-items: flex-end;
+            display: flex;
+            gap: 16px;
+            justify-content: space-between;
+            margin-bottom: 14px;
         }
 
         .data-actions {
             align-items: center;
             display: flex;
             flex-wrap: wrap;
-            gap: var(--spacing-sm);
+            gap: 8px;
             justify-content: flex-end;
         }
-        
+
         .search-box {
+            display: block;
             flex: 1;
-            max-width: 420px;
-            min-width: 260px;
+            max-width: 560px;
+            min-width: 280px;
         }
-        
+
+        .search-field {
+            align-items: center;
+            background: var(--kami-ivory);
+            border: 1px solid var(--kami-border-soft);
+            border-radius: 8px;
+            display: flex;
+            gap: 10px;
+            min-height: 46px;
+            padding: 0 14px;
+            transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+        }
+
+        .search-field svg {
+            color: var(--kami-stone);
+            flex: 0 0 auto;
+        }
+
+        .search-field:focus-within {
+            border-color: var(--kami-brand);
+            box-shadow: 0 0 0 3px #E4ECF5;
+        }
+
         .search-input {
+            background: transparent;
+            border: 0;
+            color: var(--kami-ink);
+            font-family: var(--font-family);
+            font-size: 15px;
+            min-width: 0;
+            padding: 0;
             width: 100%;
-            padding: var(--spacing-sm) var(--spacing-md);
-            border: 1px solid var(--color-gray-300);
-            border-radius: var(--radius-md);
-            font-size: var(--font-size-sm);
-            background: white;
         }
-        
+
         .search-input:focus {
+            box-shadow: none;
             outline: none;
-            border-color: var(--color-primary);
-            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
         }
-        
+
+        .search-input::placeholder {
+            color: var(--kami-stone);
+        }
+
+        .data-page .btn,
+        .filter-toggle {
+            align-items: center;
+            border-radius: 8px;
+            display: inline-flex;
+            font-family: var(--font-family);
+            font-size: 14px;
+            font-weight: 500;
+            gap: 8px;
+            justify-content: center;
+            line-height: 1.25;
+            min-height: 38px;
+            padding: 9px 13px;
+            transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+            white-space: nowrap;
+        }
+
+        .data-page .btn svg,
+        .filter-toggle svg {
+            flex: 0 0 auto;
+        }
+
+        .data-page .btn-outline,
+        .data-page .dashboard-header .btn-outline,
+        .filter-toggle {
+            background: var(--kami-ivory);
+            border: 1px solid var(--kami-border-soft);
+            color: var(--kami-dark-warm);
+        }
+
+        .data-page .btn-outline:hover,
+        .data-page .dashboard-header .btn-outline:hover,
+        .filter-toggle:hover {
+            background: var(--kami-parchment);
+            border-color: var(--kami-brand);
+            color: var(--kami-brand);
+        }
+
+        .data-page .btn:focus-visible,
+        .filter-toggle:focus-visible {
+            box-shadow: 0 0 0 3px #E4ECF5;
+            outline: 1px solid var(--kami-brand);
+            outline-offset: 1px;
+        }
+
+        .data-page .btn-primary {
+            background: var(--kami-brand);
+            border: 1px solid var(--kami-brand);
+            color: var(--kami-ivory);
+        }
+
+        .data-page .btn-primary:hover {
+            background: #132947;
+            border-color: #132947;
+        }
+
+        .data-page .btn-sm {
+            font-size: 13px;
+            min-height: 36px;
+            padding: 8px 12px;
+        }
+
+        .filter-toggle {
+            color: var(--kami-brand);
+            cursor: pointer;
+        }
+
+        .filter-toggle.active {
+            background: #E4ECF5;
+            border-color: #D0DCE9;
+            color: var(--kami-brand);
+        }
+
+        .filter-chevron {
+            transition: transform 0.2s ease;
+        }
+
+        .filter-toggle.active .filter-chevron {
+            transform: rotate(180deg);
+        }
+
+        .filter-panel {
+            background: var(--kami-ivory);
+            border: 1px solid var(--kami-border);
+            border-radius: 8px;
+            box-shadow: 0 10px 28px rgba(20, 20, 19, 0.04);
+            margin-bottom: 16px;
+            padding: 20px;
+        }
+
+        .filter-header {
+            align-items: center;
+            display: flex;
+            gap: 12px;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .filter-header h3 {
+            color: var(--kami-ink);
+            font-family: var(--font-family);
+            font-size: 18px;
+            font-weight: 500;
+            line-height: 1.3;
+            margin: 0;
+        }
+
+        .filter-content {
+            display: grid;
+            gap: 14px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 280px));
+            justify-content: start;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .filter-panel .filter-group[style*="block"] {
+            display: flex !important;
+        }
+
+        .filter-group label {
+            color: var(--kami-dark-warm);
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .filter-select {
+            appearance: none;
+            background: var(--kami-parchment);
+            border: 1px solid var(--kami-border-soft);
+            border-radius: 8px;
+            color: var(--kami-ink);
+            cursor: pointer;
+            font-family: var(--font-family);
+            font-size: 14px;
+            min-height: 42px;
+            padding: 9px 12px;
+        }
+
+        .filter-select:focus {
+            border-color: var(--kami-brand);
+            box-shadow: 0 0 0 3px #E4ECF5;
+            outline: none;
+        }
+
+        .btn-ghost {
+            background: var(--kami-parchment);
+            border: 1px solid var(--kami-border);
+            color: var(--kami-dark-warm);
+        }
+
+        .btn-ghost:hover {
+            background: var(--kami-sand);
+            color: var(--kami-ink);
+        }
+
         .data-table-container {
-            background: white;
-            border-radius: var(--radius-xl);
-            border: 1px solid var(--color-gray-200);
+            background: var(--kami-ivory);
+            border: 1px solid var(--kami-border-soft);
+            border-radius: 8px;
+            box-shadow: 0 14px 40px rgba(20, 20, 19, 0.05);
             overflow-x: auto;
             overflow-y: hidden;
-            box-shadow: var(--shadow-md);
         }
-        
+
         .data-table {
+            border-collapse: separate;
+            border-spacing: 0;
             min-width: 100%;
             table-layout: fixed;
             width: 100%;
-            border-collapse: collapse;
         }
 
         .data-site-tax_tribunal .data-table {
-            min-width: 100%;
+            min-width: 1120px;
         }
-        
+
+        .data-site-scourt_scheduled_decisions .data-table {
+            min-width: 1160px;
+        }
+
         .data-table th {
-            background: var(--color-gray-50);
-            padding: var(--spacing-md);
-            text-align: left;
-            font-weight: 600;
-            font-size: var(--font-size-sm);
-            color: var(--color-gray-700);
-            border-bottom: 1px solid var(--color-gray-200);
+            background: var(--kami-parchment);
+            border-bottom: 1px solid var(--kami-border-soft);
+            color: var(--kami-dark-warm);
             cursor: pointer;
-            user-select: none;
+            font-size: 13px;
+            font-weight: 500;
+            line-height: 1.35;
+            padding: 13px 28px 13px 14px;
             position: relative;
+            text-align: left;
+            user-select: none;
+            vertical-align: bottom;
+            white-space: nowrap;
         }
-        
+
         .data-table th:hover {
-            background: var(--color-gray-100);
+            background: var(--kami-sand);
         }
-        
+
         .data-table th.sortable::after {
+            color: var(--kami-stone);
             content: '↕';
+            font-size: 12px;
             position: absolute;
-            right: var(--spacing-sm);
-            opacity: 0.5;
-            font-size: var(--font-size-xs);
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
         }
-        
+
         .data-table th.sort-asc::after {
+            color: var(--kami-brand);
             content: '↑';
-            opacity: 1;
-            color: var(--color-primary);
         }
-        
+
         .data-table th.sort-desc::after {
+            color: var(--kami-brand);
             content: '↓';
-            opacity: 1;
-            color: var(--color-primary);
         }
-        
+
         .data-table td {
-            padding: var(--spacing-md);
-            border-bottom: 1px solid var(--color-gray-200);
-            font-size: var(--font-size-sm);
+            background: var(--kami-ivory);
+            border-bottom: 1px solid var(--kami-border);
+            color: var(--kami-dark-warm);
+            font-size: 14px;
+            line-height: 1.48;
+            padding: 14px;
             vertical-align: top;
         }
 
-        .data-table th[data-column="tax_category"] {
+        .data-table tr:hover td {
+            background: var(--kami-parchment);
+        }
+
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .data-table th[data-column="tax_category"],
+        .data-table th[data-column="tax_keywords"] {
+            width: 128px;
+        }
+
+        .data-table th[data-column="decision_type"],
+        .data-table th[data-column="conclusion"],
+        .data-table th[data-column="tax_status"] {
             width: 104px;
-        }
-
-        .data-table th[data-column="decision_type"] {
-            width: 88px;
-        }
-
-        .data-table th[data-column="conclusion"] {
-            width: 96px;
         }
 
         .data-table th[data-column="claim_number"],
         .data-table th[data-column="document_number"] {
-            width: 148px;
+            width: 158px;
         }
 
         .data-table th[data-column="published_date"],
         .data-table th[data-column="decision_date"] {
-            width: 116px;
+            width: 126px;
         }
 
         .data-table th[data-column="collected_date"] {
-            width: 212px;
+            width: 202px;
         }
-        
-        .data-table tr:hover {
-            background: var(--color-gray-50);
-        }
-        
-        .data-table tr:last-child td {
-            border-bottom: none;
-        }
-        
+
         .document-number {
+            color: var(--kami-ink);
             display: inline-block;
-            font-family: 'Courier New', monospace;
-            font-weight: 600;
-            color: var(--color-gray-900);
+            font-family: "JetBrains Mono", "SF Mono", Consolas, Monaco, "Noto Serif KR", monospace;
+            font-size: 13px;
+            font-variant-numeric: tabular-nums;
+            font-weight: 500;
             max-width: 100%;
             overflow: hidden;
             text-overflow: ellipsis;
             vertical-align: top;
             white-space: nowrap;
         }
-        
+
         .document-title {
+            min-width: 0;
+        }
+
+        .document-title a,
+        .document-title span {
+            color: var(--kami-brand);
+            display: -webkit-box;
             overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        
-        .document-title a {
-            color: var(--color-primary);
             text-decoration: none;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
         }
-        
+
         .document-title a:hover {
             text-decoration: underline;
+            text-underline-offset: 3px;
         }
-        
+
         .date-cell {
-            color: var(--color-gray-600);
-            font-size: var(--font-size-xs);
+            color: var(--kami-stone);
+            font-size: 12px;
             font-variant-numeric: tabular-nums;
             white-space: nowrap;
         }
-        
-        .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: var(--spacing-sm);
-            padding: var(--spacing-lg);
-        }
-        
-        .pagination button {
-            padding: var(--spacing-sm) var(--spacing-md);
-            border: 1px solid var(--color-gray-300);
-            background: white;
-            color: var(--color-gray-700);
-            border-radius: var(--radius-md);
-            cursor: pointer;
-            font-size: var(--font-size-sm);
-        }
-        
-        .pagination button:hover:not(:disabled) {
-            background: var(--color-gray-50);
-        }
-        
-        .pagination button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .pagination button.active {
-            background: var(--color-primary);
-            color: white;
-            border-color: var(--color-primary);
-        }
-        
-        .pagination-info {
-            color: var(--color-gray-600);
-            font-size: var(--font-size-sm);
-        }
-        
-        .loading-state {
-            text-align: center;
-            padding: var(--spacing-3xl);
-            color: var(--color-gray-500);
-        }
-        
-        .error-state {
-            text-align: center;
-            padding: var(--spacing-3xl);
-            color: var(--color-danger);
-        }
-        
-        .filter-panel {
-            background: white;
-            border-radius: var(--radius-xl);
-            border: 1px solid var(--color-gray-200);
-            padding: var(--spacing-lg);
-            margin-bottom: var(--spacing-lg);
-            box-shadow: var(--shadow-sm);
-        }
-        
-        .filter-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: var(--spacing-md);
-        }
-        
-        .filter-header h3 {
-            margin: 0;
-            font-size: var(--font-size-lg);
-            font-weight: 600;
-            color: var(--color-gray-900);
-        }
-        
-        .filter-content {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: var(--spacing-md);
-        }
-        
-        .filter-group {
-            display: flex;
-            flex-direction: column;
-            gap: var(--spacing-xs);
-        }
-        
-        .filter-group label {
-            font-size: var(--font-size-sm);
-            font-weight: 500;
-            color: var(--color-gray-700);
-        }
-        
-        .filter-select {
-            padding: var(--spacing-sm);
-            border: 1px solid var(--color-gray-300);
-            border-radius: var(--radius-md);
-            font-size: var(--font-size-sm);
-            background: white;
-            cursor: pointer;
-        }
-        
-        .filter-select:focus {
-            outline: none;
-            border-color: var(--color-primary);
-            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-        }
-        
-        .filter-toggle {
-            align-items: center;
-            background: white;
-            border: 1px solid var(--color-gray-300);
-            border-radius: var(--radius-md);
-            gap: var(--spacing-sm);
-            color: var(--color-primary);
-            cursor: pointer;
-            display: inline-flex;
-            font-size: var(--font-size-sm);
-            font-weight: 600;
-            min-height: 34px;
-            padding: var(--spacing-xs) var(--spacing-sm);
-            transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
-        }
-        
-        .filter-toggle:hover {
-            background: var(--color-gray-50);
-            border-color: var(--color-gray-400);
-            color: var(--color-primary-dark);
-        }
 
-        .filter-toggle.active {
-            background: rgba(79, 70, 229, 0.08);
-            border-color: rgba(79, 70, 229, 0.35);
-            color: var(--color-primary-dark);
-        }
-        
-        .filter-chevron {
-            transition: transform 0.2s;
-        }
-        
-        .filter-toggle.active .filter-chevron {
-            transform: rotate(180deg);
-        }
-
-        .btn-ghost {
-            background: var(--color-gray-100);
-            border: 1px solid transparent;
-            color: var(--color-gray-700);
-        }
-
-        .btn-ghost:hover {
-            background: var(--color-gray-200);
-            color: var(--color-gray-900);
-        }
-        
-        .tax-category, .decision-type, .conclusion-badge {
+        .tax-category,
+        .decision-type,
+        .conclusion-badge {
+            background: #EEF2F7;
+            border: 1px solid #D0DCE9;
+            border-radius: 6px;
+            color: var(--kami-brand);
             display: inline-block;
-            padding: var(--spacing-xs) var(--spacing-sm);
-            background: var(--color-gray-100);
-            color: var(--color-gray-700);
-            border-radius: var(--radius-sm);
-            font-size: var(--font-size-xs);
+            font-size: 12px;
             font-weight: 500;
-            max-width: 120px;
+            line-height: 1.35;
+            max-width: 126px;
             overflow: hidden;
+            padding: 4px 8px;
             text-overflow: ellipsis;
+            vertical-align: top;
             white-space: nowrap;
         }
 
-        .conclusion-badge {
-            font-weight: 700;
+        .conclusion-unfavorable,
+        .decision-unfavorable {
+            background: #F5E6E2;
+            border-color: #E6C8C0;
+            color: #8A2F27;
         }
 
-        .conclusion-unfavorable, .decision-unfavorable {
-            background: rgba(220, 38, 38, 0.10);
-            color: #991B1B;
-        }
-
-        .conclusion-favorable, .decision-favorable {
-            background: rgba(5, 150, 105, 0.12);
-            color: #047857;
+        .conclusion-favorable,
+        .decision-favorable {
+            background: #E6EEE7;
+            border-color: #C8D8CB;
+            color: #345D43;
         }
 
         .conclusion-partial {
-            background: rgba(16, 185, 129, 0.18);
-            color: #065F46;
+            background: #E7F0EB;
+            border-color: #C9DCD1;
+            color: #315C47;
         }
 
-        .conclusion-neutral, .decision-neutral {
-            background: var(--color-gray-100);
-            color: var(--color-gray-700);
+        .conclusion-neutral,
+        .decision-neutral {
+            background: var(--kami-sand);
+            border-color: var(--kami-border-soft);
+            color: var(--kami-dark-warm);
         }
-        
+
+        .pagination {
+            align-items: center;
+            background: transparent;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            padding: 20px 0 0;
+        }
+
+        .pagination button {
+            background: var(--kami-ivory);
+            border: 1px solid var(--kami-border-soft);
+            border-radius: 8px;
+            color: var(--kami-dark-warm);
+            cursor: pointer;
+            font-family: var(--font-family);
+            font-size: 13px;
+            min-height: 36px;
+            min-width: 36px;
+            padding: 8px 11px;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background: var(--kami-parchment);
+            border-color: var(--kami-brand);
+            color: var(--kami-brand);
+        }
+
+        .pagination button:disabled {
+            color: var(--kami-stone);
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+
+        .pagination button.active {
+            background: var(--kami-brand);
+            border-color: var(--kami-brand);
+            color: var(--kami-ivory);
+        }
+
+        .pagination-info {
+            color: var(--kami-stone);
+            font-size: 13px;
+            line-height: 1.4;
+            margin-left: 6px;
+        }
+
+        .loading-state,
+        .error-state,
+        .empty-state {
+            color: var(--kami-stone);
+            padding: 64px 24px;
+            text-align: center;
+        }
+
+        .error-state {
+            color: var(--color-danger);
+        }
+
+        .spinner {
+            border-color: var(--kami-border);
+            border-top-color: var(--kami-brand);
+        }
+
+        .empty-state-icon {
+            align-items: center;
+            background: var(--kami-parchment);
+            border: 1px solid var(--kami-border);
+            border-radius: 8px;
+            color: var(--kami-brand);
+            display: inline-flex;
+            height: 48px;
+            justify-content: center;
+            margin-bottom: 14px;
+            width: 48px;
+        }
+
+        .empty-state-icon svg {
+            height: 24px;
+            width: 24px;
+        }
+
+        .empty-state-title {
+            color: var(--kami-ink);
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+
+        .empty-state-description {
+            color: var(--kami-olive);
+            font-size: 14px;
+        }
+
+        .toast-container {
+            top: 20px;
+            right: 20px;
+        }
+
+        .toast {
+            background: var(--kami-ivory);
+            border: 1px solid var(--kami-border);
+            border-left: 4px solid var(--kami-brand);
+            border-radius: 8px;
+            box-shadow: 0 16px 44px rgba(20, 20, 19, 0.12);
+            color: var(--kami-dark-warm);
+            font-family: var(--font-family);
+        }
+
+        .toast.success {
+            border-left-color: var(--color-success);
+        }
+
+        .toast.error {
+            border-left-color: var(--color-danger);
+        }
+
         .active-filters {
             display: flex;
             flex-wrap: wrap;
-            gap: var(--spacing-xs);
-            margin-top: var(--spacing-sm);
+            gap: 6px;
+            margin-top: 10px;
         }
-        
+
         .active-filter {
-            display: flex;
             align-items: center;
-            gap: var(--spacing-xs);
-            padding: var(--spacing-xs) var(--spacing-sm);
-            background: var(--color-primary);
-            color: white;
-            border-radius: var(--radius-sm);
-            font-size: var(--font-size-xs);
+            background: var(--kami-brand);
+            border-radius: 6px;
+            color: var(--kami-ivory);
+            display: flex;
+            font-size: 12px;
             font-weight: 500;
+            gap: 6px;
+            padding: 5px 8px;
         }
-        
+
         .active-filter button {
             background: none;
             border: none;
-            color: white;
+            color: var(--kami-ivory);
             cursor: pointer;
-            font-size: var(--font-size-xs);
+            font-size: 12px;
+            margin-left: 2px;
             padding: 0;
-            margin-left: var(--spacing-xs);
         }
-        
-        @media (max-width: 768px) {
-            .data-page .dashboard-header .header-content {
+
+        @media (max-width: 920px) {
+            .filter-status {
                 align-items: flex-start;
+                flex-direction: column;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .data-page .container {
+                max-width: calc(100vw - 32px);
             }
 
-            .data-page .dashboard-header .header-left,
-            .data-page .dashboard-header .header-actions {
-                min-width: 0;
+            .data-page .dashboard-header .header-content,
+            .data-page .header-right,
+            .data-page .header-actions {
+                align-items: stretch;
                 width: 100%;
             }
 
-            .data-page .header-text {
-                flex: 1;
-                min-width: 0;
-            }
-
-            .data-page .header-text h1,
-            .data-page .header-text p {
-                overflow-wrap: anywhere;
-            }
-
-            .filter-status h2,
-            .filter-description {
-                max-width: 30ch;
+            .data-page .header-right {
+                justify-content: flex-start;
             }
 
             .data-toolbar {
-                flex-direction: column;
                 align-items: stretch;
-                gap: var(--spacing-md);
+                flex-direction: column;
             }
 
             .search-box {
@@ -483,7 +774,7 @@
             .data-actions {
                 justify-content: flex-start;
             }
-            
+
             .filter-content {
                 grid-template-columns: 1fr;
             }
@@ -492,25 +783,38 @@
                 min-width: 980px;
             }
 
-            .data-site-tax_tribunal .data-table {
+            .data-site-tax_tribunal .data-table,
+            .data-site-scourt_scheduled_decisions .data-table {
                 min-width: 1120px;
             }
         }
 
-        @media (max-width: 480px) {
-            .data-page .dashboard-header .header-left {
-                align-items: center;
-                flex-direction: column;
-                text-align: center;
+        @media (max-width: 560px) {
+            .data-page .container {
+                max-width: calc(100vw - 24px);
             }
 
-            .data-page .header-text {
-                max-width: 100%;
+            .data-page .dashboard-header {
+                padding: 16px 0;
+            }
+
+            .data-page .dashboard-header .header-left {
+                align-items: center;
+                flex-direction: row;
+            }
+
+            .data-page .header-logo {
+                flex-basis: 34px;
+                height: 34px;
+                width: 34px;
+            }
+
+            .filter-status {
+                padding: 14px;
             }
 
             .data-actions .btn,
             .filter-toggle {
-                justify-content: center;
                 width: 100%;
             }
         }
@@ -522,14 +826,13 @@
         <div class="container">
             <div class="header-content">
                 <div class="header-left">
-                    <div class="header-logo">
+                    <div class="header-logo" aria-hidden="true">
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" fill="currentColor"/>
                         </svg>
                     </div>
                     <div class="header-text">
-                        <h1>{{ site_name }} - 데이터 목록</h1>
-                        <p>전문가 분석을 위한 종합 데이터 뷰</p>
+                        <h1>{{ site_name }}</h1>
                     </div>
                 </div>
                 <div class="header-right">
@@ -549,23 +852,33 @@
     <main class="dashboard-main">
         <div class="container">
             <!-- Breadcrumb -->
-            <nav class="breadcrumb">
+            <nav class="breadcrumb" aria-label="현재 위치">
                 <a href="/dashboard">대시보드</a>
+                <span>/</span>
+                <span>데이터 표</span>
                 <span>/</span>
                 <span>{{ site_name }}</span>
             </nav>
 
             <!-- Filter Status -->
             <div class="filter-status">
-                <h2 id="filterTitle">데이터 로딩 중...</h2>
-                <p class="filter-description" id="filterDescription">분석을 위한 데이터를 로딩하고 있습니다. 잠시만 기다려주세요.</p>
+                <div>
+                    <h2 id="filterTitle">데이터 로딩 중...</h2>
+                    <p class="filter-description" id="filterDescription">분석을 위한 데이터를 로딩하고 있습니다. 잠시만 기다려주세요.</p>
+                </div>
             </div>
 
             <!-- Data Controls -->
-            <div class="data-toolbar">
-                <div class="search-box">
-                    <input type="text" class="search-input" id="searchInput" placeholder="문서번호, 제목, 내용으로 검색...">
-                </div>
+            <div class="data-toolbar" aria-label="데이터 표 도구">
+                <label class="search-box" for="searchInput">
+                    <span class="search-label">검색</span>
+                    <span class="search-field">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <input type="text" class="search-input" id="searchInput" placeholder="문서번호, 제목, 내용으로 검색...">
+                    </span>
+                </label>
                 <div class="data-actions">
                     <button type="button" class="filter-toggle" id="filterToggle" aria-expanded="false" aria-controls="filterPanel">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -647,7 +960,12 @@
                 </div>
                 
                 <div id="emptyState" class="empty-state" style="display: none;">
-                    <div class="empty-state-icon">📄</div>
+                    <div class="empty-state-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M7 3h7l4 4v14H7V3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                            <path d="M14 3v5h4M9.5 12h5M9.5 15h5M9.5 18h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                    </div>
                     <div class="empty-state-title">데이터 없음</div>
                     <div class="empty-state-description">현재 필터 조건에 맞는 데이터가 없습니다.</div>
                 </div>

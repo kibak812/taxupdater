@@ -5,12 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>설정 - 예규판례 모니터링</title>
     <link rel="stylesheet" href="/static/css/style.css">
-    <link rel="stylesheet" href="/static/css/dashboard.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=redesign-20260528">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23667085'><path d='M12 15a3 3 0 100-6 3 3 0 000 6z'/><path d='M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z'/></svg>">
-    <link rel="stylesheet" href="/static/css/settings.css">
+    <link rel="stylesheet" href="/static/css/settings.css?v=redesign-20260528">
 </head>
 <body class="dashboard-body settings-body">
     <!-- Header -->
@@ -26,7 +23,6 @@
                     </div>
                     <div class="header-text">
                         <h1>설정</h1>
-                        <p>크롤링 스케줄 및 모니터링 환경설정</p>
                     </div>
                 </div>
                 <div class="header-right">
@@ -55,7 +51,6 @@
                 <div class="section-header compact">
                     <div>
                         <h3>운영 요약</h3>
-                        <p>자동 모니터링 상태와 최근 크롤링 결과를 한 곳에서 확인합니다.</p>
                     </div>
                     <div class="section-actions">
                         <button class="btn btn-success btn-sm" id="instantCrawlBtn">
@@ -105,7 +100,6 @@
                 <div class="section-header compact">
                     <div>
                         <h3>소스별 모니터링</h3>
-                        <p>각 소스의 활성화 여부와 다음 실행 일정을 확인합니다. 토글 변경은 즉시 적용됩니다.</p>
                     </div>
                 </div>
 
@@ -119,7 +113,6 @@
                 <div class="section-header compact">
                     <div>
                         <h3>크롤링 설정</h3>
-                        <p>활성화된 소스의 기본 실행 주기와 알림 기준을 조정합니다.</p>
                     </div>
                     <div class="section-actions">
                         <button class="btn btn-outline btn-sm" id="resetBtn">기본값</button>
@@ -149,7 +142,6 @@
             <!-- Notification Settings -->
             <section class="settings-section">
                 <h3>알림 설정</h3>
-                <p>새로운 데이터에 대한 알림을 언제 어떻게 받을지 설정합니다.</p>
                 
                 <div class="settings-list">
                     <div class="settings-toggle-row">
