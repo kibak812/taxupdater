@@ -7,6 +7,11 @@ import pandas as pd
 from src.web.context import ConnectionManager, WebAppContext
 from src.web.factory import create_app
 from src.web.helpers import build_dashboard_payload, build_site_data_payload
+from src.web.routers.data import (
+    _build_item_details,
+    _extract_details_from_metadata,
+    _first_non_empty_link,
+)
 
 
 class FakeLogger:
@@ -194,6 +199,53 @@ class WebRefactorTests(unittest.TestCase):
         manager.disconnect(connection)
 
         self.assertEqual(manager.active_connections, [])
+
+    def test_new_data_details_extract_from_original_data(self):
+        metadata = {
+            "original_data": {
+                "세목": "양도소득세",
+                "유형": "기각",
+                "결론": "국승",
+                "링크": "",
+                "쟁점PDF": "https://example.com/issue.pdf",
+            }
+        }
+
+        self.assertEqual(
+            _extract_details_from_metadata(metadata),
+            {
+                "external_link": "https://example.com/issue.pdf",
+                "data_tax_category": "양도소득세",
+                "data_decision_type": "기각",
+                "data_conclusion": "국승",
+                "data_tax_status": "",
+            },
+        )
+
+    def test_new_data_details_build_from_site_row(self):
+        self.assertEqual(
+            _build_item_details(
+                {
+                    "세목": "부가가치세",
+                    "유형": "취소",
+                    "결론": "국패",
+                    "링크": "https://example.com/source",
+                }
+            ),
+            {
+                "external_link": "https://example.com/source",
+                "data_tax_category": "부가가치세",
+                "data_decision_type": "취소",
+                "data_conclusion": "국패",
+                "data_tax_status": "",
+            },
+        )
+
+    def test_first_non_empty_link_ignores_blank_values(self):
+        self.assertEqual(
+            _first_non_empty_link(["", None, "#", " https://example.com/doc "]),
+            "https://example.com/doc",
+        )
 
 
 if __name__ == "__main__":

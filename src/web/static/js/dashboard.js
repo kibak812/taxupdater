@@ -7,7 +7,6 @@ class ExpertDashboard {
     constructor() {
         this.currentTimeFilter = 24;
         this.customRange = null;
-        this.selectedSiteKey = null;
         this.websocket = null;
         this.refreshInterval = null;
 
@@ -175,7 +174,7 @@ class ExpertDashboard {
             const [dashboardData, newDataData, scheduleData] =
                 await Promise.all([
                     this.fetchJson('/api/dashboard'),
-                    this.fetchJson(`/api/new-data?hours=${hours}&limit=1000`),
+                    this.fetchJson(`/api/new-data?hours=${hours}&limit=5000`),
                     this.fetchOptionalJson('/api/schedules', {
                         schedules: [],
                         scheduler_running: false
@@ -218,7 +217,6 @@ class ExpertDashboard {
     setTimeFilter(hours) {
         this.currentTimeFilter = hours;
         this.customRange = null;
-        this.selectedSiteKey = null;
 
         document.querySelectorAll('.filter-btn').forEach((btn) => {
             btn.classList.toggle('active', parseInt(btn.dataset.hours, 10) === hours);
@@ -260,7 +258,6 @@ class ExpertDashboard {
         }
 
         this.customRange = { startDate, endDate, start, end };
-        this.selectedSiteKey = null;
         this.currentTimeFilter = Math.max(24, Math.ceil((Date.now() - start.getTime()) / 3600000));
         this.loadDashboardData();
     }
@@ -314,18 +311,22 @@ class ExpertDashboard {
     }
 
     createSourceFilterButton({ siteKey, label, subLabel, count, color, latestLabel = '', isQuiet = false }) {
-        const button = document.createElement('button');
-        const isActive = this.selectedSiteKey === siteKey;
+        const element = siteKey ? document.createElement('a') : document.createElement('div');
+        const isStatic = !siteKey;
 
-        button.type = 'button';
-        button.className = `source-filter-item${isActive ? ' active' : ''}${isQuiet ? ' is-quiet' : ''}`;
-        button.style.setProperty('--source-color', color);
-        button.setAttribute('aria-pressed', String(isActive));
+        element.className = `source-filter-item${isQuiet ? ' is-quiet' : ''}${isStatic ? ' is-static' : ''}`;
+        element.style.setProperty('--source-color', color);
+        if (siteKey) {
+            element.href = this.buildSiteDataUrl(siteKey, true);
+            element.setAttribute('aria-label', `${label} ${this.formatTimeFilter()} 데이터 보기`);
+        } else {
+            element.setAttribute('role', 'status');
+        }
         const metaLabel = count > 0 && latestLabel
             ? `${subLabel} · ${latestLabel}`
             : subLabel;
 
-        button.innerHTML = `
+        element.innerHTML = `
             <span class="source-filter-main">
                 <span class="source-color-dot"></span>
                 <span class="source-filter-name">${this.escapeHtml(label)}</span>
@@ -334,59 +335,57 @@ class ExpertDashboard {
             <span class="source-filter-count">${count}</span>
         `;
 
-        button.addEventListener('click', () => {
-            this.selectedSiteKey = siteKey;
-            this.renderSourceOverview();
-            this.renderRecentItems();
-        });
-
-        return button;
+        return element;
     }
 
     renderRecentItems() {
         const tbody = document.getElementById('recentItemsTableBody');
         if (!tbody) return;
 
-        const visibleItems = this.getVisibleNewData();
-        const title = this.selectedSiteKey
-            ? `${this.getSiteName(this.selectedSiteKey)} 신규 항목`
-            : '신규 항목';
+        const visibleItems = this.newData;
 
-        this.setText('recentItemsTitle', title);
+        this.setText('recentItemsTitle', '신규 항목');
         tbody.innerHTML = '';
 
         if (!visibleItems.length) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="5" class="table-empty">새 항목 없음</td>
+                    <td colspan="6" class="table-empty">새 항목 없음</td>
                 </tr>
             `;
             return;
         }
 
-        visibleItems.slice(0, 40).forEach((item) => {
+        visibleItems.forEach((item) => {
             const row = document.createElement('tr');
-            row.className = item.is_important ? 'is-important' : '';
-            row.tabIndex = 0;
-            row.addEventListener('click', () => this.viewSiteData(item.site_key, true));
-            row.addEventListener('keydown', (event) => {
-                if (event.key === 'Enter') {
-                    this.viewSiteData(item.site_key, true);
-                }
-            });
+            const target = this.getNewItemTarget(item);
+
+            row.className = `${item.is_important ? 'is-important' : ''}${target ? ' is-linkable' : ''}`.trim();
+            if (target) {
+                row.tabIndex = 0;
+                row.addEventListener('click', () => this.openNewItem(item));
+                row.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        this.openNewItem(item);
+                    }
+                });
+            }
 
             const titleText = this.escapeHtml(item.data_title || item.data_id || '제목 없음');
             const source = this.escapeHtml(this.getSiteName(item.site_key, item.site_name));
-            const category = this.escapeHtml(item.data_category || '일반');
+            const categoryBadges = this.renderBadgeList(this.getCategoryBadges(item));
+            const decisionBadges = this.renderBadgeList(this.getDecisionBadges(item));
             const dateLabel = this.escapeHtml(this.formatDocumentDate(item));
+            const actionLabel = target ? '원문 열기' : '원문 없음';
 
             row.innerHTML = `
                 <td><span class="source-badge" style="--source-color: ${this.getSiteColor(item.site_key)}">${source}</span></td>
-                <td class="muted-cell">${category}</td>
+                <td class="category-cell">${categoryBadges}</td>
+                <td class="detail-cell">${decisionBadges}</td>
                 <td class="title-cell"><span class="title-text">${titleText}</span></td>
                 <td class="date-cell">${dateLabel}</td>
                 <td class="action-cell">
-                    <button class="row-action" aria-label="데이터 보기" title="데이터 보기">
+                    <button class="row-action" aria-label="${actionLabel}" title="${actionLabel}"${target ? '' : ' disabled'}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
                             <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
@@ -396,7 +395,7 @@ class ExpertDashboard {
 
             row.querySelector('.row-action')?.addEventListener('click', (event) => {
                 event.stopPropagation();
-                this.viewSiteData(item.site_key, true);
+                this.openNewItem(item);
             });
 
             tbody.appendChild(row);
@@ -409,7 +408,7 @@ class ExpertDashboard {
         const sourceFilters = document.getElementById('sourceFilterList');
 
         if (recentBody) {
-            recentBody.innerHTML = '<tr><td colspan="5" class="table-empty">데이터 로드 실패</td></tr>';
+            recentBody.innerHTML = '<tr><td colspan="6" class="table-empty">데이터 로드 실패</td></tr>';
         }
         if (sourceFilters) {
             sourceFilters.innerHTML = '<div class="source-filter-empty">데이터 로드 실패</div>';
@@ -437,9 +436,161 @@ class ExpertDashboard {
             });
     }
 
-    getVisibleNewData() {
-        if (!this.selectedSiteKey) return this.newData;
-        return this.newData.filter((item) => item.site_key === this.selectedSiteKey);
+    getCategoryBadges(item) {
+        const originalData = this.getItemOriginalData(item);
+        const values = [
+            item.data_tax_category,
+            item.data_category,
+            item.data_tax_status,
+            originalData['세목'],
+            originalData['청구분야'],
+            originalData['조세관련']
+        ];
+        return this.uniqueTruthy(values).map((value) => ({ label: value, tone: 'category' }));
+    }
+
+    getDecisionBadges(item) {
+        const originalData = this.getItemOriginalData(item);
+        return [
+            {
+                label: item.data_decision_type || originalData['유형'],
+                tone: this.getDecisionTone(item.data_decision_type || originalData['유형'])
+            },
+            {
+                label: item.data_conclusion || originalData['결론'],
+                tone: this.getConclusionTone(item.data_conclusion || originalData['결론'])
+            }
+        ].filter((badge) => badge.label);
+    }
+
+    renderBadgeList(badges) {
+        if (!badges.length) {
+            return '<span class="empty-dash">-</span>';
+        }
+
+        return badges
+            .map((badge) => `<span class="meta-badge ${badge.tone}">${this.escapeHtml(badge.label)}</span>`)
+            .join('');
+    }
+
+    uniqueTruthy(values) {
+        const seen = new Set();
+        const result = [];
+
+        values.forEach((value) => {
+            const text = String(value || '').trim();
+            if (!text || text === '-' || seen.has(text)) return;
+            seen.add(text);
+            result.push(text);
+        });
+
+        return result;
+    }
+
+    getDecisionTone(value) {
+        const text = String(value || '').trim();
+        const unfavorable = new Set(['기각', '각하']);
+        const favorable = new Set(['취소', '경정']);
+
+        if (unfavorable.has(text)) return 'decision-unfavorable';
+        if (favorable.has(text)) return 'decision-favorable';
+        return 'decision-neutral';
+    }
+
+    getConclusionTone(value) {
+        const text = String(value || '').trim();
+        const unfavorable = new Set(['국승', '기각', '각하', '불채택']);
+        const favorable = new Set(['국패', '인용', '채택']);
+        const partial = new Set(['일부국패', '일부인용']);
+
+        if (unfavorable.has(text)) return 'conclusion-unfavorable';
+        if (favorable.has(text)) return 'conclusion-favorable';
+        if (partial.has(text)) return 'conclusion-partial';
+        return 'conclusion-neutral';
+    }
+
+    getNewItemTarget(item) {
+        const externalLink = this.getNewItemExternalLink(item);
+        if (externalLink) {
+            return { url: externalLink, external: true };
+        }
+        return null;
+    }
+
+    openNewItem(item) {
+        const target = this.getNewItemTarget(item);
+        if (!target) return;
+        window.location.href = target.url;
+    }
+
+    getNewItemExternalLink(item) {
+        const originalData = this.getItemOriginalData(item);
+        const candidates = [
+            item.external_link,
+            originalData['링크'],
+            originalData['원문링크'],
+            originalData['쟁점PDF'],
+            originalData['보도자료링크'],
+            this.buildKnownExternalLink(item, originalData)
+        ];
+
+        for (const candidate of candidates) {
+            const url = this.normalizeExternalUrl(candidate);
+            if (url) return url;
+        }
+
+        return '';
+    }
+
+    buildKnownExternalLink(item, originalData = {}) {
+        const siteKey = item.site_key;
+        const identifier = String(
+            item.data_id ||
+            originalData['문서번호'] ||
+            originalData['청구번호'] ||
+            originalData['번호'] ||
+            ''
+        ).trim();
+
+        if (!identifier) return '';
+
+        if (siteKey === 'nts_authority' || siteKey === 'nts_precedent') {
+            const encodedIdentifier = encodeURIComponent(identifier);
+            return `https://taxlaw.nts.go.kr/is/USEISA001M.do?schVcb=${encodedIdentifier}&searchType=totalSearch`;
+        }
+
+        return '';
+    }
+
+    getItemOriginalData(item) {
+        const metadata = this.parseMetadata(item.metadata);
+        return metadata?.original_data || {};
+    }
+
+    parseMetadata(metadata) {
+        if (!metadata) return {};
+        if (typeof metadata === 'object') return metadata;
+
+        try {
+            return JSON.parse(metadata);
+        } catch (error) {
+            return {};
+        }
+    }
+
+    normalizeExternalUrl(value) {
+        const raw = String(value || '').trim();
+        if (!raw || raw === '#') return '';
+
+        try {
+            const url = new URL(raw, window.location.origin);
+            if (!['http:', 'https:'].includes(url.protocol)) {
+                return '';
+            }
+            return url.href;
+        } catch (error) {
+            return '';
+        }
     }
 
     getLatestDiscoveryLabel(siteKey = null) {
@@ -502,6 +653,32 @@ class ExpertDashboard {
         return Math.max(1, this.currentTimeFilter || 24);
     }
 
+    buildSiteDataUrl(siteKey, isFiltered = false) {
+        if (!siteKey) return '';
+
+        const baseUrl = `/data/${encodeURIComponent(siteKey)}`;
+        if (!isFiltered) return baseUrl;
+
+        const params = new URLSearchParams();
+        if (this.customRange) {
+            params.set('filter', 'range');
+            params.set('start', this.customRange.startDate);
+            params.set('end', this.customRange.endDate);
+        } else {
+            params.set('filter', 'recent');
+            params.set('days', String(this.getFilterDays()));
+        }
+
+        return `${baseUrl}?${params.toString()}`;
+    }
+
+    getFilterDays() {
+        if (this.currentTimeFilter === 24) return 1;
+        if (this.currentTimeFilter === 72) return 3;
+        if (this.currentTimeFilter === 168) return 7;
+        return Math.max(1, Math.ceil(this.getQueryHours() / 24));
+    }
+
     formatTimeFilter() {
         if (this.customRange) {
             return `${this.customRange.startDate} ~ ${this.customRange.endDate}`;
@@ -556,27 +733,7 @@ class ExpertDashboard {
 
     viewSiteData(siteKey, isFiltered = false) {
         if (!siteKey) return;
-
-        if (isFiltered) {
-            let url = `/data/${siteKey}?filter=recent`;
-
-            if (this.customRange) {
-                url = `/data/${siteKey}?filter=range&start=${this.customRange.startDate}&end=${this.customRange.endDate}`;
-            } else if (this.currentTimeFilter === 24) {
-                url += '&days=1';
-            } else if (this.currentTimeFilter === 72) {
-                url += '&days=3';
-            } else if (this.currentTimeFilter === 168) {
-                url += '&days=7';
-            } else {
-                url += `&days=${Math.ceil(this.currentTimeFilter / 24)}`;
-            }
-
-            window.location.href = url;
-            return;
-        }
-
-        window.location.href = `/data/${siteKey}`;
+        window.location.href = this.buildSiteDataUrl(siteKey, isFiltered);
     }
 
     setText(id, text) {
