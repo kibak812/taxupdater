@@ -49,6 +49,21 @@ class FakeCrawlingService:
         }
 
 
+class FailingCrawlingService:
+    def execute_crawling(self, choice, progress, status, is_periodic):
+        return {
+            "status": "error",
+            "error": "tax_tribunal: 크롤링 결과 없음",
+            "results": [
+                {
+                    "site_key": "tax_tribunal",
+                    "status": "error",
+                    "error_message": "크롤링 결과 없음",
+                }
+            ],
+        }
+
+
 class FakeJob:
     def __init__(self, job_id, **kwargs):
         self.id = job_id
@@ -148,6 +163,24 @@ class SchedulerServiceLockTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "success")
         self.assertEqual(len(service.crawling_service.calls), 1)
+        self.assertEqual(service.running_jobs, set())
+
+    def test_failed_site_crawl_does_not_mark_system_healthy(self):
+        service = make_scheduler_service()
+        service.crawling_service = FailingCrawlingService()
+        status_updates = []
+        failures = []
+        successes = []
+        service._update_system_status = lambda site_key, status, *args: status_updates.append((site_key, status))
+        service._handle_crawl_failure = lambda *args: failures.append(args)
+        service._handle_crawl_success = lambda *args, **kwargs: successes.append(args)
+
+        result = service._execute_crawl_job("tax_tribunal")
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(successes, [])
+        self.assertEqual(status_updates, [("tax_tribunal", "running")])
         self.assertEqual(service.running_jobs, set())
 
 

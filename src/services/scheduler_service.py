@@ -265,6 +265,7 @@ class SchedulerService:
         session_id = f"{site_key}_{start_time.strftime('%Y%m%d_%H%M%S')}"
         lock_acquired = self._acquire_crawl_lock(site_key)
         job_started = False
+        job_failed = False
 
         if lock_acquired is None:
             return {"status": "skipped", "reason": "crawl_already_running", "site_key": site_key}
@@ -304,6 +305,7 @@ class SchedulerService:
                     self._handle_crawl_success(site_key, session_id, duration, is_manual, crawl_result)
                 else:
                     # 실패 처리
+                    job_failed = True
                     error_msg = crawl_result.get('error', '알 수 없는 오류')
                     self._handle_crawl_failure(site_key, session_id, duration, error_msg)
                 
@@ -316,13 +318,15 @@ class SchedulerService:
             # 예외 처리
             end_time = datetime.now()
             duration = int((end_time - start_time).total_seconds())
+            job_failed = True
             self._handle_crawl_failure(site_key, session_id, duration, str(e))
             
         finally:
             # 실행 중 상태 제거
             if job_started:
                 self.running_jobs.discard(site_key)
-                self._update_system_status(site_key, 'healthy')
+                if not job_failed:
+                    self._update_system_status(site_key, 'healthy')
             self._release_crawl_lock(lock_acquired)
     
     def _execute_all_sites_crawl(self, site_keys: Optional[List[str]] = None):
