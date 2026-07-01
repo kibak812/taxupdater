@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 
 from src.web.context import WebAppContext
 
-ASSET_VERSION = "fe-20260702"
+ASSET_VERSION = "fe-20260702-2"
 
 
 def _page_context(request: Request, active_nav: str, **extra) -> dict:

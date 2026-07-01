@@ -38,10 +38,10 @@
                     <h3 id="sourceOverviewTitle">출처별 신규</h3>
                 </div>
                 <div class="source-filter-summary" id="sourceFilterSummary">
-                    <div class="source-filter-empty">로딩 중</div>
+                    <div class="source-filter-empty"><span class="skeleton"></span></div>
                 </div>
                 <div class="source-filter-list source-grid" id="sourceFilterList">
-                    <div class="source-filter-empty">로딩 중</div>
+                    <div class="source-filter-empty"><span class="skeleton"></span></div>
                 </div>
             </section>
 
@@ -64,8 +64,12 @@
                             </tr>
                         </thead>
                         <tbody id="recentItemsTableBody">
-                            <tr>
-                                <td colspan="7" class="table-empty">로딩 중</td>
+                            <tr class="table-loading-row">
+                                <td colspan="7">
+                                    <span class="skeleton"></span>
+                                    <span class="skeleton"></span>
+                                    <span class="skeleton"></span>
+                                </td>
                             </tr>
                         </tbody>
                     </table>

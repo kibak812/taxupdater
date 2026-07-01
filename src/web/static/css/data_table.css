@@ -35,8 +35,8 @@
     align-items: center;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    box-shadow: 0 8px 24px rgba(20, 20, 19, 0.035);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-subtle);
     display: flex;
     justify-content: space-between;
     margin-bottom: 16px;
@@ -47,7 +47,8 @@
     color: var(--color-text);
     font-family: var(--font-family);
     font-size: 17px;
-    font-weight: 650;
+    font-weight: 700;
+    letter-spacing: var(--tracking-tight);
     line-height: 1.35;
     margin: 0 0 4px;
     overflow-wrap: anywhere;
@@ -99,9 +100,10 @@
     background: var(--color-surface);
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius);
+    box-shadow: var(--shadow-control);
     display: flex;
     gap: 10px;
-    min-height: 46px;
+    min-height: 44px;
     padding: 0 14px;
     transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
@@ -228,9 +230,9 @@
 
 .data-table-container {
     background: var(--color-surface);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius);
-    box-shadow: 0 14px 40px rgba(20, 20, 19, 0.05);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-subtle);
     overflow-x: auto;
     overflow-y: hidden;
 }
@@ -372,22 +374,26 @@
     background: var(--color-surface);
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius);
+    box-shadow: var(--shadow-control);
     color: #30343B;
     cursor: pointer;
     font-family: var(--font-family);
     font-size: 13px;
-    min-height: 36px;
-    min-width: 36px;
-    padding: 8px 11px;
+    font-variant-numeric: tabular-nums;
+    min-height: 34px;
+    min-width: 34px;
+    padding: 7px 11px;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .pagination button:hover:not(:disabled) {
-    background: var(--color-bg);
+    background: var(--color-surface-hover);
     border-color: var(--color-primary);
     color: var(--color-primary);
 }
 
 .pagination button:disabled {
+    box-shadow: none;
     color: var(--color-faint);
     cursor: not-allowed;
     opacity: 0.55;
@@ -396,6 +402,7 @@
 .pagination button.active {
     background: var(--color-primary);
     border-color: var(--color-primary);
+    box-shadow: var(--shadow-inset-highlight);
     color: var(--color-surface);
 }
 

@@ -27,7 +27,7 @@ class ExpertDashboard {
         this.setupEventListeners();
         this.initBrowserNotifications();
         this.connectWebSocket();
-        this.loadInitialData();
+        this.loadDashboardData(false);
         this.startAutoRefresh();
     }
 
@@ -91,10 +91,6 @@ class ExpertDashboard {
                 this.showToast('수집 오류', 'error', `오류: ${message.error}`);
                 break;
         }
-    }
-
-    async loadInitialData() {
-        await this.loadDashboardData(true);
     }
 
     async loadDashboardData(showLoader = true) {
