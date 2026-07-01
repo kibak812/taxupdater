@@ -482,7 +482,12 @@ class ExpertDataTable {
     
     createTableRow(item) {
         const row = document.createElement('tr');
-        
+        const esc = TaxUI.escapeHtml;
+        const titleCellHtml = (link, title) => (link !== '#'
+            ? `<a href="${esc(link)}" target="_blank" rel="noopener noreferrer" title="${esc(title)}">${esc(title)}</a>`
+            : `<span title="${esc(title)}">${esc(title)}</span>`);
+        const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
+
         // 사이트별 특화 컬럼 처리
         if (this.siteKey === 'tax_tribunal') {
             // 조세심판원: 세목, 유형, 청구번호, 제목, 결정일 표시
@@ -492,27 +497,21 @@ class ExpertDataTable {
             const claimNumber = item['청구번호'] || '-';
             const title = item['제목'] || '-';
             const decisionDate = this.formatDate(item['결정일']);
-            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
-            const link = item['링크'] || '#';
+            const link = TaxUI.safeUrl(item['링크']) || '#';
             
             row.innerHTML = `
                 <td>
-                    <span class="tax-category">${taxCategory}</span>
+                    <span class="tax-category">${esc(taxCategory)}</span>
                 </td>
                 <td>
-                    <span class="decision-type ${decisionTypeClass}">${decisionType}</span>
+                    <span class="decision-type ${decisionTypeClass}">${esc(decisionType)}</span>
                 </td>
                 <td>
-                    <span class="document-number">${claimNumber}</span>
+                    <span class="document-number">${esc(claimNumber)}</span>
                 </td>
-                <td class="document-title">
-                    ${link !== '#' ? 
-                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
-                        `<span title="${title}">${title}</span>`
-                    }
-                </td>
-                <td class="date-cell">${decisionDate}</td>
-                <td class="date-cell">${collectedDate}</td>
+                <td class="document-title">${titleCellHtml(link, title)}</td>
+                <td class="date-cell">${esc(decisionDate)}</td>
+                <td class="date-cell">${esc(collectedDate)}</td>
             `;
         } else if (this.siteKey === 'nts_authority') {
             // 국세청 유권해석: 세목 컬럼 포함
@@ -520,24 +519,18 @@ class ExpertDataTable {
             const documentNumber = item['문서번호'] || '-';
             const title = item['제목'] || '-';
             const publishedDate = this.formatDate(item['생산일자']);
-            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
-            const link = item['링크'] || '#';
+            const link = TaxUI.safeUrl(item['링크']) || '#';
             
             row.innerHTML = `
                 <td>
-                    <span class="tax-category">${taxCategory}</span>
+                    <span class="tax-category">${esc(taxCategory)}</span>
                 </td>
                 <td>
-                    <span class="document-number">${documentNumber}</span>
+                    <span class="document-number">${esc(documentNumber)}</span>
                 </td>
-                <td class="document-title">
-                    ${link !== '#' ? 
-                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
-                        `<span title="${title}">${title}</span>`
-                    }
-                </td>
-                <td class="date-cell">${publishedDate}</td>
-                <td class="date-cell">${collectedDate}</td>
+                <td class="document-title">${titleCellHtml(link, title)}</td>
+                <td class="date-cell">${esc(publishedDate)}</td>
+                <td class="date-cell">${esc(collectedDate)}</td>
             `;
         } else if (this.siteKey === 'nts_precedent') {
             // 국세청 판례: 세목, 결론 컬럼 포함
@@ -547,27 +540,21 @@ class ExpertDataTable {
             const conclusion = item['결론'] || '-';
             const conclusionClass = this.getConclusionClass(conclusion);
             const publishedDate = this.formatDate(item['생산일자']);
-            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
-            const link = item['링크'] || '#';
+            const link = TaxUI.safeUrl(item['링크']) || '#';
             
             row.innerHTML = `
                 <td>
-                    <span class="tax-category">${taxCategory}</span>
+                    <span class="tax-category">${esc(taxCategory)}</span>
                 </td>
                 <td>
-                    <span class="document-number">${documentNumber}</span>
+                    <span class="document-number">${esc(documentNumber)}</span>
                 </td>
-                <td class="document-title">
-                    ${link !== '#' ? 
-                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
-                        `<span title="${title}">${title}</span>`
-                    }
-                </td>
+                <td class="document-title">${titleCellHtml(link, title)}</td>
                 <td>
-                    <span class="conclusion-badge ${conclusionClass}">${conclusion}</span>
+                    <span class="conclusion-badge ${conclusionClass}">${esc(conclusion)}</span>
                 </td>
-                <td class="date-cell">${publishedDate}</td>
-                <td class="date-cell">${collectedDate}</td>
+                <td class="date-cell">${esc(publishedDate)}</td>
+                <td class="date-cell">${esc(collectedDate)}</td>
             `;
         } else if (this.siteKey === 'mois') {
             // 행정안전부: 세목 컬럼 포함
@@ -575,24 +562,18 @@ class ExpertDataTable {
             const documentNumber = item['문서번호'] || '-';
             const title = item['제목'] || '-';
             const publishedDate = this.formatDate(item['생산일자']);
-            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
-            const link = item['링크'] || '#';
+            const link = TaxUI.safeUrl(item['링크']) || '#';
             
             row.innerHTML = `
                 <td>
-                    <span class="tax-category">${taxCategory}</span>
+                    <span class="tax-category">${esc(taxCategory)}</span>
                 </td>
                 <td>
-                    <span class="document-number">${documentNumber}</span>
+                    <span class="document-number">${esc(documentNumber)}</span>
                 </td>
-                <td class="document-title">
-                    ${link !== '#' ? 
-                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
-                        `<span title="${title}">${title}</span>`
-                    }
-                </td>
-                <td class="date-cell">${publishedDate}</td>
-                <td class="date-cell">${collectedDate}</td>
+                <td class="document-title">${titleCellHtml(link, title)}</td>
+                <td class="date-cell">${esc(publishedDate)}</td>
+                <td class="date-cell">${esc(collectedDate)}</td>
             `;
         } else if (this.siteKey === 'scourt_scheduled_decisions') {
             // 대법원 선고예정 판결: 선고일자, 사건번호, 사건명, 조세 후보 표시
@@ -602,48 +583,36 @@ class ExpertDataTable {
             const taxStatus = item['조세관련'] || '-';
             const taxStatusClass = this.getTaxStatusClass(taxStatus);
             const taxKeywords = item['관련키워드'] || '-';
-            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
-            const link = item['쟁점PDF'] || item['보도자료링크'] || '#';
+            const link = TaxUI.safeUrl(item['쟁점PDF'] || item['보도자료링크']) || '#';
 
             row.innerHTML = `
-                <td class="date-cell">${decisionDate}</td>
+                <td class="date-cell">${esc(decisionDate)}</td>
                 <td>
-                    <span class="document-number">${caseNumber}</span>
+                    <span class="document-number">${esc(caseNumber)}</span>
                 </td>
-                <td class="document-title">
-                    ${link !== '#' ?
-                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` :
-                        `<span title="${title}">${title}</span>`
-                    }
+                <td class="document-title">${titleCellHtml(link, title)}</td>
+                <td>
+                    <span class="conclusion-badge ${taxStatusClass}">${esc(taxStatus)}</span>
                 </td>
                 <td>
-                    <span class="conclusion-badge ${taxStatusClass}">${taxStatus}</span>
+                    <span class="tax-category">${esc(taxKeywords)}</span>
                 </td>
-                <td>
-                    <span class="tax-category">${taxKeywords}</span>
-                </td>
-                <td class="date-cell">${collectedDate}</td>
+                <td class="date-cell">${esc(collectedDate)}</td>
             `;
         } else {
             // 기타 사이트: 기존 공통 포맷
             const documentNumber = item['문서번호'] || item['판례번호'] || item['청구번호'] || item['번호'] || item['사건번호'] || '-';
             const title = item['제목'] || item['심판내용'] || item['사건명'] || '-';
             const publishedDate = this.formatDate(item['게시일'] || item['작성일'] || item['선고일'] || item['선고일자'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자']);
-            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
-            const link = item['링크'] || item['원문링크'] || '#';
+            const link = TaxUI.safeUrl(item['링크'] || item['원문링크']) || '#';
             
             row.innerHTML = `
                 <td>
-                    <span class="document-number">${documentNumber}</span>
+                    <span class="document-number">${esc(documentNumber)}</span>
                 </td>
-                <td class="document-title">
-                    ${link !== '#' ? 
-                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
-                        `<span title="${title}">${title}</span>`
-                    }
-                </td>
-                <td class="date-cell">${publishedDate}</td>
-                <td class="date-cell">${collectedDate}</td>
+                <td class="document-title">${titleCellHtml(link, title)}</td>
+                <td class="date-cell">${esc(publishedDate)}</td>
+                <td class="date-cell">${esc(collectedDate)}</td>
             `;
         }
         

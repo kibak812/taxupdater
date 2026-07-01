@@ -432,8 +432,8 @@
         border-bottom: 1px solid var(--color-border);
         display: grid;
         gap: 4px 12px;
-        grid-template-columns: 120px minmax(0, 1fr);
-        padding: 11px 12px;
+        grid-template-columns: minmax(0, 1fr) auto;
+        padding: 12px;
     }
 
     .recent-table tbody tr:last-child {
@@ -443,53 +443,64 @@
     .recent-table td {
         border-bottom: 0;
         display: block;
+        max-width: 100%;
+        min-width: 0;
+        overflow: hidden;
         padding: 0;
     }
 
+    /* Card order: source + date on top, then title, document number, badges */
     .recent-table td:nth-child(1) {
         grid-column: 1;
         grid-row: 1;
         width: auto;
     }
 
-    .recent-table td:nth-child(2) {
-        align-self: start;
-        grid-column: 1;
+    .recent-table td:nth-child(6) {
+        align-self: center;
+        font-size: 12px;
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: end;
+        width: auto;
+    }
+
+    .recent-table td:nth-child(5) {
+        grid-column: 1 / -1;
         grid-row: 2;
+        max-width: none;
+        white-space: normal;
+    }
+
+    .recent-table td:nth-child(5) .title-text {
+        display: -webkit-box;
+        line-height: 1.45;
+        max-width: none;
+        white-space: normal;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+    }
+
+    .recent-table td:nth-child(2) {
+        grid-column: 1 / -1;
+        grid-row: 3;
         width: auto;
     }
 
     .recent-table td:nth-child(3) {
-        align-self: start;
-        grid-column: 2;
-        grid-row: 1;
-        max-width: 100%;
-        min-width: 0;
-        overflow: hidden;
+        grid-column: 1 / -1;
+        grid-row: 4;
         width: auto;
     }
 
     .recent-table td:nth-child(4) {
-        align-self: start;
-        grid-column: 2;
-        grid-row: 2;
-        max-width: 100%;
-        min-width: 0;
-        overflow: hidden;
+        grid-column: 1 / -1;
+        grid-row: 5;
         width: auto;
     }
 
-    .recent-table th:nth-child(5),
-    .recent-table td:nth-child(5),
-    .recent-table th:nth-child(6),
-    .recent-table td:nth-child(6),
-    .recent-table th:nth-child(7),
     .recent-table td:nth-child(7) {
         display: none;
-    }
-
-    .recent-table .title-text {
-        max-width: clamp(160px, 42vw, 260px);
     }
 
     .source-filter-list {
@@ -517,8 +528,9 @@
     }
 
     .filter-btn {
-        padding-left: 8px;
-        padding-right: 8px;
+        min-height: 38px;
+        padding-left: 10px;
+        padding-right: 10px;
     }
 
     .panel-header,

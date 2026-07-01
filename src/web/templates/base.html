@@ -41,6 +41,7 @@
     <div id="toastContainer" class="toast-container"></div>
     {% block overlays %}{% endblock %}
 
+    <script>window.SITE_DISPLAY = {{ site_display | tojson }};</script>
     <script src="/static/js/common.js?v={{ asset_version }}"></script>
     {% block scripts %}{% endblock %}
 </body>

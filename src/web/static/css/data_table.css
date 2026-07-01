@@ -506,6 +506,6 @@
 
     .data-actions .btn,
     .filter-toggle {
-        width: 100%;
+        flex: 1 1 0;
     }
 }

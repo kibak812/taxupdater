@@ -444,7 +444,7 @@ class ExpertDashboard {
     openNewItem(item) {
         const target = this.getNewItemTarget(item);
         if (!target) return;
-        window.location.href = target.url;
+        window.open(target.url, '_blank', 'noopener');
     }
 
     getNewItemExternalLink(item) {
@@ -503,18 +503,7 @@ class ExpertDashboard {
     }
 
     normalizeExternalUrl(value) {
-        const raw = String(value || '').trim();
-        if (!raw || raw === '#') return '';
-
-        try {
-            const url = new URL(raw, window.location.origin);
-            if (!['http:', 'https:'].includes(url.protocol)) {
-                return '';
-            }
-            return url.href;
-        } catch (error) {
-            return '';
-        }
+        return TaxUI.safeUrl(value);
     }
 
     firstTruthy(values) {

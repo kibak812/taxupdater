@@ -6,27 +6,8 @@
 (function () {
     'use strict';
 
-    const SITE_NAMES = {
-        tax_tribunal: '심판원 결정례',
-        nts_authority: '국세청 유권해석',
-        nts_precedent: '국세청 판례',
-        moef: '기획재정부',
-        mois: '행정안전부',
-        bai: '감사원',
-        scourt_major_decisions: '전국법원 주요판결',
-        scourt_scheduled_decisions: '대법원 선고예정'
-    };
-
-    const SITE_COLORS = {
-        tax_tribunal: '#4F46E5',
-        nts_authority: '#059669',
-        nts_precedent: '#D97706',
-        moef: '#8B5CF6',
-        mois: '#DC2626',
-        bai: '#6B7280',
-        scourt_major_decisions: '#0F766E',
-        scourt_scheduled_decisions: '#B45309'
-    };
+    // Injected by base.html from the server-side single source (src/config/sites.py SITE_DISPLAY)
+    const SITE_DISPLAY = window.SITE_DISPLAY || {};
 
     const SOURCE_ORDER = [
         'nts_authority',
@@ -50,12 +31,32 @@
             .replace(/'/g, '&#039;');
     }
 
+    /** Allow only http(s) URLs; returns '' for anything else (javascript:, data:, malformed). */
+    function safeUrl(value) {
+        const raw = String(value || '').trim();
+        if (!raw || raw === '#') return '';
+
+        try {
+            const url = new URL(raw, window.location.origin);
+            if (!['http:', 'https:'].includes(url.protocol)) {
+                return '';
+            }
+            return url.href;
+        } catch (error) {
+            return '';
+        }
+    }
+
+    function getSiteKeys() {
+        return Object.keys(SITE_DISPLAY);
+    }
+
     function getSiteName(siteKey, fallback = '') {
-        return SITE_NAMES[siteKey] || fallback || siteKey;
+        return SITE_DISPLAY[siteKey]?.name || fallback || siteKey;
     }
 
     function getSiteColor(siteKey) {
-        return SITE_COLORS[siteKey] || '#6B7280';
+        return SITE_DISPLAY[siteKey]?.color || '#6B7280';
     }
 
     function showToast(title, type, message) {
@@ -225,10 +226,10 @@
     }
 
     window.TaxUI = {
-        SITE_NAMES,
-        SITE_COLORS,
         SOURCE_ORDER,
         escapeHtml,
+        safeUrl,
+        getSiteKeys,
         getSiteName,
         getSiteColor,
         showToast,

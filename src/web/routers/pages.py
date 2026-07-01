@@ -3,20 +3,20 @@ from fastapi.responses import HTMLResponse
 
 from src.web.context import WebAppContext
 
-ASSET_VERSION = "fe-20260702-2"
-
-
-def _page_context(request: Request, active_nav: str, **extra) -> dict:
-    return {
-        "request": request,
-        "asset_version": ASSET_VERSION,
-        "active_nav": active_nav,
-        **extra,
-    }
+ASSET_VERSION = "fe-20260702-3"
 
 
 def create_page_router(context: WebAppContext) -> APIRouter:
     router = APIRouter()
+
+    def _page_context(request: Request, active_nav: str, **extra) -> dict:
+        return {
+            "request": request,
+            "asset_version": ASSET_VERSION,
+            "active_nav": active_nav,
+            "site_display": context.site_info,
+            **extra,
+        }
 
     @router.get("/", response_class=HTMLResponse)
     @router.get("/dashboard", response_class=HTMLResponse)

@@ -7,17 +7,6 @@ class ExpertSettings {
     constructor() {
         this.jobHistoryLimit = 30;
         this.visibleJobHistoryCount = 5;
-        this.siteNames = {
-            'tax_tribunal': '조세심판원',
-            'nts_authority': '국세청(유권해석)',
-            'nts_precedent': '국세청(판례)',
-            'moef': '기획재정부',
-            'mois': '행정안전부',
-            'bai': '감사원',
-            'scourt_major_decisions': '전국법원 주요판결',
-            'scourt_scheduled_decisions': '대법원 선고예정 판결'
-        };
-        
         this.defaultSettings = {
             defaultInterval: 6,
             maxRetries: 3,
@@ -189,7 +178,7 @@ class ExpertSettings {
         
         container.innerHTML = '';
         
-        const siteKeys = Object.keys(TaxUI.SITE_COLORS);
+        const siteKeys = TaxUI.getSiteKeys();
 
         if (siteKeys.length === 0) {
             container.innerHTML = `
@@ -308,8 +297,8 @@ class ExpertSettings {
         const item = document.createElement('div');
         item.className = 'source-tile';
         
-        const siteName = this.siteNames[siteKey] || siteKey;
-        const siteColor = TaxUI.SITE_COLORS[siteKey] || '#6B7280';
+        const siteName = TaxUI.getSiteName(siteKey);
+        const siteColor = TaxUI.getSiteColor(siteKey);
         item.style.setProperty('--setting-accent', siteColor);
         
         const isEnabled = schedule?.enabled || false;
@@ -405,7 +394,7 @@ class ExpertSettings {
                     body: JSON.stringify(scheduleData)
                 });
 
-                this.showToast('스케줄 활성화', 'success', `${this.siteNames[siteKey]} 모니터링이 활성화되었습니다`);
+                this.showToast('스케줄 활성화', 'success', `${TaxUI.getSiteName(siteKey)} 모니터링이 활성화되었습니다`);
 
             } else {
                 // Disable site
@@ -413,7 +402,7 @@ class ExpertSettings {
                     method: 'DELETE'
                 });
 
-                this.showToast('스케줄 비활성화', 'success', `${this.siteNames[siteKey]} 모니터링이 비활성화되었습니다`);
+                this.showToast('스케줄 비활성화', 'success', `${TaxUI.getSiteName(siteKey)} 모니터링이 비활성화되었습니다`);
             }
             
             // Reload site schedules to update UI
@@ -592,7 +581,7 @@ class ExpertSettings {
 
             } catch (error) {
                 console.warn(`Failed to update schedule for ${siteKey}:`, error);
-                this.showToast('스케줄 업데이트 실패', 'warning', `${this.siteNames[siteKey]} 스케줄 업데이트에 실패했습니다`);
+                this.showToast('스케줄 업데이트 실패', 'warning', `${TaxUI.getSiteName(siteKey)} 스케줄 업데이트에 실패했습니다`);
             }
         }
         
@@ -738,7 +727,7 @@ class ExpertSettings {
         const startTime = new Date(job.start_time);
         const relativeTime = this.formatRelativeTime(startTime);
         const siteKey = job.site_key;
-        const badgeColor = TaxUI.SITE_COLORS[siteKey] || '#6B7280';
+        const badgeColor = TaxUI.getSiteColor(siteKey);
         item.style.setProperty('--badge-color', badgeColor);
         item.style.setProperty('--badge-text-color', 'white');
 
@@ -789,11 +778,11 @@ class ExpertSettings {
         item.innerHTML = `
             <div class="timeline-header">
                 <h4 class="timeline-title">
-                    ${statusIcon} ${this.getSiteName(siteKey)} 크롤링 ${statusText}
+                    ${statusIcon} ${TaxUI.getSiteName(siteKey)} 크롤링 ${statusText}
                 </h4>
                 <div class="timeline-meta">
                     <span class="organization-badge">
-                        ${this.getSiteName(siteKey)}
+                        ${TaxUI.getSiteName(siteKey)}
                     </span>
                     <span class="job-status ${statusClass}">${statusText}</span>
                     <span>${relativeTime}</span>
@@ -810,17 +799,13 @@ class ExpertSettings {
         return item;
     }
 
-    getSiteName(siteKey) {
-        return this.siteNames[siteKey] || siteKey;
-    }
-
     updateOperationsSummary() {
         const schedules = Object.values(this.siteSchedules || {});
         const enabledSchedules = schedules.filter(schedule => Boolean(schedule.enabled));
 
         const activeSourcesCount = document.getElementById('activeSourcesCount');
         if (activeSourcesCount) {
-            activeSourcesCount.textContent = `${enabledSchedules.length} / ${Object.keys(TaxUI.SITE_COLORS).length}`;
+            activeSourcesCount.textContent = `${enabledSchedules.length} / ${TaxUI.getSiteKeys().length}`;
         }
 
         const nextRunSummary = document.getElementById('nextRunSummary');
@@ -834,7 +819,7 @@ class ExpertSettings {
                 .sort((a, b) => a.date - b.date)[0];
 
             nextRunSummary.textContent = nextRun
-                ? `${this.getSiteName(nextRun.siteKey)} ${this.formatDateTime(nextRun.date)}`
+                ? `${TaxUI.getSiteName(nextRun.siteKey)} ${this.formatDateTime(nextRun.date)}`
                 : '예정 없음';
         }
 
@@ -853,7 +838,7 @@ class ExpertSettings {
             }
 
             const statusInfo = this.getJobStatusInfo(latestJob.status);
-            latestRunStatus.textContent = `${this.getSiteName(latestJob.site_key)} ${statusInfo.text}`;
+            latestRunStatus.textContent = `${TaxUI.getSiteName(latestJob.site_key)} ${statusInfo.text}`;
             latestRunStatus.className = `operation-value ${statusInfo.className}`;
             latestRunMeta.textContent = `${this.formatRelativeTime(new Date(latestJob.start_time))} · ${this.formatJobResult(latestJob)}`;
         }

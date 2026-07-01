@@ -723,4 +723,12 @@
     .app-nav {
         margin-left: 0;
     }
+
+    .app-nav-link {
+        padding: 10px 13px;
+    }
+
+    .btn {
+        min-height: 38px;
+    }
 }
