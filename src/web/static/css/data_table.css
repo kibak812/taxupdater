@@ -1,0 +1,504 @@
+/* Data table page styles. Tokens and shared components come from common.css. */
+
+.data-page *,
+.data-page *::before,
+.data-page *::after {
+    letter-spacing: 0;
+}
+
+.data-page .container {
+    max-width: min(1280px, calc(100vw - 48px));
+    padding: 0;
+}
+
+.breadcrumb {
+    align-items: center;
+    color: var(--color-faint);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 13px;
+    gap: 8px;
+    margin-bottom: 18px;
+}
+
+.breadcrumb a {
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+.breadcrumb a:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.filter-status {
+    align-items: center;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(20, 20, 19, 0.035);
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding: 16px 18px;
+}
+
+.filter-status h2 {
+    color: var(--color-text);
+    font-family: var(--font-family);
+    font-size: 17px;
+    font-weight: 650;
+    line-height: 1.35;
+    margin: 0 0 4px;
+    overflow-wrap: anywhere;
+}
+
+.filter-description {
+    color: var(--color-muted);
+    font-size: 13px;
+    line-height: 1.45;
+    margin: 0;
+    max-width: 72ch;
+    overflow-wrap: anywhere;
+}
+
+.data-toolbar {
+    align-items: flex-end;
+    display: flex;
+    gap: 16px;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.data-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.search-box {
+    display: block;
+    flex: 1;
+    max-width: 560px;
+    min-width: 280px;
+}
+
+.search-label {
+    color: var(--color-primary);
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+    margin: 0 0 6px;
+}
+
+.search-field {
+    align-items: center;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius);
+    display: flex;
+    gap: 10px;
+    min-height: 46px;
+    padding: 0 14px;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.search-field svg {
+    color: var(--color-faint);
+    flex: 0 0 auto;
+}
+
+.search-field:focus-within {
+    border-color: var(--color-primary);
+    box-shadow: var(--focus-ring);
+}
+
+.search-input {
+    background: transparent;
+    border: 0;
+    color: var(--color-text);
+    font-family: var(--font-family);
+    font-size: 15px;
+    min-width: 0;
+    padding: 0;
+    width: 100%;
+}
+
+.search-input:focus {
+    box-shadow: none;
+    outline: none;
+}
+
+.search-input::placeholder {
+    color: var(--color-faint);
+}
+
+.filter-toggle {
+    border-color: var(--color-border-strong);
+    color: var(--color-primary);
+    gap: 8px;
+}
+
+.filter-toggle:hover {
+    background: var(--color-bg);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.filter-toggle.active {
+    background: var(--color-primary-soft);
+    border-color: var(--color-primary-border);
+    color: var(--color-primary);
+}
+
+.filter-chevron {
+    transition: transform 0.2s ease;
+}
+
+.filter-toggle.active .filter-chevron {
+    transform: rotate(180deg);
+}
+
+.filter-panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    box-shadow: 0 10px 28px rgba(20, 20, 19, 0.04);
+    margin-bottom: 16px;
+    padding: 20px;
+}
+
+.filter-header {
+    align-items: center;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.filter-header h3 {
+    color: var(--color-text);
+    font-family: var(--font-family);
+    font-size: 18px;
+    font-weight: 500;
+    line-height: 1.3;
+    margin: 0;
+}
+
+.filter-content {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 280px));
+    justify-content: start;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.filter-group label {
+    color: #30343B;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.filter-select {
+    appearance: none;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius);
+    color: var(--color-text);
+    cursor: pointer;
+    font-family: var(--font-family);
+    font-size: 14px;
+    min-height: 42px;
+    padding: 9px 12px;
+}
+
+.filter-select:focus {
+    border-color: var(--color-primary);
+    box-shadow: var(--focus-ring);
+    outline: none;
+}
+
+.data-table-container {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius);
+    box-shadow: 0 14px 40px rgba(20, 20, 19, 0.05);
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.data-page .data-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    min-width: 100%;
+    table-layout: fixed;
+    width: 100%;
+}
+
+.data-site-tax_tribunal .data-table {
+    min-width: 1120px;
+}
+
+.data-site-scourt_scheduled_decisions .data-table {
+    min-width: 1160px;
+}
+
+.data-page .data-table th {
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border-strong);
+    color: #30343B;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.35;
+    padding: 13px 28px 13px 14px;
+    position: relative;
+    text-align: left;
+    user-select: none;
+    vertical-align: bottom;
+    white-space: nowrap;
+}
+
+.data-page .data-table th:hover {
+    background: #F1F3F5;
+}
+
+.data-page .data-table th.sortable::after {
+    color: var(--color-faint);
+    content: '↕';
+    font-size: 12px;
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.data-page .data-table th.sort-asc::after {
+    color: var(--color-primary);
+    content: '↑';
+}
+
+.data-page .data-table th.sort-desc::after {
+    color: var(--color-primary);
+    content: '↓';
+}
+
+.data-page .data-table td {
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    color: #30343B;
+    font-size: 14px;
+    line-height: 1.48;
+    padding: 14px;
+    vertical-align: top;
+}
+
+.data-page .data-table tr:hover td {
+    background: var(--color-bg);
+}
+
+.data-page .data-table tr:last-child td {
+    border-bottom: none;
+}
+
+.data-page .data-table th[data-column="tax_category"],
+.data-page .data-table th[data-column="tax_keywords"] {
+    width: 128px;
+}
+
+.data-page .data-table th[data-column="decision_type"],
+.data-page .data-table th[data-column="conclusion"],
+.data-page .data-table th[data-column="tax_status"] {
+    width: 104px;
+}
+
+.data-page .data-table th[data-column="claim_number"],
+.data-page .data-table th[data-column="document_number"] {
+    width: 158px;
+}
+
+.data-page .data-table th[data-column="published_date"],
+.data-page .data-table th[data-column="decision_date"] {
+    width: 126px;
+}
+
+.data-page .data-table th[data-column="collected_date"] {
+    width: 202px;
+}
+
+.document-title {
+    min-width: 0;
+}
+
+.document-title a,
+.document-title span {
+    color: var(--color-primary);
+    display: -webkit-box;
+    overflow: hidden;
+    text-decoration: none;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.document-title a:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.data-page .date-cell {
+    color: var(--color-faint);
+    font-size: 12px;
+}
+
+.pagination {
+    align-items: center;
+    background: transparent;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    padding: 20px 0 0;
+}
+
+.pagination button {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius);
+    color: #30343B;
+    cursor: pointer;
+    font-family: var(--font-family);
+    font-size: 13px;
+    min-height: 36px;
+    min-width: 36px;
+    padding: 8px 11px;
+}
+
+.pagination button:hover:not(:disabled) {
+    background: var(--color-bg);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.pagination button:disabled {
+    color: var(--color-faint);
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.pagination button.active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-surface);
+}
+
+.pagination-info {
+    color: var(--color-faint);
+    font-size: 13px;
+    line-height: 1.4;
+    margin-left: 6px;
+}
+
+.loading-state,
+.error-state,
+.empty-state {
+    color: var(--color-faint);
+    padding: 64px 24px;
+    text-align: center;
+}
+
+.error-state {
+    color: var(--color-danger);
+}
+
+.empty-state-icon {
+    align-items: center;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    color: var(--color-primary);
+    display: inline-flex;
+    height: 48px;
+    justify-content: center;
+    margin-bottom: 14px;
+    width: 48px;
+}
+
+.empty-state-icon svg {
+    height: 24px;
+    width: 24px;
+}
+
+.empty-state-title {
+    color: var(--color-text);
+    font-size: 18px;
+    font-weight: 500;
+    margin-bottom: 6px;
+}
+
+.empty-state-description {
+    color: var(--color-muted);
+    font-size: 14px;
+}
+
+@media (max-width: 920px) {
+    .filter-status {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 768px) {
+    .data-page .container {
+        max-width: calc(100vw - 32px);
+    }
+
+    .data-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .search-box {
+        max-width: none;
+        min-width: 0;
+    }
+
+    .data-actions {
+        justify-content: flex-start;
+    }
+
+    .filter-content {
+        grid-template-columns: 1fr;
+    }
+
+    .data-page .data-table {
+        min-width: 980px;
+    }
+
+    .data-site-tax_tribunal .data-table,
+    .data-site-scourt_scheduled_decisions .data-table {
+        min-width: 1120px;
+    }
+}
+
+@media (max-width: 560px) {
+    .data-page .container {
+        max-width: calc(100vw - 24px);
+    }
+
+    .filter-status {
+        padding: 14px;
+    }
+
+    .data-actions .btn,
+    .filter-toggle {
+        width: 100%;
+    }
+}

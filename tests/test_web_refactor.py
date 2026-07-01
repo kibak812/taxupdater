@@ -10,6 +10,7 @@ from src.web.helpers import build_dashboard_payload, build_site_data_payload
 from src.web.routers.data import (
     _build_item_details,
     _extract_details_from_metadata,
+    _filter_scourt_non_tax_rows,
     _first_non_empty_link,
 )
 
@@ -208,6 +209,8 @@ class WebRefactorTests(unittest.TestCase):
                 "결론": "국승",
                 "링크": "",
                 "쟁점PDF": "https://example.com/issue.pdf",
+                "문서번호": "조심-2026-인-0094",
+                "생산일자": "2026.06.23.",
             }
         }
 
@@ -219,6 +222,8 @@ class WebRefactorTests(unittest.TestCase):
                 "data_decision_type": "기각",
                 "data_conclusion": "국승",
                 "data_tax_status": "",
+                "data_document_number": "조심-2026-인-0094",
+                "data_document_date": "2026.06.23.",
             },
         )
 
@@ -230,6 +235,8 @@ class WebRefactorTests(unittest.TestCase):
                     "유형": "취소",
                     "결론": "국패",
                     "링크": "https://example.com/source",
+                    "청구번호": "조심2026중1234",
+                    "결정일": "2026-06-23",
                 }
             ),
             {
@@ -238,6 +245,8 @@ class WebRefactorTests(unittest.TestCase):
                 "data_decision_type": "취소",
                 "data_conclusion": "국패",
                 "data_tax_status": "",
+                "data_document_number": "조심2026중1234",
+                "data_document_date": "2026-06-23",
             },
         )
 
@@ -245,6 +254,26 @@ class WebRefactorTests(unittest.TestCase):
         self.assertEqual(
             _first_non_empty_link(["", None, "#", " https://example.com/doc "]),
             "https://example.com/doc",
+        )
+
+    def test_scourt_scheduled_data_hides_non_tax_rows_by_default(self):
+        data = pd.DataFrame(
+            [
+                {"사건번호": "2026두30340", "조세관련": "조세후보"},
+                {"사건번호": "2026도5355", "조세관련": "비조세"},
+            ]
+        )
+
+        filtered = _filter_scourt_non_tax_rows("scourt_scheduled_decisions", data)
+
+        self.assertEqual(filtered["사건번호"].tolist(), ["2026두30340"])
+        self.assertEqual(
+            _filter_scourt_non_tax_rows(
+                "scourt_scheduled_decisions",
+                data,
+                include_non_tax=True,
+            )["사건번호"].tolist(),
+            ["2026두30340", "2026도5355"],
         )
 
 

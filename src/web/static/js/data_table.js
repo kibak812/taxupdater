@@ -7,7 +7,6 @@ class ExpertDataTable {
     constructor() {
         this.siteKey = window.siteConfig.siteKey;
         this.siteName = window.siteConfig.siteName;
-        this.siteColor = window.siteConfig.siteColor;
         
         // 사이트별 컴럼명 매핑
         this.siteColumnNames = {
@@ -226,14 +225,8 @@ class ExpertDataTable {
             }
         }
         
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const result = await response.json();
-        
+        const result = await TaxUI.fetchJson(url);
+
         this.rawData = result.data || [];
         this.data = this.rawData;
         this.totalCount = result.pagination?.total_count || 0;
@@ -260,14 +253,8 @@ class ExpertDataTable {
             }
         }
         
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const result = await response.json();
-        
+        const result = await TaxUI.fetchJson(url);
+
         this.allData = result.data || [];
         this.updateTableHeader();
         this.setupFilters();
@@ -888,13 +875,7 @@ class ExpertDataTable {
             
             // Get all data (without pagination)
             const url = `/api/sites/${this.siteKey}/data?limit=10000&search=${encodeURIComponent(this.searchQuery)}`;
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-                throw new Error('내보내기 실패');
-            }
-            
-            const result = await response.json();
+            const result = await TaxUI.fetchJson(url);
             const exportData = result.data || [];
             
             // Convert to CSV
@@ -972,23 +953,23 @@ class ExpertDataTable {
         if (this.siteKey === 'tax_tribunal') {
             // 조세심판원: 세목, 유형 필터 모두 표시
             this.populateFilterOptions();
-            taxCategoryFilter.style.display = 'block';
-            decisionTypeFilter.style.display = 'block';
+            taxCategoryFilter.style.display = 'flex';
+            decisionTypeFilter.style.display = 'flex';
             conclusionFilter.style.display = 'none';
             filterToggle.style.display = 'flex';
         } else if (this.siteKey === 'nts_authority') {
             // 국세청 유권해석: 세목 필터만 표시
             this.populateFilterOptions();
-            taxCategoryFilter.style.display = 'block';
+            taxCategoryFilter.style.display = 'flex';
             decisionTypeFilter.style.display = 'none';
             conclusionFilter.style.display = 'none';
             filterToggle.style.display = 'flex';
         } else if (this.siteKey === 'nts_precedent') {
             // 국세청 판례: 세목, 결론 필터 표시
             this.populateFilterOptions();
-            taxCategoryFilter.style.display = 'block';
+            taxCategoryFilter.style.display = 'flex';
             decisionTypeFilter.style.display = 'none';
-            conclusionFilter.style.display = 'block';
+            conclusionFilter.style.display = 'flex';
             filterToggle.style.display = 'flex';
         } else {
             // 기타 사이트: 필터 숨김
@@ -1155,33 +1136,7 @@ class ExpertDataTable {
     }
     
     showToast(title, type, message) {
-        const container = document.getElementById('toastContainer');
-        if (!container) return;
-        
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        
-        toast.innerHTML = `
-            <div><strong>${title}</strong></div>
-            <div>${message}</div>
-        `;
-        
-        container.appendChild(toast);
-        
-        // Show animation
-        setTimeout(() => {
-            toast.classList.add('show');
-        }, 100);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            toast.classList.remove('show');
-            setTimeout(() => {
-                if (toast.parentNode) {
-                    toast.parentNode.removeChild(toast);
-                }
-            }, 300);
-        }, 5000);
+        TaxUI.showToast(title, type, message);
     }
 }
 

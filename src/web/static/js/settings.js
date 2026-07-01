@@ -7,17 +7,6 @@ class ExpertSettings {
     constructor() {
         this.jobHistoryLimit = 30;
         this.visibleJobHistoryCount = 5;
-        this.siteColors = {
-            'tax_tribunal': '#4F46E5',
-            'nts_authority': '#059669',
-            'nts_precedent': '#D97706',
-            'moef': '#8B5CF6',
-            'mois': '#DC2626',
-            'bai': '#6B7280',
-            'scourt_major_decisions': '#0F766E',
-            'scourt_scheduled_decisions': '#B45309'
-        };
-        
         this.siteNames = {
             'tax_tribunal': '조세심판원',
             'nts_authority': '국세청(유권해석)',
@@ -136,8 +125,7 @@ class ExpertSettings {
     
     async loadSystemStatus() {
         try {
-            const response = await fetch('/api/system-status');
-            const data = await response.json();
+            const data = await TaxUI.fetchJson('/api/system-status');
             this.systemStatus = data;
             
             const isRunning = data.scheduler_status?.scheduler_running || false;
@@ -175,9 +163,8 @@ class ExpertSettings {
     
     async loadSiteSchedules() {
         try {
-            const response = await fetch('/api/schedules');
-            const data = await response.json();
-            
+            const data = await TaxUI.fetchJson('/api/schedules');
+
             this.siteSchedules = {};
             if (data.schedules) {
                 data.schedules.forEach(schedule => {
@@ -202,7 +189,7 @@ class ExpertSettings {
         
         container.innerHTML = '';
         
-        const siteKeys = Object.keys(this.siteColors);
+        const siteKeys = Object.keys(TaxUI.SITE_COLORS);
 
         if (siteKeys.length === 0) {
             container.innerHTML = `
@@ -322,7 +309,7 @@ class ExpertSettings {
         item.className = 'source-tile';
         
         const siteName = this.siteNames[siteKey] || siteKey;
-        const siteColor = this.siteColors[siteKey] || '#6B7280';
+        const siteColor = TaxUI.SITE_COLORS[siteKey] || '#6B7280';
         item.style.setProperty('--setting-accent', siteColor);
         
         const isEnabled = schedule?.enabled || false;
@@ -410,30 +397,22 @@ class ExpertSettings {
                     notification_threshold: this.currentSettings.notificationThreshold
                 };
                 
-                const response = await fetch('/api/schedules', {
+                await TaxUI.fetchJson('/api/schedules', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify(scheduleData)
                 });
-                
-                if (!response.ok) {
-                    throw new Error('Failed to enable schedule');
-                }
-                
+
                 this.showToast('스케줄 활성화', 'success', `${this.siteNames[siteKey]} 모니터링이 활성화되었습니다`);
-                
+
             } else {
                 // Disable site
-                const response = await fetch(`/api/schedules/${siteKey}`, {
+                await TaxUI.fetchJson(`/api/schedules/${siteKey}`, {
                     method: 'DELETE'
                 });
-                
-                if (!response.ok) {
-                    throw new Error('Failed to disable schedule');
-                }
-                
+
                 this.showToast('스케줄 비활성화', 'success', `${this.siteNames[siteKey]} 모니터링이 비활성화되었습니다`);
             }
             
@@ -602,19 +581,15 @@ class ExpertSettings {
                 };
                 
                 console.log(`Updating schedule for ${siteKey}: ${schedule.cron_expression} → ${newCronExpression}`);
-                
-                const response = await fetch('/api/schedules', {
+
+                await TaxUI.fetchJson('/api/schedules', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify(scheduleData)
                 });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
+
             } catch (error) {
                 console.warn(`Failed to update schedule for ${siteKey}:`, error);
                 this.showToast('스케줄 업데이트 실패', 'warning', `${this.siteNames[siteKey]} 스케줄 업데이트에 실패했습니다`);
@@ -638,8 +613,7 @@ class ExpertSettings {
 
     async loadLatestUpdates() {
         try {
-            const response = await fetch(`/api/job-history?limit=${this.jobHistoryLimit}`);
-            const data = await response.json();
+            const data = await TaxUI.fetchJson(`/api/job-history?limit=${this.jobHistoryLimit}`);
 
             this.jobHistory = data.job_history || [];
             this.renderLatestUpdates(this.jobHistory);
@@ -685,16 +659,12 @@ class ExpertSettings {
                 btn.textContent = '탐색 시작 중...';
             }
 
-            const response = await fetch('/api/crawl/all', {
+            await TaxUI.fetchJson('/api/crawl/all', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 }
             });
-
-            if (!response.ok) {
-                throw new Error('크롤링 시작 실패');
-            }
 
             this.showToast('즉시 탐색 시작', 'success', '전체 사이트 크롤링을 시작했습니다.');
             setTimeout(() => this.loadLatestUpdates(), 1500);
@@ -768,7 +738,7 @@ class ExpertSettings {
         const startTime = new Date(job.start_time);
         const relativeTime = this.formatRelativeTime(startTime);
         const siteKey = job.site_key;
-        const badgeColor = this.siteColors[siteKey] || '#6B7280';
+        const badgeColor = TaxUI.SITE_COLORS[siteKey] || '#6B7280';
         item.style.setProperty('--badge-color', badgeColor);
         item.style.setProperty('--badge-text-color', 'white');
 
@@ -850,7 +820,7 @@ class ExpertSettings {
 
         const activeSourcesCount = document.getElementById('activeSourcesCount');
         if (activeSourcesCount) {
-            activeSourcesCount.textContent = `${enabledSchedules.length} / ${Object.keys(this.siteColors).length}`;
+            activeSourcesCount.textContent = `${enabledSchedules.length} / ${Object.keys(TaxUI.SITE_COLORS).length}`;
         }
 
         const nextRunSummary = document.getElementById('nextRunSummary');
@@ -1068,31 +1038,16 @@ class ExpertSettings {
     }
     
     loadNotificationSetting() {
-        try {
-            const saved = localStorage.getItem('taxupdater_browser_notifications');
-            return saved ? JSON.parse(saved) : false;
-        } catch (error) {
-            console.error('알림 설정 로드 실패:', error);
-            return false;
-        }
+        return TaxUI.loadNotificationSetting();
     }
-    
+
     saveNotificationSetting(enabled) {
-        try {
-            localStorage.setItem('taxupdater_browser_notifications', JSON.stringify(enabled));
-        } catch (error) {
-            console.error('알림 설정 저장 실패:', error);
-        }
+        TaxUI.saveNotificationSetting(enabled);
     }
 
     async loadNtfySettings() {
         try {
-            const response = await fetch('/api/ntfy-settings');
-            if (!response.ok) {
-                throw new Error('ntfy 설정을 불러오지 못했습니다');
-            }
-
-            const settings = await response.json();
+            const settings = await TaxUI.fetchJson('/api/ntfy-settings');
             this.updateNtfySummary(settings);
             this.setText('ntfyTopicValue', settings.explicit_url_configured ? 'NTFY_URL 사용' : (settings.topic || '미설정'));
             this.setText('ntfyServerValue', settings.server_url || 'https://ntfy.sh');
@@ -1145,40 +1100,13 @@ class ExpertSettings {
     }
     
     showToast(title, type, message) {
-        const container = document.getElementById('toastContainer');
-        if (!container) return;
-        
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        
-        toast.innerHTML = `
-            <div><strong>${title}</strong></div>
-            <div>${message}</div>
-        `;
-        
-        container.appendChild(toast);
-        
-        // Show animation
-        setTimeout(() => {
-            toast.classList.add('show');
-        }, 100);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            toast.classList.remove('show');
-            setTimeout(() => {
-                if (toast.parentNode) {
-                    toast.parentNode.removeChild(toast);
-                }
-            }, 300);
-        }, 5000);
+        TaxUI.showToast(title, type, message);
     }
 
     // 터널 관리 메서드들
     async loadTunnelStatus() {
         try {
-            const response = await fetch('/api/tunnel-status');
-            const status = await response.json();
+            const status = await TaxUI.fetchJson('/api/tunnel-status');
             this.updateTunnelUI(status);
         } catch (error) {
             console.error('터널 상태 로드 실패:', error);

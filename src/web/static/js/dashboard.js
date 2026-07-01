@@ -7,48 +7,15 @@ class ExpertDashboard {
     constructor() {
         this.currentTimeFilter = 24;
         this.customRange = null;
-        this.websocket = null;
+        this.crawlSocket = null;
         this.refreshInterval = null;
-
-        this.siteColors = {
-            tax_tribunal: '#4F46E5',
-            nts_authority: '#059669',
-            nts_precedent: '#D97706',
-            moef: '#8B5CF6',
-            mois: '#DC2626',
-            bai: '#6B7280',
-            scourt_major_decisions: '#0F766E',
-            scourt_scheduled_decisions: '#B45309'
-        };
-
-        this.siteNames = {
-            tax_tribunal: '심판원 결정례',
-            nts_authority: '국세청 유권해석',
-            nts_precedent: '국세청 판례',
-            moef: '기획재정부',
-            mois: '행정안전부',
-            bai: '감사원',
-            scourt_major_decisions: '전국법원 주요판결',
-            scourt_scheduled_decisions: '대법원 선고예정'
-        };
-
-        this.sourceOrder = [
-            'nts_authority',
-            'nts_precedent',
-            'tax_tribunal',
-            'moef',
-            'mois',
-            'bai',
-            'scourt_major_decisions',
-            'scourt_scheduled_decisions'
-        ];
 
         this.dashboardData = { sites: [], last_refresh: null };
         this.recentCounts = {};
         this.newData = [];
         this.scheduleData = { schedules: [] };
 
-        this.browserNotificationEnabled = this.loadNotificationSetting();
+        this.browserNotificationEnabled = TaxUI.loadNotificationSetting();
         this.notificationPermission = 'default';
         this.isPageVisible = true;
         this.lastNotificationTime = new Map();
@@ -79,10 +46,6 @@ class ExpertDashboard {
             this.applyCustomDateRange();
         });
 
-        document.getElementById('settingsBtn')?.addEventListener('click', () => {
-            window.location.href = '/settings';
-        });
-
         document.getElementById('refreshDashboardBtn')?.addEventListener('click', () => {
             this.loadDashboardData();
         });
@@ -92,50 +55,20 @@ class ExpertDashboard {
         });
     }
 
-    async connectWebSocket() {
-        try {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/crawl`;
-
-            this.websocket = new WebSocket(wsUrl);
-
-            this.websocket.onopen = () => {
-                this.updateConnectionStatus(true);
-            };
-
-            this.websocket.onmessage = (event) => {
-                try {
-                    const message = JSON.parse(event.data);
-                    this.handleWebSocketMessage(message);
-                } catch (error) {
-                    console.error('WebSocket message parsing error:', error);
-                }
-            };
-
-            this.websocket.onclose = () => {
-                this.updateConnectionStatus(false);
-                setTimeout(() => {
-                    this.connectWebSocket();
-                }, 5000);
-            };
-
-            this.websocket.onerror = () => {
-                this.updateConnectionStatus(false);
-            };
-        } catch (error) {
-            this.updateConnectionStatus(false);
-        }
+    connectWebSocket() {
+        this.crawlSocket = TaxUI.connectCrawlSocket({
+            onMessage: (message) => this.handleWebSocketMessage(message),
+            onStatusChange: (isConnected) => this.updateConnectionStatus(isConnected)
+        });
     }
 
     updateConnectionStatus(isConnected) {
         const statusElement = document.getElementById('connectionStatus');
-        const dotElement = statusElement?.querySelector('.indicator-dot');
         const textElement = statusElement?.querySelector('span');
 
-        if (!statusElement || !dotElement || !textElement) return;
+        if (!statusElement || !textElement) return;
 
         statusElement.classList.toggle('is-offline', !isConnected);
-        dotElement.style.background = isConnected ? '#059669' : '#DC2626';
         textElement.textContent = isConnected ? '연결됨' : '끊김';
     }
 
@@ -173,9 +106,9 @@ class ExpertDashboard {
             const hours = this.getQueryHours();
             const [dashboardData, newDataData, scheduleData] =
                 await Promise.all([
-                    this.fetchJson('/api/dashboard'),
-                    this.fetchJson(`/api/new-data?hours=${hours}&limit=5000`),
-                    this.fetchOptionalJson('/api/schedules', {
+                    TaxUI.fetchJson('/api/dashboard'),
+                    TaxUI.fetchJson(`/api/new-data?hours=${hours}&limit=5000`),
+                    TaxUI.fetchOptionalJson('/api/schedules', {
                         schedules: [],
                         scheduler_running: false
                     })
@@ -193,24 +126,6 @@ class ExpertDashboard {
             this.renderFailureState();
         } finally {
             this.showLoading(false);
-        }
-    }
-
-    async fetchJson(url) {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`${url} ${response.status}`);
-        }
-        return response.json();
-    }
-
-    async fetchOptionalJson(url, fallback) {
-        try {
-            const response = await fetch(url);
-            if (!response.ok) return fallback;
-            return response.json();
-        } catch (error) {
-            return fallback;
         }
     }
 
@@ -350,7 +265,7 @@ class ExpertDashboard {
         if (!visibleItems.length) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" class="table-empty">새 항목 없음</td>
+                    <td colspan="7" class="table-empty">새 항목 없음</td>
                 </tr>
             `;
             return;
@@ -373,6 +288,7 @@ class ExpertDashboard {
 
             const titleText = this.escapeHtml(item.data_title || item.data_id || '제목 없음');
             const source = this.escapeHtml(this.getSiteName(item.site_key, item.site_name));
+            const documentNumber = this.escapeHtml(this.getDocumentNumber(item));
             const categoryBadges = this.renderBadgeList(this.getCategoryBadges(item));
             const decisionBadges = this.renderBadgeList(this.getDecisionBadges(item));
             const dateLabel = this.escapeHtml(this.formatDocumentDate(item));
@@ -380,6 +296,7 @@ class ExpertDashboard {
 
             row.innerHTML = `
                 <td><span class="source-badge" style="--source-color: ${this.getSiteColor(item.site_key)}">${source}</span></td>
+                <td class="document-cell"><span class="document-number">${documentNumber}</span></td>
                 <td class="category-cell">${categoryBadges}</td>
                 <td class="detail-cell">${decisionBadges}</td>
                 <td class="title-cell"><span class="title-text">${titleText}</span></td>
@@ -408,7 +325,7 @@ class ExpertDashboard {
         const sourceFilters = document.getElementById('sourceFilterList');
 
         if (recentBody) {
-            recentBody.innerHTML = '<tr><td colspan="6" class="table-empty">데이터 로드 실패</td></tr>';
+            recentBody.innerHTML = '<tr><td colspan="7" class="table-empty">데이터 로드 실패</td></tr>';
         }
         if (sourceFilters) {
             sourceFilters.innerHTML = '<div class="source-filter-empty">데이터 로드 실패</div>';
@@ -426,8 +343,8 @@ class ExpertDashboard {
     getOrderedSources() {
         return [...(this.dashboardData.sites || [])]
             .sort((a, b) => {
-                const aIndex = this.sourceOrder.indexOf(a.site_key);
-                const bIndex = this.sourceOrder.indexOf(b.site_key);
+                const aIndex = TaxUI.SOURCE_ORDER.indexOf(a.site_key);
+                const bIndex = TaxUI.SOURCE_ORDER.indexOf(b.site_key);
                 if (aIndex !== -1 || bIndex !== -1) {
                     return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
                 }
@@ -465,7 +382,7 @@ class ExpertDashboard {
 
     renderBadgeList(badges) {
         if (!badges.length) {
-            return '<span class="empty-dash">-</span>';
+            return '';
         }
 
         return badges
@@ -507,6 +424,17 @@ class ExpertDashboard {
         if (favorable.has(text)) return 'conclusion-favorable';
         if (partial.has(text)) return 'conclusion-partial';
         return 'conclusion-neutral';
+    }
+
+    getDocumentNumber(item) {
+        const directValue = this.firstTruthy([item.data_document_number]);
+        if (directValue) return directValue;
+
+        const dataId = String(item.data_id || '').trim();
+        if (item.site_key === 'scourt_scheduled_decisions' && dataId.includes('|')) {
+            return dataId.split('|')[1] || dataId;
+        }
+        return dataId;
     }
 
     getNewItemTarget(item) {
@@ -593,6 +521,14 @@ class ExpertDashboard {
         }
     }
 
+    firstTruthy(values) {
+        for (const value of values) {
+            const text = String(value || '').trim();
+            if (text && text !== '-') return text;
+        }
+        return '';
+    }
+
     getLatestDiscoveryLabel(siteKey = null) {
         const items = siteKey
             ? this.newData.filter((item) => item.site_key === siteKey)
@@ -642,11 +578,11 @@ class ExpertDashboard {
     }
 
     getSiteName(siteKey, fallback = '') {
-        return this.siteNames[siteKey] || fallback || siteKey;
+        return TaxUI.getSiteName(siteKey, fallback);
     }
 
     getSiteColor(siteKey) {
-        return this.siteColors[siteKey] || '#6B7280';
+        return TaxUI.getSiteColor(siteKey);
     }
 
     getQueryHours() {
@@ -692,34 +628,20 @@ class ExpertDashboard {
     }
 
     formatDocumentDate(item) {
-        if (item.data_date) return item.data_date;
-        if (item.discovered_at) return this.formatCompactDate(new Date(item.discovered_at));
-        return '--';
+        const documentDate = this.firstTruthy([item.data_document_date, item.data_date]);
+
+        const formattedDocumentDate = this.formatDateOnly(documentDate);
+        if (formattedDocumentDate) return formattedDocumentDate;
+
+        return this.formatDateOnly(item.discovered_at);
+    }
+
+    formatDateOnly(value) {
+        return TaxUI.formatDateOnly(value);
     }
 
     formatRelativeTime(date) {
-        if (!date || Number.isNaN(date.getTime())) return '--';
-
-        const diffInMinutes = Math.floor((Date.now() - date.getTime()) / 60000);
-
-        if (diffInMinutes < 1) return '방금 전';
-        if (diffInMinutes < 60) return `${diffInMinutes}분 전`;
-
-        const diffInHours = Math.floor(diffInMinutes / 60);
-        if (diffInHours < 24) return `${diffInHours}시간 전`;
-
-        const diffInDays = Math.floor(diffInHours / 24);
-        if (diffInDays < 7) return `${diffInDays}일 전`;
-
-        return this.formatCompactDate(date);
-    }
-
-    formatCompactDate(date) {
-        if (!date || Number.isNaN(date.getTime())) return '--';
-        return date.toLocaleDateString('ko-KR', {
-            month: '2-digit',
-            day: '2-digit'
-        });
+        return TaxUI.formatRelativeTime(date);
     }
 
     formatCompactTime(date) {
@@ -742,37 +664,11 @@ class ExpertDashboard {
     }
 
     escapeHtml(value) {
-        return String(value)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
+        return TaxUI.escapeHtml(value);
     }
 
     showToast(title, type, message) {
-        const container = document.getElementById('toastContainer');
-        if (!container) return;
-
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.innerHTML = `
-            <div><strong>${this.escapeHtml(title)}</strong></div>
-            <div>${this.escapeHtml(message)}</div>
-        `;
-
-        container.appendChild(toast);
-
-        setTimeout(() => {
-            toast.classList.add('show');
-        }, 100);
-
-        setTimeout(() => {
-            toast.classList.remove('show');
-            setTimeout(() => {
-                toast.remove();
-            }, 300);
-        }, 5000);
+        TaxUI.showToast(title, type, message);
     }
 
     showLoading(show) {
@@ -815,11 +711,11 @@ class ExpertDashboard {
 
             if (permission === 'granted') {
                 this.browserNotificationEnabled = true;
-                this.saveNotificationSetting(true);
+                TaxUI.saveNotificationSetting(true);
                 this.showToast('알림 허용', 'success', '브라우저 알림이 활성화되었습니다');
             } else {
                 this.browserNotificationEnabled = false;
-                this.saveNotificationSetting(false);
+                TaxUI.saveNotificationSetting(false);
                 this.showToast('알림 비활성', 'warning', '브라우저 알림을 사용할 수 없습니다');
             }
         } catch (error) {
@@ -829,7 +725,7 @@ class ExpertDashboard {
 
     toggleBrowserNotifications(enabled) {
         this.browserNotificationEnabled = enabled;
-        this.saveNotificationSetting(enabled);
+        TaxUI.saveNotificationSetting(enabled);
 
         if (enabled && this.notificationPermission !== 'granted') {
             this.requestNotificationPermission();
@@ -906,28 +802,10 @@ class ExpertDashboard {
         return false;
     }
 
-    loadNotificationSetting() {
-        try {
-            const saved = localStorage.getItem('taxupdater_browser_notifications');
-            return saved ? JSON.parse(saved) : false;
-        } catch (error) {
-            return false;
-        }
-    }
-
-    saveNotificationSetting(enabled) {
-        try {
-            localStorage.setItem('taxupdater_browser_notifications', JSON.stringify(enabled));
-        } catch (error) {
-            return false;
-        }
-        return true;
-    }
-
     destroy() {
         this.stopAutoRefresh();
-        if (this.websocket) {
-            this.websocket.close();
+        if (this.crawlSocket) {
+            this.crawlSocket.close();
         }
     }
 }

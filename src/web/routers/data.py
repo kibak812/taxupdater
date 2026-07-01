@@ -5,12 +5,25 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException
 
 from src.config.settings import KEY_COLUMNS
+from src.config.sites import SCOURT_NON_TAX_STATUS as NON_TAX_STATUS
 from src.web.context import WebAppContext
 from src.web.helpers import build_dashboard_payload, build_site_data_payload
 
 
 LINK_COLUMNS = ("링크", "원문링크", "쟁점PDF", "보도자료링크")
 DETAIL_COLUMNS = ("세목", "청구분야", "유형", "결론", "조세관련")
+DOCUMENT_NUMBER_COLUMNS = ("문서번호", "청구번호", "사건번호", "번호", "고유키")
+DOCUMENT_DATE_COLUMNS = (
+    "생산일자",
+    "결정일",
+    "결정일자",
+    "회신일자",
+    "작성일",
+    "선고일자",
+    "게시일",
+    "등록일자",
+)
+SCOURT_SCHEDULED_SITE_KEY = "scourt_scheduled_decisions"
 
 
 def _first_non_empty_link(values) -> str:
@@ -42,6 +55,12 @@ def _build_item_details(values) -> dict:
         "data_decision_type": _first_non_empty_value([values.get("유형")]),
         "data_conclusion": _first_non_empty_value([values.get("결론")]),
         "data_tax_status": _first_non_empty_value([values.get("조세관련")]),
+        "data_document_number": _first_non_empty_value(
+            values.get(column) for column in DOCUMENT_NUMBER_COLUMNS
+        ),
+        "data_document_date": _first_non_empty_value(
+            values.get(column) for column in DOCUMENT_DATE_COLUMNS
+        ),
     }
 
 
@@ -84,7 +103,12 @@ def _lookup_item_details(
 
     lookup_columns = [
         column
-        for column in [*LINK_COLUMNS, *DETAIL_COLUMNS]
+        for column in [
+            *LINK_COLUMNS,
+            *DETAIL_COLUMNS,
+            *DOCUMENT_NUMBER_COLUMNS,
+            *DOCUMENT_DATE_COLUMNS,
+        ]
         if column in existing_columns
     ]
     if not lookup_columns:
@@ -100,6 +124,16 @@ def _lookup_item_details(
         return {}
 
     return _build_item_details(dict(zip(lookup_columns, row)))
+
+
+def _filter_scourt_non_tax_rows(site_key: str, data, include_non_tax: bool = False):
+    if include_non_tax or site_key != SCOURT_SCHEDULED_SITE_KEY or data.empty:
+        return data
+    if "조세관련" not in data.columns:
+        return data
+
+    tax_status = data["조세관련"].fillna("").astype(str).str.strip()
+    return data[tax_status != NON_TAX_STATUS]
 
 
 def create_data_router(context: WebAppContext) -> APIRouter:
@@ -122,6 +156,7 @@ def create_data_router(context: WebAppContext) -> APIRouter:
         days: int = None,
         start: str = None,
         end: str = None,
+        include_non_tax: bool = False,
     ):
         try:
             if site_key not in context.site_info:
@@ -133,6 +168,8 @@ def create_data_router(context: WebAppContext) -> APIRouter:
                 data = context.repository.load_filtered_data(site_key, start_date=start, end_date=end)
             else:
                 data = context.repository.load_existing_data(site_key, include_metadata=True)
+
+            data = _filter_scourt_non_tax_rows(site_key, data, include_non_tax)
 
             return build_site_data_payload(
                 site_key,
@@ -195,7 +232,12 @@ def create_data_router(context: WebAppContext) -> APIRouter:
             raise HTTPException(status_code=500, detail=f"최근 데이터 개수 조회 실패: {str(e)}")
 
     @router.get("/api/new-data")
-    async def get_new_data(site_key: str = None, hours: int = 24, limit: int = 100):
+    async def get_new_data(
+        site_key: str = None,
+        hours: int = 24,
+        limit: int = 100,
+        include_non_tax: bool = False,
+    ):
         try:
             cutoff_time = datetime.now() - timedelta(hours=hours)
 
@@ -208,6 +250,10 @@ def create_data_router(context: WebAppContext) -> APIRouter:
                 if site_key:
                     where_conditions.append("site_key = ?")
                     params.append(site_key)
+
+                if not include_non_tax:
+                    where_conditions.append("(site_key != ? OR COALESCE(data_category, '') != ?)")
+                    params.extend([SCOURT_SCHEDULED_SITE_KEY, NON_TAX_STATUS])
 
                 where_clause = " AND ".join(where_conditions)
 
@@ -256,6 +302,8 @@ def create_data_router(context: WebAppContext) -> APIRouter:
                             "data_decision_type": item_details.get("data_decision_type", ""),
                             "data_conclusion": item_details.get("data_conclusion", ""),
                             "data_tax_status": item_details.get("data_tax_status", ""),
+                            "data_document_number": item_details.get("data_document_number", ""),
+                            "data_document_date": item_details.get("data_document_date", ""),
                         }
                     )
 
