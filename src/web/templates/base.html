@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}예규판례 모니터링{% endblock %}</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"></noscript>
+    <link rel="stylesheet" href="/static/css/common.css?v={{ asset_version }}">
+    {% block styles %}{% endblock %}
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%231B365D'><path d='M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2'/></svg>">
+</head>
+<body class="dashboard-body {% block body_class %}{% endblock %}">
+    <header class="dashboard-header">
+        <div class="container">
+            <div class="header-content">
+                <div class="header-left">
+                    <a class="header-logo" href="/dashboard" aria-label="대시보드로 이동">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <path d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </a>
+                    <div class="header-text">
+                        <h1>{% block page_title %}예규판례 모니터링{% endblock %}</h1>
+                    </div>
+                    <nav class="app-nav" aria-label="주요 페이지">
+                        <a href="/dashboard" class="app-nav-link{% if active_nav == 'dashboard' %} active{% endif %}">대시보드</a>
+                        <a href="/settings" class="app-nav-link{% if active_nav == 'settings' %} active{% endif %}">설정</a>
+                    </nav>
+                </div>
+                <div class="header-actions">{% block header_actions %}{% endblock %}</div>
+            </div>
+        </div>
+    </header>
+
+    <main class="dashboard-main">
+        <div class="container">{% block content %}{% endblock %}</div>
+    </main>
+
+    <div id="toastContainer" class="toast-container"></div>
+    {% block overlays %}{% endblock %}
+
+    <script>window.SITE_DISPLAY = {{ site_display | tojson }};</script>
+    <script src="/static/js/common.js?v={{ asset_version }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

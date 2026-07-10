@@ -1,573 +1,55 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ site_name }} - 데이터 목록</title>
-    <link rel="stylesheet" href="/static/css/style.css">
-    <link rel="stylesheet" href="/static/css/dashboard.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23667085'><path d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z'/></svg>">
-    <style>
-        /* Additional styles specific to data table */
-        .breadcrumb {
-            display: flex;
-            align-items: center;
-            gap: var(--spacing-sm);
-            margin-bottom: var(--spacing-lg);
-            font-size: var(--font-size-sm);
-            color: var(--color-gray-600);
-        }
-        
-        .breadcrumb a {
-            color: var(--color-primary);
-            text-decoration: none;
-        }
-        
-        .breadcrumb a:hover {
-            text-decoration: underline;
-        }
-        
-        .filter-status {
-            background: white;
-            padding: var(--spacing-lg);
-            border-radius: var(--radius-xl);
-            border: 1px solid var(--color-gray-200);
-            margin-bottom: var(--spacing-xl);
-        }
-        
-        .filter-status h2 {
-            margin: 0 0 var(--spacing-sm) 0;
-            color: var(--color-gray-900);
-            font-size: var(--font-size-xl);
-            font-weight: 600;
-            line-height: 1.35;
-            overflow-wrap: anywhere;
-        }
-        
-        .filter-description {
-            color: var(--color-gray-600);
-            line-height: 1.55;
-            margin: 0;
-            overflow-wrap: anywhere;
-        }
-        
-        .data-toolbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: var(--spacing-lg);
-            margin-bottom: var(--spacing-lg);
-        }
+{% extends "base.html" %}
 
-        .data-actions {
-            align-items: center;
-            display: flex;
-            flex-wrap: wrap;
-            gap: var(--spacing-sm);
-            justify-content: flex-end;
-        }
-        
-        .search-box {
-            flex: 1;
-            max-width: 420px;
-            min-width: 260px;
-        }
-        
-        .search-input {
-            width: 100%;
-            padding: var(--spacing-sm) var(--spacing-md);
-            border: 1px solid var(--color-gray-300);
-            border-radius: var(--radius-md);
-            font-size: var(--font-size-sm);
-            background: white;
-        }
-        
-        .search-input:focus {
-            outline: none;
-            border-color: var(--color-primary);
-            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-        }
-        
-        .data-table-container {
-            background: white;
-            border-radius: var(--radius-xl);
-            border: 1px solid var(--color-gray-200);
-            overflow-x: auto;
-            overflow-y: hidden;
-            box-shadow: var(--shadow-md);
-        }
-        
-        .data-table {
-            min-width: 100%;
-            table-layout: fixed;
-            width: 100%;
-            border-collapse: collapse;
-        }
+{% block title %}{{ site_name }} - 데이터 목록{% endblock %}
 
-        .data-site-tax_tribunal .data-table {
-            min-width: 100%;
-        }
-        
-        .data-table th {
-            background: var(--color-gray-50);
-            padding: var(--spacing-md);
-            text-align: left;
-            font-weight: 600;
-            font-size: var(--font-size-sm);
-            color: var(--color-gray-700);
-            border-bottom: 1px solid var(--color-gray-200);
-            cursor: pointer;
-            user-select: none;
-            position: relative;
-        }
-        
-        .data-table th:hover {
-            background: var(--color-gray-100);
-        }
-        
-        .data-table th.sortable::after {
-            content: '↕';
-            position: absolute;
-            right: var(--spacing-sm);
-            opacity: 0.5;
-            font-size: var(--font-size-xs);
-        }
-        
-        .data-table th.sort-asc::after {
-            content: '↑';
-            opacity: 1;
-            color: var(--color-primary);
-        }
-        
-        .data-table th.sort-desc::after {
-            content: '↓';
-            opacity: 1;
-            color: var(--color-primary);
-        }
-        
-        .data-table td {
-            padding: var(--spacing-md);
-            border-bottom: 1px solid var(--color-gray-200);
-            font-size: var(--font-size-sm);
-            vertical-align: top;
-        }
+{% block styles %}
+    <link rel="stylesheet" href="/static/css/data_table.css?v={{ asset_version }}">
+{% endblock %}
 
-        .data-table th[data-column="tax_category"] {
-            width: 104px;
-        }
+{% block body_class %}data-page data-site-{{ site_key }}{% endblock %}
 
-        .data-table th[data-column="decision_type"] {
-            width: 88px;
-        }
+{% block page_title %}{{ site_name }}{% endblock %}
 
-        .data-table th[data-column="conclusion"] {
-            width: 96px;
-        }
-
-        .data-table th[data-column="claim_number"],
-        .data-table th[data-column="document_number"] {
-            width: 148px;
-        }
-
-        .data-table th[data-column="published_date"],
-        .data-table th[data-column="decision_date"] {
-            width: 116px;
-        }
-
-        .data-table th[data-column="collected_date"] {
-            width: 212px;
-        }
-        
-        .data-table tr:hover {
-            background: var(--color-gray-50);
-        }
-        
-        .data-table tr:last-child td {
-            border-bottom: none;
-        }
-        
-        .document-number {
-            display: inline-block;
-            font-family: 'Courier New', monospace;
-            font-weight: 600;
-            color: var(--color-gray-900);
-            max-width: 100%;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            vertical-align: top;
-            white-space: nowrap;
-        }
-        
-        .document-title {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        
-        .document-title a {
-            color: var(--color-primary);
-            text-decoration: none;
-        }
-        
-        .document-title a:hover {
-            text-decoration: underline;
-        }
-        
-        .date-cell {
-            color: var(--color-gray-600);
-            font-size: var(--font-size-xs);
-            font-variant-numeric: tabular-nums;
-            white-space: nowrap;
-        }
-        
-        .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: var(--spacing-sm);
-            padding: var(--spacing-lg);
-        }
-        
-        .pagination button {
-            padding: var(--spacing-sm) var(--spacing-md);
-            border: 1px solid var(--color-gray-300);
-            background: white;
-            color: var(--color-gray-700);
-            border-radius: var(--radius-md);
-            cursor: pointer;
-            font-size: var(--font-size-sm);
-        }
-        
-        .pagination button:hover:not(:disabled) {
-            background: var(--color-gray-50);
-        }
-        
-        .pagination button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .pagination button.active {
-            background: var(--color-primary);
-            color: white;
-            border-color: var(--color-primary);
-        }
-        
-        .pagination-info {
-            color: var(--color-gray-600);
-            font-size: var(--font-size-sm);
-        }
-        
-        .loading-state {
-            text-align: center;
-            padding: var(--spacing-3xl);
-            color: var(--color-gray-500);
-        }
-        
-        .error-state {
-            text-align: center;
-            padding: var(--spacing-3xl);
-            color: var(--color-danger);
-        }
-        
-        .filter-panel {
-            background: white;
-            border-radius: var(--radius-xl);
-            border: 1px solid var(--color-gray-200);
-            padding: var(--spacing-lg);
-            margin-bottom: var(--spacing-lg);
-            box-shadow: var(--shadow-sm);
-        }
-        
-        .filter-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: var(--spacing-md);
-        }
-        
-        .filter-header h3 {
-            margin: 0;
-            font-size: var(--font-size-lg);
-            font-weight: 600;
-            color: var(--color-gray-900);
-        }
-        
-        .filter-content {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: var(--spacing-md);
-        }
-        
-        .filter-group {
-            display: flex;
-            flex-direction: column;
-            gap: var(--spacing-xs);
-        }
-        
-        .filter-group label {
-            font-size: var(--font-size-sm);
-            font-weight: 500;
-            color: var(--color-gray-700);
-        }
-        
-        .filter-select {
-            padding: var(--spacing-sm);
-            border: 1px solid var(--color-gray-300);
-            border-radius: var(--radius-md);
-            font-size: var(--font-size-sm);
-            background: white;
-            cursor: pointer;
-        }
-        
-        .filter-select:focus {
-            outline: none;
-            border-color: var(--color-primary);
-            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-        }
-        
-        .filter-toggle {
-            align-items: center;
-            background: white;
-            border: 1px solid var(--color-gray-300);
-            border-radius: var(--radius-md);
-            gap: var(--spacing-sm);
-            color: var(--color-primary);
-            cursor: pointer;
-            display: inline-flex;
-            font-size: var(--font-size-sm);
-            font-weight: 600;
-            min-height: 34px;
-            padding: var(--spacing-xs) var(--spacing-sm);
-            transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
-        }
-        
-        .filter-toggle:hover {
-            background: var(--color-gray-50);
-            border-color: var(--color-gray-400);
-            color: var(--color-primary-dark);
-        }
-
-        .filter-toggle.active {
-            background: rgba(79, 70, 229, 0.08);
-            border-color: rgba(79, 70, 229, 0.35);
-            color: var(--color-primary-dark);
-        }
-        
-        .filter-chevron {
-            transition: transform 0.2s;
-        }
-        
-        .filter-toggle.active .filter-chevron {
-            transform: rotate(180deg);
-        }
-
-        .btn-ghost {
-            background: var(--color-gray-100);
-            border: 1px solid transparent;
-            color: var(--color-gray-700);
-        }
-
-        .btn-ghost:hover {
-            background: var(--color-gray-200);
-            color: var(--color-gray-900);
-        }
-        
-        .tax-category, .decision-type, .conclusion-badge {
-            display: inline-block;
-            padding: var(--spacing-xs) var(--spacing-sm);
-            background: var(--color-gray-100);
-            color: var(--color-gray-700);
-            border-radius: var(--radius-sm);
-            font-size: var(--font-size-xs);
-            font-weight: 500;
-            max-width: 120px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .conclusion-badge {
-            font-weight: 700;
-        }
-
-        .conclusion-unfavorable, .decision-unfavorable {
-            background: rgba(220, 38, 38, 0.10);
-            color: #991B1B;
-        }
-
-        .conclusion-favorable, .decision-favorable {
-            background: rgba(5, 150, 105, 0.12);
-            color: #047857;
-        }
-
-        .conclusion-partial {
-            background: rgba(16, 185, 129, 0.18);
-            color: #065F46;
-        }
-
-        .conclusion-neutral, .decision-neutral {
-            background: var(--color-gray-100);
-            color: var(--color-gray-700);
-        }
-        
-        .active-filters {
-            display: flex;
-            flex-wrap: wrap;
-            gap: var(--spacing-xs);
-            margin-top: var(--spacing-sm);
-        }
-        
-        .active-filter {
-            display: flex;
-            align-items: center;
-            gap: var(--spacing-xs);
-            padding: var(--spacing-xs) var(--spacing-sm);
-            background: var(--color-primary);
-            color: white;
-            border-radius: var(--radius-sm);
-            font-size: var(--font-size-xs);
-            font-weight: 500;
-        }
-        
-        .active-filter button {
-            background: none;
-            border: none;
-            color: white;
-            cursor: pointer;
-            font-size: var(--font-size-xs);
-            padding: 0;
-            margin-left: var(--spacing-xs);
-        }
-        
-        @media (max-width: 768px) {
-            .data-page .dashboard-header .header-content {
-                align-items: flex-start;
-            }
-
-            .data-page .dashboard-header .header-left,
-            .data-page .dashboard-header .header-actions {
-                min-width: 0;
-                width: 100%;
-            }
-
-            .data-page .header-text {
-                flex: 1;
-                min-width: 0;
-            }
-
-            .data-page .header-text h1,
-            .data-page .header-text p {
-                overflow-wrap: anywhere;
-            }
-
-            .filter-status h2,
-            .filter-description {
-                max-width: 30ch;
-            }
-
-            .data-toolbar {
-                flex-direction: column;
-                align-items: stretch;
-                gap: var(--spacing-md);
-            }
-
-            .search-box {
-                max-width: none;
-                min-width: 0;
-            }
-
-            .data-actions {
-                justify-content: flex-start;
-            }
-            
-            .filter-content {
-                grid-template-columns: 1fr;
-            }
-
-            .data-table {
-                min-width: 980px;
-            }
-
-            .data-site-tax_tribunal .data-table {
-                min-width: 1120px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .data-page .dashboard-header .header-left {
-                align-items: center;
-                flex-direction: column;
-                text-align: center;
-            }
-
-            .data-page .header-text {
-                max-width: 100%;
-            }
-
-            .data-actions .btn,
-            .filter-toggle {
-                justify-content: center;
-                width: 100%;
-            }
-        }
-    </style>
-</head>
-<body class="dashboard-body data-page data-site-{{ site_key }}">
-    <!-- Header -->
-    <header class="dashboard-header">
-        <div class="container">
-            <div class="header-content">
-                <div class="header-left">
-                    <div class="header-logo">
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" fill="currentColor"/>
+{% block header_actions %}
+                    <button class="btn btn-outline" onclick="window.location.href='/dashboard'">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                    </div>
-                    <div class="header-text">
-                        <h1>{{ site_name }} - 데이터 목록</h1>
-                        <p>전문가 분석을 위한 종합 데이터 뷰</p>
-                    </div>
-                </div>
-                <div class="header-right">
-                    <div class="header-actions">
-                        <button class="btn btn-outline" onclick="window.location.href='/dashboard'">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            대시보드로 돌아가기
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </header>
+                        대시보드로 돌아가기
+                    </button>
+{% endblock %}
 
-    <main class="dashboard-main">
-        <div class="container">
+{% block content %}
             <!-- Breadcrumb -->
-            <nav class="breadcrumb">
+            <nav class="breadcrumb" aria-label="현재 위치">
                 <a href="/dashboard">대시보드</a>
+                <span>/</span>
+                <span>데이터 표</span>
                 <span>/</span>
                 <span>{{ site_name }}</span>
             </nav>
 
             <!-- Filter Status -->
             <div class="filter-status">
-                <h2 id="filterTitle">데이터 로딩 중...</h2>
-                <p class="filter-description" id="filterDescription">분석을 위한 데이터를 로딩하고 있습니다. 잠시만 기다려주세요.</p>
+                <div>
+                    <h2 id="filterTitle">데이터 로딩 중...</h2>
+                    <p class="filter-description" id="filterDescription">분석을 위한 데이터를 로딩하고 있습니다. 잠시만 기다려주세요.</p>
+                </div>
             </div>
 
             <!-- Data Controls -->
-            <div class="data-toolbar">
-                <div class="search-box">
-                    <input type="text" class="search-input" id="searchInput" placeholder="문서번호, 제목, 내용으로 검색...">
-                </div>
+            <div class="data-toolbar" aria-label="데이터 표 도구">
+                <label class="search-box" for="searchInput">
+                    <span class="search-label">검색</span>
+                    <span class="search-field">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <input type="text" class="search-input" id="searchInput" placeholder="문서번호, 제목, 내용으로 검색...">
+                    </span>
+                </label>
                 <div class="data-actions">
-                    <button type="button" class="filter-toggle" id="filterToggle" aria-expanded="false" aria-controls="filterPanel">
+                    <button type="button" class="btn btn-outline filter-toggle" id="filterToggle" aria-expanded="false" aria-controls="filterPanel">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M4 7h16M7 12h10M10 17h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
@@ -634,20 +116,25 @@
                         <!-- Data will be loaded here -->
                     </tbody>
                 </table>
-                
+
                 <!-- Loading/Error States -->
                 <div id="loadingState" class="loading-state">
                     <div class="spinner" style="margin: 0 auto var(--spacing-md);"></div>
                     <p>데이터 로딩 중...</p>
                 </div>
-                
+
                 <div id="errorState" class="error-state" style="display: none;">
                     <p>데이터 로딩에 실패했습니다. 다시 시도해주세요.</p>
                     <button class="btn btn-primary btn-sm" onclick="dataTable.loadData()">다시 시도</button>
                 </div>
-                
+
                 <div id="emptyState" class="empty-state" style="display: none;">
-                    <div class="empty-state-icon">📄</div>
+                    <div class="empty-state-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M7 3h7l4 4v14H7V3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                            <path d="M14 3v5h4M9.5 12h5M9.5 15h5M9.5 18h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                    </div>
                     <div class="empty-state-title">데이터 없음</div>
                     <div class="empty-state-description">현재 필터 조건에 맞는 데이터가 없습니다.</div>
                 </div>
@@ -657,12 +144,9 @@
             <div class="pagination" id="pagination" style="display: none;">
                 <!-- Pagination will be generated dynamically -->
             </div>
-        </div>
-    </main>
+{% endblock %}
 
-    <!-- Toast Notifications -->
-    <div id="toastContainer" class="toast-container"></div>
-
+{% block scripts %}
     <script>
         // Pass server-side data to JavaScript
         window.siteConfig = {
@@ -671,6 +155,5 @@
             siteColor: '{{ site_color }}'
         };
     </script>
-    <script src="/static/js/data_table.js"></script>
-</body>
-</html>
+    <script src="/static/js/data_table.js?v={{ asset_version }}"></script>
+{% endblock %}

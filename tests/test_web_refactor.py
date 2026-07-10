@@ -7,6 +7,12 @@ import pandas as pd
 from src.web.context import ConnectionManager, WebAppContext
 from src.web.factory import create_app
 from src.web.helpers import build_dashboard_payload, build_site_data_payload
+from src.web.routers.data import (
+    _build_item_details,
+    _extract_details_from_metadata,
+    _filter_scourt_non_tax_rows,
+    _first_non_empty_link,
+)
 
 
 class FakeLogger:
@@ -194,6 +200,81 @@ class WebRefactorTests(unittest.TestCase):
         manager.disconnect(connection)
 
         self.assertEqual(manager.active_connections, [])
+
+    def test_new_data_details_extract_from_original_data(self):
+        metadata = {
+            "original_data": {
+                "세목": "양도소득세",
+                "유형": "기각",
+                "결론": "국승",
+                "링크": "",
+                "쟁점PDF": "https://example.com/issue.pdf",
+                "문서번호": "조심-2026-인-0094",
+                "생산일자": "2026.06.23.",
+            }
+        }
+
+        self.assertEqual(
+            _extract_details_from_metadata(metadata),
+            {
+                "external_link": "https://example.com/issue.pdf",
+                "data_tax_category": "양도소득세",
+                "data_decision_type": "기각",
+                "data_conclusion": "국승",
+                "data_tax_status": "",
+                "data_document_number": "조심-2026-인-0094",
+                "data_document_date": "2026.06.23.",
+            },
+        )
+
+    def test_new_data_details_build_from_site_row(self):
+        self.assertEqual(
+            _build_item_details(
+                {
+                    "세목": "부가가치세",
+                    "유형": "취소",
+                    "결론": "국패",
+                    "링크": "https://example.com/source",
+                    "청구번호": "조심2026중1234",
+                    "결정일": "2026-06-23",
+                }
+            ),
+            {
+                "external_link": "https://example.com/source",
+                "data_tax_category": "부가가치세",
+                "data_decision_type": "취소",
+                "data_conclusion": "국패",
+                "data_tax_status": "",
+                "data_document_number": "조심2026중1234",
+                "data_document_date": "2026-06-23",
+            },
+        )
+
+    def test_first_non_empty_link_ignores_blank_values(self):
+        self.assertEqual(
+            _first_non_empty_link(["", None, "#", " https://example.com/doc "]),
+            "https://example.com/doc",
+        )
+
+    def test_scourt_scheduled_data_hides_non_tax_rows_by_default(self):
+        data = pd.DataFrame(
+            [
+                {"사건번호": "2026두30340", "조세관련": "조세후보"},
+                {"사건번호": "2026도5355", "조세관련": "비조세"},
+            ]
+        )
+
+        filtered = _filter_scourt_non_tax_rows("scourt_scheduled_decisions", data)
+
+        self.assertEqual(filtered["사건번호"].tolist(), ["2026두30340"])
+        self.assertEqual(
+            _filter_scourt_non_tax_rows(
+                "scourt_scheduled_decisions",
+                data,
+                include_non_tax=True,
+            )["사건번호"].tolist(),
+            ["2026두30340", "2026도5355"],
+        )
 
 
 if __name__ == "__main__":

@@ -8,12 +8,26 @@ from src.services.crawler_service import CrawlingService
 class FakeRepository:
     db_path = ":memory:"
 
+    def load_existing_data(self, site_key):
+        return pd.DataFrame()
+
 
 class FakeCrawler:
     supports_numeric_stop = True
 
     def get_site_name(self):
         return "가짜 크롤러"
+
+
+class EmptyResultCrawler:
+    def get_site_name(self):
+        return "조세심판원"
+
+    def get_key_column(self):
+        return "청구번호"
+
+    def crawl(self, **kwargs):
+        return pd.DataFrame(columns=["청구번호"])
 
 
 class CrawlingServiceTests(unittest.TestCase):
@@ -72,6 +86,16 @@ class CrawlingServiceTests(unittest.TestCase):
         self.assertIn("조세후보", tags)
         self.assertIn("키워드:법인세", tags)
         self.assertIn("키워드:경정청구", tags)
+
+    def test_execute_crawling_returns_error_when_selected_site_fails(self):
+        service = CrawlingService({"tax_tribunal": EmptyResultCrawler()}, FakeRepository())
+
+        result = service.execute_crawling("1", None, None)
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["failed_sites"], 1)
+        self.assertEqual(result["success_sites"], 0)
+        self.assertIn("tax_tribunal", result["error"])
 
 
 if __name__ == "__main__":

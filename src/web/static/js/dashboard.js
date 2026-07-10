@@ -1,472 +1,718 @@
 /**
- * Tax Law Monitoring Dashboard - Modern Expert UI
- * Professional dashboard for busy tax law experts
+ * Tax law monitoring dashboard
+ * Primary flow: choose a period, scan sources with new items, then inspect the items.
  */
 
 class ExpertDashboard {
     constructor() {
-        this.currentTimeFilter = 24; // Default: last 24 hours
-        this.siteColors = {
-            'tax_tribunal': '#4F46E5',
-            'nts_authority': '#059669',
-            'nts_precedent': '#D97706',
-            'moef': '#8B5CF6',
-            'mois': '#DC2626',
-            'bai': '#6B7280',
-            'scourt_major_decisions': '#0F766E',
-            'scourt_scheduled_decisions': '#B45309'
-        };
-        
-        this.siteNames = {
-            'tax_tribunal': '조세심판원',
-            'nts_authority': '국세청(유권해석)',
-            'nts_precedent': '국세청(판례)',
-            'moef': '기획재정부',
-            'mois': '행정안전부',
-            'bai': '감사원',
-            'scourt_major_decisions': '전국법원 주요판결',
-            'scourt_scheduled_decisions': '대법원 선고예정 판결'
-        };
-        this.websocket = null;
+        this.currentTimeFilter = 24;
+        this.customRange = null;
+        this.crawlSocket = null;
         this.refreshInterval = null;
-        
-        // 브라우저 알림 관련 설정
-        this.browserNotificationEnabled = this.loadNotificationSetting();
+
+        this.dashboardData = { sites: [], last_refresh: null };
+        this.recentCounts = {};
+        this.newData = [];
+        this.scheduleData = { schedules: [] };
+
+        this.browserNotificationEnabled = TaxUI.loadNotificationSetting();
         this.notificationPermission = 'default';
         this.isPageVisible = true;
-        this.lastNotificationTime = new Map(); // 사이트별 마지막 알림 시간
-        
+        this.lastNotificationTime = new Map();
+
         this.init();
     }
-    
+
     init() {
         this.setupEventListeners();
         this.initBrowserNotifications();
         this.connectWebSocket();
-        this.loadInitialData();
+        this.loadDashboardData(false);
         this.startAutoRefresh();
-        
-        console.log('전문가 대시보드 초기화 완료');
     }
-    
+
     setupEventListeners() {
-        // Time filter buttons
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                this.setTimeFilter(parseInt(e.target.dataset.hours));
+        document.querySelectorAll('.filter-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                if (btn.dataset.range === 'custom') {
+                    this.showCustomRange();
+                    return;
+                }
+                this.setTimeFilter(parseInt(btn.dataset.hours, 10));
             });
         });
-        
-        // Date range picker
+
         document.getElementById('applyDateRange')?.addEventListener('click', () => {
             this.applyCustomDateRange();
         });
-        
-        // Settings button
-        document.getElementById('settingsBtn')?.addEventListener('click', () => {
-            window.location.href = '/settings';
+
+        document.getElementById('refreshDashboardBtn')?.addEventListener('click', () => {
+            this.loadDashboardData();
         });
-        
-        // 페이지 가시성 추적
+
         document.addEventListener('visibilitychange', () => {
             this.isPageVisible = !document.hidden;
         });
-        
     }
-    
-    async connectWebSocket() {
-        try {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/crawl`;
-            
-            this.websocket = new WebSocket(wsUrl);
-            
-            this.websocket.onopen = () => {
-                console.log('WebSocket 연결됨');
-                this.updateConnectionStatus(true);
-            };
-            
-            this.websocket.onmessage = (event) => {
-                try {
-                    const message = JSON.parse(event.data);
-                    this.handleWebSocketMessage(message);
-                } catch (error) {
-                    console.error('WebSocket message parsing error:', error);
-                }
-            };
-            
-            this.websocket.onclose = () => {
-                console.warn('WebSocket 연결 끊어짐');
-                this.updateConnectionStatus(false);
-                
-                // 5초 후 자동 재연결
-                setTimeout(() => {
-                    this.connectWebSocket();
-                }, 5000);
-            };
-            
-            this.websocket.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                this.updateConnectionStatus(false);
-            };
-            
-        } catch (error) {
-            console.error('WebSocket connection failed:', error);
-            this.updateConnectionStatus(false);
-        }
+
+    connectWebSocket() {
+        this.crawlSocket = TaxUI.connectCrawlSocket({
+            onMessage: (message) => this.handleWebSocketMessage(message),
+            onStatusChange: (isConnected) => this.updateConnectionStatus(isConnected)
+        });
     }
-    
+
     updateConnectionStatus(isConnected) {
         const statusElement = document.getElementById('connectionStatus');
-        const dotElement = statusElement?.querySelector('.indicator-dot');
         const textElement = statusElement?.querySelector('span');
-        
-        if (dotElement && textElement) {
-            if (isConnected) {
-                dotElement.style.background = '#10B981';
-                textElement.textContent = '연결됨';
-            } else {
-                dotElement.style.background = '#EF4444';
-                textElement.textContent = '연결 끊어짐';
-            }
-        }
+
+        if (!statusElement || !textElement) return;
+
+        statusElement.classList.toggle('is-offline', !isConnected);
+        textElement.textContent = isConnected ? '연결됨' : '끊김';
     }
-    
+
     handleWebSocketMessage(message) {
-        console.log('WebSocket message:', message);
-        
         switch (message.type) {
             case 'notification':
                 this.showToast('새로운 업데이트', 'success', message.title);
-                
-                // 브라우저 푸시 알림 표시 (페이지가 비활성화된 경우)
                 this.showBrowserNotification(message.title, message.message, {
                     site_key: message.site_key,
                     urgency_level: message.urgency_level,
                     new_data_count: message.new_data_count,
                     notification_type: message.notification_type
                 });
-                
-                this.loadStatusCards(); // 데이터 새로고침
+                this.loadDashboardData(false);
                 break;
             case 'crawl_complete':
-                this.showToast('크롤링 완료', 'success', '데이터 수집이 성공적으로 완료되었습니다');
-                this.loadStatusCards();
+                this.loadDashboardData(false);
                 break;
             case 'crawl_error':
-                this.showToast('크롤링 오류', 'error', `오류: ${message.error}`);
+                this.showToast('수집 오류', 'error', `오류: ${message.error}`);
                 break;
         }
     }
-    
-    async loadInitialData() {
-        this.showLoading(true);
-        
+
+    async loadDashboardData(showLoader = true) {
+        if (showLoader) {
+            this.showLoading(true);
+        }
+
         try {
-            await Promise.all([
-                this.loadStatusCards()
-            ]);
+            const hours = this.getQueryHours();
+            const [dashboardData, newDataData, scheduleData] =
+                await Promise.all([
+                    TaxUI.fetchJson('/api/dashboard'),
+                    TaxUI.fetchJson(`/api/new-data?hours=${hours}&limit=5000`),
+                    TaxUI.fetchOptionalJson('/api/schedules', {
+                        schedules: [],
+                        scheduler_running: false
+                    })
+                ]);
+
+            this.dashboardData = dashboardData || { sites: [] };
+            this.newData = newDataData?.new_data || [];
+            this.recentCounts = this.buildRecentCounts(this.newData);
+            this.scheduleData = scheduleData || { schedules: [] };
+
+            this.renderDashboard();
         } catch (error) {
-            console.error('초기 데이터 로드 실패:', error);
-            this.showToast('로드 오류', 'error', '대시보드 데이터를 불러오는데 실패했습니다');
+            console.error('대시보드 데이터 로드 실패:', error);
+            this.showToast('로드 오류', 'error', '대시보드 데이터를 불러오지 못했습니다');
+            this.renderFailureState();
         } finally {
             this.showLoading(false);
         }
     }
-    
+
     setTimeFilter(hours) {
         this.currentTimeFilter = hours;
-        
-        // Update active button
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.classList.remove('active');
+        this.customRange = null;
+
+        document.querySelectorAll('.filter-btn').forEach((btn) => {
+            btn.classList.toggle('active', parseInt(btn.dataset.hours, 10) === hours);
         });
-        document.querySelector(`[data-hours="${hours}"]`).classList.add('active');
-        
-        // Reload data with new filter
-        this.loadStatusCards();
+
+        const picker = document.getElementById('dateRangePicker');
+        if (picker) picker.hidden = true;
+
+        this.loadDashboardData();
     }
-    
+
+    showCustomRange() {
+        document.querySelectorAll('.filter-btn').forEach((btn) => {
+            btn.classList.toggle('active', btn.dataset.range === 'custom');
+        });
+
+        const picker = document.getElementById('dateRangePicker');
+        if (picker) {
+            picker.hidden = false;
+            document.getElementById('startDate')?.focus();
+        }
+    }
+
     applyCustomDateRange() {
-        const startDate = document.getElementById('startDate').value;
-        const endDate = document.getElementById('endDate').value;
-        
-        if (startDate && endDate) {
-            // 시간 차이 계산
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-            const diffHours = Math.ceil((end - start) / (1000 * 60 * 60));
-            
-            this.currentTimeFilter = diffHours;
-            this.loadStatusCards();
-            
-            // 활성 필터 버튼 초기화
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
+        const startDate = document.getElementById('startDate')?.value;
+        const endDate = document.getElementById('endDate')?.value;
+
+        if (!startDate || !endDate) {
+            this.showToast('기간 선택', 'warning', '시작일과 종료일을 선택해주세요');
+            return;
         }
-    }
-    
-    async loadStatusCards() {
-        try {
-            // 대시보드 데이터와 최근 데이터 개수 로드
-            const [dashboardResponse, recentCountsResponse] = await Promise.all([
-                fetch('/api/dashboard'),
-                fetch(`/api/sites/recent-counts?hours=${this.currentTimeFilter}`)
-            ]);
-            
-            const dashboardData = await dashboardResponse.json();
-            const recentCountsData = await recentCountsResponse.json();
-            
-            this.renderStatusCards(dashboardData.sites || [], recentCountsData.recent_counts || {});
-        } catch (error) {
-            console.error('상태 카드 로드 실패:', error);
-            this.showToast('로드 오류', 'error', '사이트 상태 데이터를 불러오는데 실패했습니다');
+
+        const start = new Date(`${startDate}T00:00:00`);
+        const end = new Date(`${endDate}T23:59:59`);
+
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+            this.showToast('기간 오류', 'error', '기간을 다시 확인해주세요');
+            return;
         }
+
+        this.customRange = { startDate, endDate, start, end };
+        this.currentTimeFilter = Math.max(24, Math.ceil((Date.now() - start.getTime()) / 3600000));
+        this.loadDashboardData();
     }
-    
-    renderStatusCards(sites, recentCounts) {
-        const container = document.getElementById('statusCardsGrid');
+
+    renderDashboard() {
+        this.renderSourceOverview();
+        this.renderRecentItems();
+        this.updateHeaderOperationalStatus();
+    }
+
+    renderSourceOverview() {
+        const summary = document.getElementById('sourceFilterSummary');
+        const container = document.getElementById('sourceFilterList');
         if (!container) return;
-        
-        container.innerHTML = '';
-        
-        sites.forEach(site => {
-            const recentCount = recentCounts[site.site_key]?.count || 0;
-            const card = this.createStatusCard(site, recentCount);
-            container.appendChild(card);
-        });
-    }
-    
-    createStatusCard(site, recentCount) {
-        const card = document.createElement('div');
-        card.className = 'status-card';
-        card.style.setProperty('--card-color', this.siteColors[site.site_key] || '#6B7280');
-        
-        // 상태 결정
-        let status = 'inactive';
-        let statusText = '비활성';
-        
-        if (site.total_count > 0) {
-            status = recentCount > 0 ? 'active' : 'inactive';
-            statusText = recentCount > 0 ? '활성' : '새 데이터 없음';
+
+        const sources = this.getOrderedSources();
+        const sourcesWithNew = sources.filter((site) => this.getRecentCount(site.site_key) > 0);
+        const totalNew = this.getTotalNewCount();
+
+        if (summary) {
+            summary.innerHTML = '';
+            summary.appendChild(this.createSourceFilterButton({
+                siteKey: null,
+                label: '전체',
+                subLabel: sourcesWithNew.length ? `${sourcesWithNew.length}개 출처` : '신규 없음',
+                count: totalNew,
+                color: '#1B365D',
+                latestLabel: this.getLatestDiscoveryLabel()
+            }));
         }
-        
-        // 마지막 업데이트 시간 포맷
-        const lastUpdate = site.last_updated ? 
-            this.formatRelativeTime(new Date(site.last_updated)) : 
-            '없음';
-        
-        card.innerHTML = `
-            <div class="card-header">
-                <h3 class="card-organization">${this.siteNames[site.site_key] || site.site_name}</h3>
-                <span class="card-status ${status}">${statusText}</span>
-            </div>
-            <div class="card-metrics">
-                <div class="new-data-count">+${recentCount}</div>
-                <div class="new-data-label">${this.formatTimeFilter()} 신규 항목</div>
-            </div>
-            <div class="card-footer">
-                <span class="last-update">마지막 업데이트: ${lastUpdate}</span>
-                <div class="card-actions">
-                    <button class="btn btn-primary btn-sm" onclick="dashboard.viewSiteData('${site.site_key}', false)">
-                        데이터 보기
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        // 전체 카드에 클릭 핸들러 추가
-        card.addEventListener('click', (e) => {
-            if (!e.target.closest('.card-actions')) {
-                this.viewSiteData(site.site_key, true); // 카드 클릭 시 필터링된 데이터
-            }
+
+        container.innerHTML = '';
+
+        if (!sources.length) {
+            container.innerHTML = '<div class="source-filter-empty">선택한 기간에 새 항목 없음</div>';
+            return;
+        }
+
+        sources.forEach((site) => {
+            const count = this.getRecentCount(site.site_key);
+            container.appendChild(this.createSourceFilterButton({
+                siteKey: site.site_key,
+                label: this.getSiteName(site.site_key, site.site_name),
+                subLabel: count > 0 ? '신규' : '신규 없음',
+                count,
+                color: this.getSiteColor(site.site_key),
+                latestLabel: this.getLatestDiscoveryLabel(site.site_key),
+                isQuiet: count === 0
+            }));
         });
-        
-        return card;
     }
-    
-    getSiteName(siteKey) {
-        const siteNames = {
-            'tax_tribunal': '조세심판원',
-            'nts_authority': '국세청(유권해석)',
-            'nts_precedent': '국세청(판례)',
-            'moef': '기획재정부',
-            'mois': '행정안전부',
-            'bai': '감사원',
-            'scourt_major_decisions': '전국법원 주요판결',
-            'scourt_scheduled_decisions': '대법원 선고예정 판결'
-        };
-        return siteNames[siteKey] || siteKey;
+
+    createSourceFilterButton({ siteKey, label, subLabel, count, color, latestLabel = '', isQuiet = false }) {
+        const element = siteKey ? document.createElement('a') : document.createElement('div');
+        const isStatic = !siteKey;
+
+        element.className = `source-filter-item${isQuiet ? ' is-quiet' : ''}${isStatic ? ' is-static' : ''}`;
+        element.style.setProperty('--source-color', color);
+        if (siteKey) {
+            element.href = this.buildSiteDataUrl(siteKey, true);
+            element.setAttribute('aria-label', `${label} ${this.formatTimeFilter()} 데이터 보기`);
+        } else {
+            element.setAttribute('role', 'status');
+        }
+        const metaLabel = count > 0 && latestLabel
+            ? `${subLabel} · ${latestLabel}`
+            : subLabel;
+
+        element.innerHTML = `
+            <span class="source-filter-main">
+                <span class="source-color-dot"></span>
+                <span class="source-filter-name">${this.escapeHtml(label)}</span>
+            </span>
+            <span class="source-filter-meta">${this.escapeHtml(metaLabel)}</span>
+            <span class="source-filter-count">${count}</span>
+        `;
+
+        return element;
     }
-    
+
+    renderRecentItems() {
+        const tbody = document.getElementById('recentItemsTableBody');
+        if (!tbody) return;
+
+        const visibleItems = this.newData;
+
+        this.setText('recentItemsTitle', '신규 항목');
+        tbody.innerHTML = '';
+
+        if (!visibleItems.length) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="table-empty">새 항목 없음</td>
+                </tr>
+            `;
+            return;
+        }
+
+        visibleItems.forEach((item) => {
+            const row = document.createElement('tr');
+            const target = this.getNewItemTarget(item);
+
+            row.className = `${item.is_important ? 'is-important' : ''}${target ? ' is-linkable' : ''}`.trim();
+            if (target) {
+                row.tabIndex = 0;
+                row.addEventListener('click', () => this.openNewItem(item));
+                row.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        this.openNewItem(item);
+                    }
+                });
+            }
+
+            const titleText = this.escapeHtml(item.data_title || item.data_id || '제목 없음');
+            const source = this.escapeHtml(this.getSiteName(item.site_key, item.site_name));
+            const documentNumber = this.escapeHtml(this.getDocumentNumber(item));
+            const categoryBadges = this.renderBadgeList(this.getCategoryBadges(item));
+            const decisionBadges = this.renderBadgeList(this.getDecisionBadges(item));
+            const dateLabel = this.escapeHtml(this.formatDocumentDate(item));
+            const actionLabel = target ? '원문 열기' : '원문 없음';
+
+            row.innerHTML = `
+                <td><span class="source-badge" style="--source-color: ${this.getSiteColor(item.site_key)}">${source}</span></td>
+                <td class="document-cell"><span class="document-number">${documentNumber}</span></td>
+                <td class="category-cell">${categoryBadges}</td>
+                <td class="detail-cell">${decisionBadges}</td>
+                <td class="title-cell"><span class="title-text">${titleText}</span></td>
+                <td class="date-cell">${dateLabel}</td>
+                <td class="action-cell">
+                    <button class="row-action" aria-label="${actionLabel}" title="${actionLabel}"${target ? '' : ' disabled'}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </td>
+            `;
+
+            row.querySelector('.row-action')?.addEventListener('click', (event) => {
+                event.stopPropagation();
+                this.openNewItem(item);
+            });
+
+            tbody.appendChild(row);
+        });
+    }
+
+    renderFailureState() {
+        const recentBody = document.getElementById('recentItemsTableBody');
+        const sourceSummary = document.getElementById('sourceFilterSummary');
+        const sourceFilters = document.getElementById('sourceFilterList');
+
+        if (recentBody) {
+            recentBody.innerHTML = '<tr><td colspan="7" class="table-empty">데이터 로드 실패</td></tr>';
+        }
+        if (sourceFilters) {
+            sourceFilters.innerHTML = '<div class="source-filter-empty">데이터 로드 실패</div>';
+        }
+        if (sourceSummary) {
+            sourceSummary.innerHTML = '<div class="source-filter-empty">데이터 로드 실패</div>';
+        }
+    }
+
+    updateHeaderOperationalStatus() {
+        const nextRun = this.getNextRun();
+        this.setText('headerScheduleStatus', nextRun ? `다음 ${this.formatCompactTime(nextRun)}` : '다음 --');
+    }
+
+    getOrderedSources() {
+        return [...(this.dashboardData.sites || [])]
+            .sort((a, b) => {
+                const aIndex = TaxUI.SOURCE_ORDER.indexOf(a.site_key);
+                const bIndex = TaxUI.SOURCE_ORDER.indexOf(b.site_key);
+                if (aIndex !== -1 || bIndex !== -1) {
+                    return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+                }
+                return this.getSiteName(a.site_key, a.site_name)
+                    .localeCompare(this.getSiteName(b.site_key, b.site_name), 'ko-KR');
+            });
+    }
+
+    getCategoryBadges(item) {
+        const originalData = this.getItemOriginalData(item);
+        const values = [
+            item.data_tax_category,
+            item.data_category,
+            item.data_tax_status,
+            originalData['세목'],
+            originalData['청구분야'],
+            originalData['조세관련']
+        ];
+        return this.uniqueTruthy(values).map((value) => ({ label: value, tone: 'category' }));
+    }
+
+    getDecisionBadges(item) {
+        const originalData = this.getItemOriginalData(item);
+        return [
+            {
+                label: item.data_decision_type || originalData['유형'],
+                tone: this.getDecisionTone(item.data_decision_type || originalData['유형'])
+            },
+            {
+                label: item.data_conclusion || originalData['결론'],
+                tone: this.getConclusionTone(item.data_conclusion || originalData['결론'])
+            }
+        ].filter((badge) => badge.label);
+    }
+
+    renderBadgeList(badges) {
+        if (!badges.length) {
+            return '';
+        }
+
+        return badges
+            .map((badge) => `<span class="meta-badge ${badge.tone}">${this.escapeHtml(badge.label)}</span>`)
+            .join('');
+    }
+
+    uniqueTruthy(values) {
+        const seen = new Set();
+        const result = [];
+
+        values.forEach((value) => {
+            const text = String(value || '').trim();
+            if (!text || text === '-' || seen.has(text)) return;
+            seen.add(text);
+            result.push(text);
+        });
+
+        return result;
+    }
+
+    getDecisionTone(value) {
+        const text = String(value || '').trim();
+        const unfavorable = new Set(['기각', '각하']);
+        const favorable = new Set(['취소', '경정']);
+
+        if (unfavorable.has(text)) return 'decision-unfavorable';
+        if (favorable.has(text)) return 'decision-favorable';
+        return 'decision-neutral';
+    }
+
+    getConclusionTone(value) {
+        const text = String(value || '').trim();
+        const unfavorable = new Set(['국승', '기각', '각하', '불채택']);
+        const favorable = new Set(['국패', '인용', '채택']);
+        const partial = new Set(['일부국패', '일부인용']);
+
+        if (unfavorable.has(text)) return 'conclusion-unfavorable';
+        if (favorable.has(text)) return 'conclusion-favorable';
+        if (partial.has(text)) return 'conclusion-partial';
+        return 'conclusion-neutral';
+    }
+
+    getDocumentNumber(item) {
+        const directValue = this.firstTruthy([item.data_document_number]);
+        if (directValue) return directValue;
+
+        const dataId = String(item.data_id || '').trim();
+        if (item.site_key === 'scourt_scheduled_decisions' && dataId.includes('|')) {
+            return dataId.split('|')[1] || dataId;
+        }
+        return dataId;
+    }
+
+    getNewItemTarget(item) {
+        const externalLink = this.getNewItemExternalLink(item);
+        if (externalLink) {
+            return { url: externalLink, external: true };
+        }
+        return null;
+    }
+
+    openNewItem(item) {
+        const target = this.getNewItemTarget(item);
+        if (!target) return;
+        window.open(target.url, '_blank', 'noopener');
+    }
+
+    getNewItemExternalLink(item) {
+        const originalData = this.getItemOriginalData(item);
+        const candidates = [
+            item.external_link,
+            originalData['링크'],
+            originalData['원문링크'],
+            originalData['쟁점PDF'],
+            originalData['보도자료링크'],
+            this.buildKnownExternalLink(item, originalData)
+        ];
+
+        for (const candidate of candidates) {
+            const url = this.normalizeExternalUrl(candidate);
+            if (url) return url;
+        }
+
+        return '';
+    }
+
+    buildKnownExternalLink(item, originalData = {}) {
+        const siteKey = item.site_key;
+        const identifier = String(
+            item.data_id ||
+            originalData['문서번호'] ||
+            originalData['청구번호'] ||
+            originalData['번호'] ||
+            ''
+        ).trim();
+
+        if (!identifier) return '';
+
+        if (siteKey === 'nts_authority' || siteKey === 'nts_precedent') {
+            const encodedIdentifier = encodeURIComponent(identifier);
+            return `https://taxlaw.nts.go.kr/is/USEISA001M.do?schVcb=${encodedIdentifier}&searchType=totalSearch`;
+        }
+
+        return '';
+    }
+
+    getItemOriginalData(item) {
+        const metadata = this.parseMetadata(item.metadata);
+        return metadata?.original_data || {};
+    }
+
+    parseMetadata(metadata) {
+        if (!metadata) return {};
+        if (typeof metadata === 'object') return metadata;
+
+        try {
+            return JSON.parse(metadata);
+        } catch (error) {
+            return {};
+        }
+    }
+
+    normalizeExternalUrl(value) {
+        return TaxUI.safeUrl(value);
+    }
+
+    firstTruthy(values) {
+        for (const value of values) {
+            const text = String(value || '').trim();
+            if (text && text !== '-') return text;
+        }
+        return '';
+    }
+
+    getLatestDiscoveryLabel(siteKey = null) {
+        const items = siteKey
+            ? this.newData.filter((item) => item.site_key === siteKey)
+            : this.newData;
+
+        const latest = items
+            .map((item) => item.discovered_at ? new Date(item.discovered_at) : null)
+            .filter((date) => date && !Number.isNaN(date.getTime()))
+            .sort((a, b) => b - a)[0];
+
+        return latest ? this.formatRelativeTime(latest) : '신규 없음';
+    }
+
+    buildRecentCounts(items) {
+        return items.reduce((counts, item) => {
+            const siteKey = item.site_key;
+            if (!siteKey) return counts;
+
+            if (!counts[siteKey]) {
+                counts[siteKey] = {
+                    count: 0,
+                    site_name: this.getSiteName(siteKey, item.site_name)
+                };
+            }
+
+            counts[siteKey].count += 1;
+            return counts;
+        }, {});
+    }
+
+    getRecentCount(siteKey) {
+        return this.recentCounts?.[siteKey]?.count || 0;
+    }
+
+    getTotalNewCount() {
+        return Object.values(this.recentCounts || {}).reduce((sum, item) => sum + (item.count || 0), 0);
+    }
+
+    getNextRun() {
+        const nextRuns = (this.scheduleData.schedules || [])
+            .filter((schedule) => Boolean(schedule.enabled))
+            .map((schedule) => schedule.scheduler_status?.next_run ? new Date(schedule.scheduler_status.next_run) : null)
+            .filter((date) => date && !Number.isNaN(date.getTime()) && date.getTime() > Date.now())
+            .sort((a, b) => a - b);
+
+        return nextRuns[0] || null;
+    }
+
+    getSiteName(siteKey, fallback = '') {
+        return TaxUI.getSiteName(siteKey, fallback);
+    }
+
+    getSiteColor(siteKey) {
+        return TaxUI.getSiteColor(siteKey);
+    }
+
+    getQueryHours() {
+        return Math.max(1, this.currentTimeFilter || 24);
+    }
+
+    buildSiteDataUrl(siteKey, isFiltered = false) {
+        if (!siteKey) return '';
+
+        const baseUrl = `/data/${encodeURIComponent(siteKey)}`;
+        if (!isFiltered) return baseUrl;
+
+        const params = new URLSearchParams();
+        if (this.customRange) {
+            params.set('filter', 'range');
+            params.set('start', this.customRange.startDate);
+            params.set('end', this.customRange.endDate);
+        } else {
+            params.set('filter', 'recent');
+            params.set('days', String(this.getFilterDays()));
+        }
+
+        return `${baseUrl}?${params.toString()}`;
+    }
+
+    getFilterDays() {
+        if (this.currentTimeFilter === 24) return 1;
+        if (this.currentTimeFilter === 72) return 3;
+        if (this.currentTimeFilter === 168) return 7;
+        return Math.max(1, Math.ceil(this.getQueryHours() / 24));
+    }
+
     formatTimeFilter() {
+        if (this.customRange) {
+            return `${this.customRange.startDate} ~ ${this.customRange.endDate}`;
+        }
         if (this.currentTimeFilter === 24) return '최근 24시간';
         if (this.currentTimeFilter === 72) return '최근 3일';
         if (this.currentTimeFilter === 168) return '최근 7일';
-        
+
         const days = Math.ceil(this.currentTimeFilter / 24);
         return `최근 ${days}일`;
     }
-    
+
+    formatDocumentDate(item) {
+        const documentDate = this.firstTruthy([item.data_document_date, item.data_date]);
+
+        const formattedDocumentDate = this.formatDateOnly(documentDate);
+        if (formattedDocumentDate) return formattedDocumentDate;
+
+        return this.formatDateOnly(item.discovered_at);
+    }
+
+    formatDateOnly(value) {
+        return TaxUI.formatDateOnly(value);
+    }
+
     formatRelativeTime(date) {
-        const now = new Date();
-        const diffInMinutes = Math.floor((now - date) / (1000 * 60));
-        
-        if (diffInMinutes < 1) return '방금 전';
-        if (diffInMinutes < 60) return `${diffInMinutes}분 전`;
-        
-        const diffInHours = Math.floor(diffInMinutes / 60);
-        if (diffInHours < 24) return `${diffInHours}시간 전`;
-        
-        const diffInDays = Math.floor(diffInHours / 24);
-        if (diffInDays < 7) return `${diffInDays}일 전`;
-        
-        return date.toLocaleDateString('ko-KR');
+        return TaxUI.formatRelativeTime(date);
     }
-    
+
+    formatCompactTime(date) {
+        if (!date || Number.isNaN(date.getTime())) return '--';
+        return date.toLocaleTimeString('ko-KR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+    }
+
     viewSiteData(siteKey, isFiltered = false) {
-        // Navigate to data table view for this site
-        if (isFiltered) {
-            // 카드 클릭 - 필터링된 데이터 보기
-            let url = `/data/${siteKey}?filter=recent`;
-            
-            if (this.currentTimeFilter === 24) {
-                url += '&days=1';
-            } else if (this.currentTimeFilter === 72) {
-                url += '&days=3';
-            } else if (this.currentTimeFilter === 168) {
-                url += '&days=7';
-            } else {
-                // 사용자 정의 날짜 범위
-                const startDate = document.getElementById('startDate')?.value;
-                const endDate = document.getElementById('endDate')?.value;
-                if (startDate && endDate) {
-                    url = `/data/${siteKey}?filter=range&start=${startDate}&end=${endDate}`;
-                } else {
-                    // 일수로 계산
-                    const days = Math.ceil(this.currentTimeFilter / 24);
-                    url += `&days=${days}`;
-                }
-            }
-            
-            window.location.href = url;
-        } else {
-            // 데이터 보기 버튼 클릭 - 전체 데이터 보기
-            window.location.href = `/data/${siteKey}`;
-        }
+        if (!siteKey) return;
+        window.location.href = this.buildSiteDataUrl(siteKey, isFiltered);
     }
-    
+
+    setText(id, text) {
+        const element = document.getElementById(id);
+        if (element) element.textContent = text;
+    }
+
+    escapeHtml(value) {
+        return TaxUI.escapeHtml(value);
+    }
+
     showToast(title, type, message) {
-        const container = document.getElementById('toastContainer');
-        if (!container) return;
-        
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        
-        toast.innerHTML = `
-            <div><strong>${title}</strong></div>
-            <div>${message}</div>
-        `;
-        
-        container.appendChild(toast);
-        
-        // Show animation
-        setTimeout(() => {
-            toast.classList.add('show');
-        }, 100);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            toast.classList.remove('show');
-            setTimeout(() => {
-                if (toast.parentNode) {
-                    toast.parentNode.removeChild(toast);
-                }
-            }, 300);
-        }, 5000);
+        TaxUI.showToast(title, type, message);
     }
-    
+
     showLoading(show) {
         const overlay = document.getElementById('loadingOverlay');
-        if (overlay) {
-            if (show) {
-                overlay.classList.add('show');
-            } else {
-                overlay.classList.remove('show');
-            }
-        }
+        if (!overlay) return;
+        overlay.classList.toggle('show', Boolean(show));
     }
-    
+
     startAutoRefresh() {
-        // Refresh data every 5 minutes
         this.refreshInterval = setInterval(() => {
-            this.loadStatusCards();
+            this.loadDashboardData(false);
         }, 5 * 60 * 1000);
     }
-    
+
     stopAutoRefresh() {
         if (this.refreshInterval) {
             clearInterval(this.refreshInterval);
             this.refreshInterval = null;
         }
     }
-    
-    // 브라우저 알림 관련 메서드들
+
     async initBrowserNotifications() {
-        // 브라우저 알림 지원 여부 확인
         if (!('Notification' in window)) {
-            console.warn('브라우저에서 알림을 지원하지 않습니다');
-            this.updateNotificationUI('unsupported');
+            this.notificationPermission = 'unsupported';
             return;
         }
-        
-        // 현재 권한 상태 확인
+
         this.notificationPermission = Notification.permission;
-        console.log('브라우저 알림 권한 상태:', this.notificationPermission);
-        
-        // UI 업데이트
-        this.updateNotificationUI(this.notificationPermission);
-        
-        // 권한이 있고 설정이 활성화되어 있으면 알림 준비
-        if (this.notificationPermission === 'granted' && this.browserNotificationEnabled) {
-            console.log('브라우저 알림 활성화됨');
-        }
     }
-    
+
     async requestNotificationPermission() {
         if (!('Notification' in window)) {
             this.showToast('알림 지원 안됨', 'error', '브라우저에서 알림을 지원하지 않습니다');
             return;
         }
-        
+
         try {
             const permission = await Notification.requestPermission();
             this.notificationPermission = permission;
-            this.updateNotificationUI(permission);
-            
+
             if (permission === 'granted') {
-                this.showToast('알림 권한 허용', 'success', '브라우저 알림이 활성화되었습니다');
-                // 권한을 받으면 자동으로 알림 활성화
                 this.browserNotificationEnabled = true;
-                this.saveNotificationSetting(true);
+                TaxUI.saveNotificationSetting(true);
+                this.showToast('알림 허용', 'success', '브라우저 알림이 활성화되었습니다');
             } else {
-                this.showToast('알림 권한 거부', 'warning', '브라우저 알림을 사용할 수 없습니다');
                 this.browserNotificationEnabled = false;
-                this.saveNotificationSetting(false);
+                TaxUI.saveNotificationSetting(false);
+                this.showToast('알림 비활성', 'warning', '브라우저 알림을 사용할 수 없습니다');
             }
         } catch (error) {
-            console.error('알림 권한 요청 실패:', error);
-            this.showToast('권한 요청 실패', 'error', '알림 권한 요청 중 오류가 발생했습니다');
+            this.showToast('권한 오류', 'error', '알림 권한 요청 중 오류가 발생했습니다');
         }
     }
-    
+
     toggleBrowserNotifications(enabled) {
         this.browserNotificationEnabled = enabled;
-        this.saveNotificationSetting(enabled);
-        
+        TaxUI.saveNotificationSetting(enabled);
+
         if (enabled && this.notificationPermission !== 'granted') {
-            // 권한이 없으면 요청
             this.requestNotificationPermission();
         } else {
             this.showToast(
@@ -476,157 +722,86 @@ class ExpertDashboard {
             );
         }
     }
-    
-    updateNotificationUI(permission) {
-        const toggle = document.getElementById('notificationToggle');
-        const permissionBtn = document.getElementById('requestNotificationPermissionBtn');
-        const statusElement = document.getElementById('notificationPermissionStatus');
-        
-        if (toggle) {
-            toggle.checked = this.browserNotificationEnabled;
-            toggle.disabled = permission === 'denied' || permission === 'unsupported';
-        }
-        
-        if (permissionBtn) {
-            permissionBtn.style.display = permission === 'default' ? 'inline-block' : 'none';
-        }
-        
-        if (statusElement) {
-            const statusMap = {
-                'granted': { text: '허용됨', class: 'success' },
-                'denied': { text: '거부됨', class: 'error' },
-                'default': { text: '미설정', class: 'warning' },
-                'unsupported': { text: '지원 안됨', class: 'error' }
-            };
-            
-            const status = statusMap[permission] || statusMap['default'];
-            statusElement.textContent = status.text;
-            statusElement.className = `notification-status ${status.class}`;
-        }
-    }
-    
+
     showBrowserNotification(title, message, data = {}) {
-        // 브라우저 알림 표시 조건 확인
         if (!this.shouldShowBrowserNotification(data)) {
             return false;
         }
-        
+
         try {
-            const options = {
+            const notification = new Notification(title, {
                 body: message,
                 icon: '/static/favicon.ico',
                 badge: '/static/favicon.ico',
                 tag: data.site_key || 'taxupdater',
-                data: data,
+                data,
                 requireInteraction: data.urgency_level === 'high',
                 silent: false
-            };
-            
-            const notification = new Notification(title, options);
-            
-            // 알림 클릭 이벤트
+            });
+
             notification.onclick = (event) => {
                 event.preventDefault();
                 window.focus();
-                
-                // 사이트 키가 있으면 해당 페이지로 이동
-                if (data.site_key && data.site_key !== 'system' && data.site_key !== 'all_sites') {
+
+                if (data.site_key && !['system', 'all_sites'].includes(data.site_key)) {
                     window.location.href = `/data/${data.site_key}`;
                 }
-                
+
                 notification.close();
             };
-            
-            // 자동 닫기 (중요도가 높지 않은 경우)
+
             if (data.urgency_level !== 'high') {
                 setTimeout(() => {
                     notification.close();
                 }, 8000);
             }
-            
-            console.log('브라우저 알림 표시:', title);
+
             return true;
-            
         } catch (error) {
-            console.error('브라우저 알림 표시 실패:', error);
             return false;
         }
     }
-    
+
     shouldShowBrowserNotification(data = {}) {
-        // 권한이 없으면 표시하지 않음
-        if (this.notificationPermission !== 'granted') {
-            return false;
-        }
-        
-        // 사용자가 비활성화했으면 표시하지 않음
-        if (!this.browserNotificationEnabled) {
-            return false;
-        }
-        
-        // 페이지가 활성화되어 있으면 토스트만 표시 (브라우저 알림 중복 방지)
-        if (this.isPageVisible) {
-            return false;
-        }
-        
-        // 알림 빈도 제한 (같은 사이트에서 5분 이내 중복 알림 방지)
+        if (this.notificationPermission !== 'granted') return false;
+        if (!this.browserNotificationEnabled) return false;
+        if (this.isPageVisible) return false;
+
         if (data.site_key && this.isNotificationTooFrequent(data.site_key)) {
-            console.log(`알림 빈도 제한: ${data.site_key}`);
             return false;
         }
-        
+
         return true;
     }
-    
+
     isNotificationTooFrequent(siteKey) {
         const now = Date.now();
         const lastTime = this.lastNotificationTime.get(siteKey);
-        const minInterval = 5 * 60 * 1000; // 5분
-        
-        if (lastTime && (now - lastTime) < minInterval) {
+        const minInterval = 5 * 60 * 1000;
+
+        if (lastTime && now - lastTime < minInterval) {
             return true;
         }
-        
+
         this.lastNotificationTime.set(siteKey, now);
         return false;
     }
-    
-    loadNotificationSetting() {
-        try {
-            const saved = localStorage.getItem('taxupdater_browser_notifications');
-            return saved ? JSON.parse(saved) : false;
-        } catch (error) {
-            console.error('알림 설정 로드 실패:', error);
-            return false;
-        }
-    }
-    
-    saveNotificationSetting(enabled) {
-        try {
-            localStorage.setItem('taxupdater_browser_notifications', JSON.stringify(enabled));
-        } catch (error) {
-            console.error('알림 설정 저장 실패:', error);
-        }
-    }
-    
-    
+
     destroy() {
         this.stopAutoRefresh();
-        if (this.websocket) {
-            this.websocket.close();
+        if (this.crawlSocket) {
+            this.crawlSocket.close();
         }
     }
 }
 
-// Initialize dashboard when DOM is loaded
 let dashboard;
 
 document.addEventListener('DOMContentLoaded', () => {
     dashboard = new ExpertDashboard();
-    window.dashboard = dashboard; // Make it globally accessible
+    window.dashboard = dashboard;
 });
 
-// Cleanup on page unload
 window.addEventListener('beforeunload', () => {
     if (dashboard) {
         dashboard.destroy();

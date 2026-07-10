@@ -7,7 +7,6 @@ class ExpertDataTable {
     constructor() {
         this.siteKey = window.siteConfig.siteKey;
         this.siteName = window.siteConfig.siteName;
-        this.siteColor = window.siteConfig.siteColor;
         
         // 사이트별 컴럼명 매핑
         this.siteColumnNames = {
@@ -226,14 +225,8 @@ class ExpertDataTable {
             }
         }
         
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const result = await response.json();
-        
+        const result = await TaxUI.fetchJson(url);
+
         this.rawData = result.data || [];
         this.data = this.rawData;
         this.totalCount = result.pagination?.total_count || 0;
@@ -260,14 +253,8 @@ class ExpertDataTable {
             }
         }
         
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const result = await response.json();
-        
+        const result = await TaxUI.fetchJson(url);
+
         this.allData = result.data || [];
         this.updateTableHeader();
         this.setupFilters();
@@ -412,20 +399,17 @@ class ExpertDataTable {
         const descriptionElement = document.getElementById('filterDescription');
         
         if (titleElement && descriptionElement) {
-            let title = this.siteName;
-            let description = '';
+            const titleParts = [this.siteName];
+            const descriptionParts = [];
             
             // 시간 필터가 적용된 경우
             if (this.filterType === 'recent' && this.filterDays) {
                 const dayText = this.filterDays == 1 ? '24시간' : `${this.filterDays}일`;
-                title += ` - 최근 ${dayText} 신규 데이터`;
-                description = `최근 ${dayText} 동안 수집된 `;
+                titleParts.push(`최근 ${dayText}`);
             } else if (this.filterType === 'range' && this.filterStartDate && this.filterEndDate) {
-                title += ` - ${this.filterStartDate} ~ ${this.filterEndDate}`;
-                description = `${this.filterStartDate}부터 ${this.filterEndDate}까지 수집된 `;
+                titleParts.push(`${this.filterStartDate} ~ ${this.filterEndDate}`);
             } else {
-                title += ' - 전체 데이터';
-                description = '이 소스에서 수집된 ';
+                titleParts.push('전체');
             }
             
             // 필터 조건 추가
@@ -441,26 +425,25 @@ class ExpertDataTable {
             }
             
             if (activeFilters.length > 0) {
-                title += ` (${activeFilters.join(', ')})`;
-                description += `${activeFilters.join(', ')} 조건으로 필터링된 `;
+                titleParts.push(activeFilters.join(' · '));
             }
             
             // 검색 조건 추가
             if (this.searchQuery) {
-                title += ' (검색 결과)';
-                description += `"${this.searchQuery}"와 일치하는 `;
+                titleParts.push('검색 결과');
+                descriptionParts.push(`"${this.searchQuery}"`);
             }
             
-            description += `${this.totalCount.toLocaleString()}개 항목을 표시하고 있습니다`;
+            descriptionParts.push(`${this.totalCount.toLocaleString()}개 항목`);
             
-            titleElement.textContent = title;
-            descriptionElement.textContent = description;
+            titleElement.textContent = titleParts.join(' · ');
+            descriptionElement.textContent = descriptionParts.join(' · ');
             
             // 필터가 적용된 경우 "전체 데이터 보기" 링크 추가
             if (this.filterType || this.isFiltered) {
                 const viewAllLink = document.createElement('a');
                 viewAllLink.href = `/data/${this.siteKey}`;
-                viewAllLink.textContent = ' 전체 데이터 보기 →';
+                viewAllLink.textContent = ' 전체 보기';
                 viewAllLink.style.marginLeft = '10px';
                 viewAllLink.style.color = 'var(--color-primary)';
                 viewAllLink.style.textDecoration = 'none';
@@ -499,7 +482,12 @@ class ExpertDataTable {
     
     createTableRow(item) {
         const row = document.createElement('tr');
-        
+        const esc = TaxUI.escapeHtml;
+        const titleCellHtml = (link, title) => (link !== '#'
+            ? `<a href="${esc(link)}" target="_blank" rel="noopener noreferrer" title="${esc(title)}">${esc(title)}</a>`
+            : `<span title="${esc(title)}">${esc(title)}</span>`);
+        const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
+
         // 사이트별 특화 컬럼 처리
         if (this.siteKey === 'tax_tribunal') {
             // 조세심판원: 세목, 유형, 청구번호, 제목, 결정일 표시
@@ -509,27 +497,21 @@ class ExpertDataTable {
             const claimNumber = item['청구번호'] || '-';
             const title = item['제목'] || '-';
             const decisionDate = this.formatDate(item['결정일']);
-            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
-            const link = item['링크'] || '#';
+            const link = TaxUI.safeUrl(item['링크']) || '#';
             
             row.innerHTML = `
                 <td>
-                    <span class="tax-category">${taxCategory}</span>
+                    <span class="tax-category">${esc(taxCategory)}</span>
                 </td>
                 <td>
-                    <span class="decision-type ${decisionTypeClass}">${decisionType}</span>
+                    <span class="decision-type ${decisionTypeClass}">${esc(decisionType)}</span>
                 </td>
                 <td>
-                    <span class="document-number">${claimNumber}</span>
+                    <span class="document-number">${esc(claimNumber)}</span>
                 </td>
-                <td class="document-title">
-                    ${link !== '#' ? 
-                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
-                        `<span title="${title}">${title}</span>`
-                    }
-                </td>
-                <td class="date-cell">${decisionDate}</td>
-                <td class="date-cell">${collectedDate}</td>
+                <td class="document-title">${titleCellHtml(link, title)}</td>
+                <td class="date-cell">${esc(decisionDate)}</td>
+                <td class="date-cell">${esc(collectedDate)}</td>
             `;
         } else if (this.siteKey === 'nts_authority') {
             // 국세청 유권해석: 세목 컬럼 포함
@@ -537,24 +519,18 @@ class ExpertDataTable {
             const documentNumber = item['문서번호'] || '-';
             const title = item['제목'] || '-';
             const publishedDate = this.formatDate(item['생산일자']);
-            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
-            const link = item['링크'] || '#';
+            const link = TaxUI.safeUrl(item['링크']) || '#';
             
             row.innerHTML = `
                 <td>
-                    <span class="tax-category">${taxCategory}</span>
+                    <span class="tax-category">${esc(taxCategory)}</span>
                 </td>
                 <td>
-                    <span class="document-number">${documentNumber}</span>
+                    <span class="document-number">${esc(documentNumber)}</span>
                 </td>
-                <td class="document-title">
-                    ${link !== '#' ? 
-                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
-                        `<span title="${title}">${title}</span>`
-                    }
-                </td>
-                <td class="date-cell">${publishedDate}</td>
-                <td class="date-cell">${collectedDate}</td>
+                <td class="document-title">${titleCellHtml(link, title)}</td>
+                <td class="date-cell">${esc(publishedDate)}</td>
+                <td class="date-cell">${esc(collectedDate)}</td>
             `;
         } else if (this.siteKey === 'nts_precedent') {
             // 국세청 판례: 세목, 결론 컬럼 포함
@@ -564,27 +540,21 @@ class ExpertDataTable {
             const conclusion = item['결론'] || '-';
             const conclusionClass = this.getConclusionClass(conclusion);
             const publishedDate = this.formatDate(item['생산일자']);
-            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
-            const link = item['링크'] || '#';
+            const link = TaxUI.safeUrl(item['링크']) || '#';
             
             row.innerHTML = `
                 <td>
-                    <span class="tax-category">${taxCategory}</span>
+                    <span class="tax-category">${esc(taxCategory)}</span>
                 </td>
                 <td>
-                    <span class="document-number">${documentNumber}</span>
+                    <span class="document-number">${esc(documentNumber)}</span>
                 </td>
-                <td class="document-title">
-                    ${link !== '#' ? 
-                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
-                        `<span title="${title}">${title}</span>`
-                    }
-                </td>
+                <td class="document-title">${titleCellHtml(link, title)}</td>
                 <td>
-                    <span class="conclusion-badge ${conclusionClass}">${conclusion}</span>
+                    <span class="conclusion-badge ${conclusionClass}">${esc(conclusion)}</span>
                 </td>
-                <td class="date-cell">${publishedDate}</td>
-                <td class="date-cell">${collectedDate}</td>
+                <td class="date-cell">${esc(publishedDate)}</td>
+                <td class="date-cell">${esc(collectedDate)}</td>
             `;
         } else if (this.siteKey === 'mois') {
             // 행정안전부: 세목 컬럼 포함
@@ -592,24 +562,18 @@ class ExpertDataTable {
             const documentNumber = item['문서번호'] || '-';
             const title = item['제목'] || '-';
             const publishedDate = this.formatDate(item['생산일자']);
-            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
-            const link = item['링크'] || '#';
+            const link = TaxUI.safeUrl(item['링크']) || '#';
             
             row.innerHTML = `
                 <td>
-                    <span class="tax-category">${taxCategory}</span>
+                    <span class="tax-category">${esc(taxCategory)}</span>
                 </td>
                 <td>
-                    <span class="document-number">${documentNumber}</span>
+                    <span class="document-number">${esc(documentNumber)}</span>
                 </td>
-                <td class="document-title">
-                    ${link !== '#' ? 
-                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
-                        `<span title="${title}">${title}</span>`
-                    }
-                </td>
-                <td class="date-cell">${publishedDate}</td>
-                <td class="date-cell">${collectedDate}</td>
+                <td class="document-title">${titleCellHtml(link, title)}</td>
+                <td class="date-cell">${esc(publishedDate)}</td>
+                <td class="date-cell">${esc(collectedDate)}</td>
             `;
         } else if (this.siteKey === 'scourt_scheduled_decisions') {
             // 대법원 선고예정 판결: 선고일자, 사건번호, 사건명, 조세 후보 표시
@@ -619,48 +583,36 @@ class ExpertDataTable {
             const taxStatus = item['조세관련'] || '-';
             const taxStatusClass = this.getTaxStatusClass(taxStatus);
             const taxKeywords = item['관련키워드'] || '-';
-            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
-            const link = item['쟁점PDF'] || item['보도자료링크'] || '#';
+            const link = TaxUI.safeUrl(item['쟁점PDF'] || item['보도자료링크']) || '#';
 
             row.innerHTML = `
-                <td class="date-cell">${decisionDate}</td>
+                <td class="date-cell">${esc(decisionDate)}</td>
                 <td>
-                    <span class="document-number">${caseNumber}</span>
+                    <span class="document-number">${esc(caseNumber)}</span>
                 </td>
-                <td class="document-title">
-                    ${link !== '#' ?
-                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` :
-                        `<span title="${title}">${title}</span>`
-                    }
+                <td class="document-title">${titleCellHtml(link, title)}</td>
+                <td>
+                    <span class="conclusion-badge ${taxStatusClass}">${esc(taxStatus)}</span>
                 </td>
                 <td>
-                    <span class="conclusion-badge ${taxStatusClass}">${taxStatus}</span>
+                    <span class="tax-category">${esc(taxKeywords)}</span>
                 </td>
-                <td>
-                    <span class="tax-category">${taxKeywords}</span>
-                </td>
-                <td class="date-cell">${collectedDate}</td>
+                <td class="date-cell">${esc(collectedDate)}</td>
             `;
         } else {
             // 기타 사이트: 기존 공통 포맷
             const documentNumber = item['문서번호'] || item['판례번호'] || item['청구번호'] || item['번호'] || item['사건번호'] || '-';
             const title = item['제목'] || item['심판내용'] || item['사건명'] || '-';
             const publishedDate = this.formatDate(item['게시일'] || item['작성일'] || item['선고일'] || item['선고일자'] || item['결정일'] || item['생산일자'] || item['회신일자'] || item['결정일자']);
-            const collectedDate = this.formatDateTime(item['updated_at'] || item['created_at']);
-            const link = item['링크'] || item['원문링크'] || '#';
+            const link = TaxUI.safeUrl(item['링크'] || item['원문링크']) || '#';
             
             row.innerHTML = `
                 <td>
-                    <span class="document-number">${documentNumber}</span>
+                    <span class="document-number">${esc(documentNumber)}</span>
                 </td>
-                <td class="document-title">
-                    ${link !== '#' ? 
-                        `<a href="${link}" target="_blank" title="${title}">${title}</a>` : 
-                        `<span title="${title}">${title}</span>`
-                    }
-                </td>
-                <td class="date-cell">${publishedDate}</td>
-                <td class="date-cell">${collectedDate}</td>
+                <td class="document-title">${titleCellHtml(link, title)}</td>
+                <td class="date-cell">${esc(publishedDate)}</td>
+                <td class="date-cell">${esc(collectedDate)}</td>
             `;
         }
         
@@ -892,13 +844,7 @@ class ExpertDataTable {
             
             // Get all data (without pagination)
             const url = `/api/sites/${this.siteKey}/data?limit=10000&search=${encodeURIComponent(this.searchQuery)}`;
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-                throw new Error('내보내기 실패');
-            }
-            
-            const result = await response.json();
+            const result = await TaxUI.fetchJson(url);
             const exportData = result.data || [];
             
             // Convert to CSV
@@ -976,23 +922,23 @@ class ExpertDataTable {
         if (this.siteKey === 'tax_tribunal') {
             // 조세심판원: 세목, 유형 필터 모두 표시
             this.populateFilterOptions();
-            taxCategoryFilter.style.display = 'block';
-            decisionTypeFilter.style.display = 'block';
+            taxCategoryFilter.style.display = 'flex';
+            decisionTypeFilter.style.display = 'flex';
             conclusionFilter.style.display = 'none';
             filterToggle.style.display = 'flex';
         } else if (this.siteKey === 'nts_authority') {
             // 국세청 유권해석: 세목 필터만 표시
             this.populateFilterOptions();
-            taxCategoryFilter.style.display = 'block';
+            taxCategoryFilter.style.display = 'flex';
             decisionTypeFilter.style.display = 'none';
             conclusionFilter.style.display = 'none';
             filterToggle.style.display = 'flex';
         } else if (this.siteKey === 'nts_precedent') {
             // 국세청 판례: 세목, 결론 필터 표시
             this.populateFilterOptions();
-            taxCategoryFilter.style.display = 'block';
+            taxCategoryFilter.style.display = 'flex';
             decisionTypeFilter.style.display = 'none';
-            conclusionFilter.style.display = 'block';
+            conclusionFilter.style.display = 'flex';
             filterToggle.style.display = 'flex';
         } else {
             // 기타 사이트: 필터 숨김
@@ -1159,33 +1105,7 @@ class ExpertDataTable {
     }
     
     showToast(title, type, message) {
-        const container = document.getElementById('toastContainer');
-        if (!container) return;
-        
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        
-        toast.innerHTML = `
-            <div><strong>${title}</strong></div>
-            <div>${message}</div>
-        `;
-        
-        container.appendChild(toast);
-        
-        // Show animation
-        setTimeout(() => {
-            toast.classList.add('show');
-        }, 100);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            toast.classList.remove('show');
-            setTimeout(() => {
-                if (toast.parentNode) {
-                    toast.parentNode.removeChild(toast);
-                }
-            }, 300);
-        }, 5000);
+        TaxUI.showToast(title, type, message);
     }
 }
 

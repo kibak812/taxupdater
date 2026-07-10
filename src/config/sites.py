@@ -27,6 +27,11 @@ class SiteDisplay:
     choice_number: str  # 레거시 선택 번호 (예: "1")
 
 
+# 대법원 선고예정 항목의 조세관련 상태 값
+# (scourt_scheduled_decision_crawler가 기록하고, 웹 데이터 라우터가 기본 필터로 사용)
+SCOURT_NON_TAX_STATUS = "비조세"
+
+
 # =============================================================================
 # SITE_CATALOG: 크롤링 도메인 정보 (단일 소스)
 # =============================================================================
@@ -93,32 +98,32 @@ SITE_CATALOG: Dict[str, SiteDefinition] = {
 SITE_DISPLAY: Dict[str, SiteDisplay] = {
     "tax_tribunal": SiteDisplay(
         name="조세심판원",
-        color="#3B82F6",
+        color="#4F46E5",
         choice_number="1"
     ),
     "nts_authority": SiteDisplay(
         name="국세청 유권해석",
-        color="#10B981",
+        color="#059669",
         choice_number="2"
     ),
     "nts_precedent": SiteDisplay(
         name="국세청 판례",
-        color="#8B5CF6",
+        color="#D97706",
         choice_number="4"
     ),
     "moef": SiteDisplay(
         name="기획재정부",
-        color="#F59E0B",
+        color="#8B5CF6",
         choice_number="3"
     ),
     "mois": SiteDisplay(
         name="행정안전부",
-        color="#EF4444",
+        color="#DC2626",
         choice_number="5"
     ),
     "bai": SiteDisplay(
         name="감사원",
-        color="#6366F1",
+        color="#6B7280",
         choice_number="6"
     ),
     "scourt_major_decisions": SiteDisplay(

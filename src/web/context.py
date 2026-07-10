@@ -21,6 +21,8 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
+from src.config.sites import get_legacy_site_info
+
 
 def get_configured_ngrok_url() -> str:
     """Return the configured static ngrok URL, if one is available."""
@@ -70,18 +72,6 @@ class ConnectionManager:
                 await connection.send_text(json.dumps(message))
             except Exception:
                 pass
-
-
-BASE_SITE_INFO = {
-    "tax_tribunal": {"name": "조세심판원", "color": "#3B82F6"},
-    "nts_authority": {"name": "국세청", "color": "#10B981"},
-    "moef": {"name": "기획재정부", "color": "#8B5CF6"},
-    "nts_precedent": {"name": "국세청 판례", "color": "#F59E0B"},
-    "mois": {"name": "행정안전부", "color": "#EF4444"},
-    "bai": {"name": "감사원", "color": "#6B7280"},
-    "scourt_major_decisions": {"name": "전국법원 주요판결", "color": "#0F766E"},
-    "scourt_scheduled_decisions": {"name": "대법원 선고예정 판결", "color": "#B45309"},
-}
 
 
 @dataclass
@@ -197,7 +187,7 @@ def create_default_context() -> WebAppContext:
         logger,
     )
 
-    site_info = {key: value for key, value in BASE_SITE_INFO.items() if key in crawlers}
+    site_info = {key: value for key, value in get_legacy_site_info().items() if key in crawlers}
 
     return WebAppContext(
         project_root=PROJECT_ROOT,

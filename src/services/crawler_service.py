@@ -151,13 +151,33 @@ class CrawlingService:
         
         self.logger.info("전체 크롤링 완료!")
         self.logger.info("=" * 60)
+
+        failed_results = [result for result in summary_results if result.get('status') != 'success']
+        success_results = [result for result in summary_results if result.get('status') == 'success']
+        if failed_results and success_results:
+            overall_status = "partial_success"
+            message = "크롤링 일부 실패"
+        elif failed_results:
+            overall_status = "error"
+            message = "크롤링 실패"
+        else:
+            overall_status = "success"
+            message = "크롤링 완료"
+
+        error_summary = "; ".join(
+            f"{result.get('site_key', 'unknown')}: {result.get('error_message', '알 수 없는 오류')}"
+            for result in failed_results
+        )
         
         # 크롤링 결과 반환
         return {
-            "status": "success",
-            "message": "크롤링 완료",
+            "status": overall_status,
+            "message": message,
+            "error": error_summary,
             "results": summary_results,
             "total_sites": len(selected_crawlers),
+            "failed_sites": len(failed_results),
+            "success_sites": len(success_results),
             "total_new_count": sum(result.get('new_count', 0) for result in summary_results if result.get('status') == 'success')
         }
     

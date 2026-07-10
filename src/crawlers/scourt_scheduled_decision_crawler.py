@@ -15,7 +15,7 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-from src.config.sites import get_site
+from src.config.sites import SCOURT_NON_TAX_STATUS, get_site
 from src.crawlers.base_crawler import BaseCrawler
 
 
@@ -157,7 +157,7 @@ class ScourtScheduledDecisionCrawler(BaseCrawler):
                 "사건종류": case_type,
                 "사건번호": case_number,
                 "사건명": title,
-                "조세관련": "조세후보" if matched_keywords else "비조세",
+                "조세관련": "조세후보" if matched_keywords else SCOURT_NON_TAX_STATUS,
                 "관련키워드": ", ".join(matched_keywords),
                 "쟁점PDF": issue_pdf,
                 "보도자료링크": press_link,

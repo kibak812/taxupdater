@@ -4,8 +4,136 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException
 
+from src.config.settings import KEY_COLUMNS
+from src.config.sites import SCOURT_NON_TAX_STATUS as NON_TAX_STATUS
 from src.web.context import WebAppContext
 from src.web.helpers import build_dashboard_payload, build_site_data_payload
+
+
+LINK_COLUMNS = ("링크", "원문링크", "쟁점PDF", "보도자료링크")
+DETAIL_COLUMNS = ("세목", "청구분야", "유형", "결론", "조세관련")
+DOCUMENT_NUMBER_COLUMNS = ("문서번호", "청구번호", "사건번호", "번호", "고유키")
+DOCUMENT_DATE_COLUMNS = (
+    "생산일자",
+    "결정일",
+    "결정일자",
+    "회신일자",
+    "작성일",
+    "선고일자",
+    "게시일",
+    "등록일자",
+)
+SCOURT_SCHEDULED_SITE_KEY = "scourt_scheduled_decisions"
+
+
+def _first_non_empty_link(values) -> str:
+    for value in values:
+        if value is None:
+            continue
+        link = str(value).strip()
+        if link and link != "#":
+            return link
+    return ""
+
+
+def _first_non_empty_value(values) -> str:
+    for value in values:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text and text != "-":
+            return text
+    return ""
+
+
+def _build_item_details(values) -> dict:
+    return {
+        "external_link": _first_non_empty_link(values.get(column) for column in LINK_COLUMNS),
+        "data_tax_category": _first_non_empty_value(
+            values.get(column) for column in ("세목", "청구분야")
+        ),
+        "data_decision_type": _first_non_empty_value([values.get("유형")]),
+        "data_conclusion": _first_non_empty_value([values.get("결론")]),
+        "data_tax_status": _first_non_empty_value([values.get("조세관련")]),
+        "data_document_number": _first_non_empty_value(
+            values.get(column) for column in DOCUMENT_NUMBER_COLUMNS
+        ),
+        "data_document_date": _first_non_empty_value(
+            values.get(column) for column in DOCUMENT_DATE_COLUMNS
+        ),
+    }
+
+
+def _extract_details_from_metadata(metadata) -> dict:
+    if not isinstance(metadata, dict):
+        return {}
+
+    original_data = metadata.get("original_data")
+    if isinstance(original_data, dict):
+        return _build_item_details(original_data)
+
+    return {}
+
+
+def _lookup_item_details(
+    conn: sqlite3.Connection,
+    site_key: str,
+    data_id: str,
+    context: WebAppContext,
+    columns_cache: dict = None,
+) -> dict:
+    if not site_key or not data_id or site_key not in context.site_info:
+        return {}
+
+    table_name = context.repository._table_name(site_key)
+    key_column = KEY_COLUMNS.get(site_key)
+    if not key_column:
+        return {}
+
+    cursor = conn.cursor()
+    if columns_cache is not None and table_name in columns_cache:
+        existing_columns = columns_cache[table_name]
+    else:
+        cursor.execute(f"PRAGMA table_info([{table_name}])")
+        existing_columns = {row[1] for row in cursor.fetchall()}
+        if columns_cache is not None:
+            columns_cache[table_name] = existing_columns
+    if key_column not in existing_columns:
+        return {}
+
+    lookup_columns = [
+        column
+        for column in [
+            *LINK_COLUMNS,
+            *DETAIL_COLUMNS,
+            *DOCUMENT_NUMBER_COLUMNS,
+            *DOCUMENT_DATE_COLUMNS,
+        ]
+        if column in existing_columns
+    ]
+    if not lookup_columns:
+        return {}
+
+    select_columns = ", ".join(f"[{column}]" for column in lookup_columns)
+    cursor.execute(
+        f"SELECT {select_columns} FROM [{table_name}] WHERE [{key_column}] = ? LIMIT 1",
+        (data_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return {}
+
+    return _build_item_details(dict(zip(lookup_columns, row)))
+
+
+def _filter_scourt_non_tax_rows(site_key: str, data, include_non_tax: bool = False):
+    if include_non_tax or site_key != SCOURT_SCHEDULED_SITE_KEY or data.empty:
+        return data
+    if "조세관련" not in data.columns:
+        return data
+
+    tax_status = data["조세관련"].fillna("").astype(str).str.strip()
+    return data[tax_status != NON_TAX_STATUS]
 
 
 def create_data_router(context: WebAppContext) -> APIRouter:
@@ -28,6 +156,7 @@ def create_data_router(context: WebAppContext) -> APIRouter:
         days: int = None,
         start: str = None,
         end: str = None,
+        include_non_tax: bool = False,
     ):
         try:
             if site_key not in context.site_info:
@@ -39,6 +168,8 @@ def create_data_router(context: WebAppContext) -> APIRouter:
                 data = context.repository.load_filtered_data(site_key, start_date=start, end_date=end)
             else:
                 data = context.repository.load_existing_data(site_key, include_metadata=True)
+
+            data = _filter_scourt_non_tax_rows(site_key, data, include_non_tax)
 
             return build_site_data_payload(
                 site_key,
@@ -101,7 +232,12 @@ def create_data_router(context: WebAppContext) -> APIRouter:
             raise HTTPException(status_code=500, detail=f"최근 데이터 개수 조회 실패: {str(e)}")
 
     @router.get("/api/new-data")
-    async def get_new_data(site_key: str = None, hours: int = 24, limit: int = 100):
+    async def get_new_data(
+        site_key: str = None,
+        hours: int = 24,
+        limit: int = 100,
+        include_non_tax: bool = False,
+    ):
         try:
             cutoff_time = datetime.now() - timedelta(hours=hours)
 
@@ -114,6 +250,10 @@ def create_data_router(context: WebAppContext) -> APIRouter:
                 if site_key:
                     where_conditions.append("site_key = ?")
                     params.append(site_key)
+
+                if not include_non_tax:
+                    where_conditions.append("(site_key != ? OR COALESCE(data_category, '') != ?)")
+                    params.extend([SCOURT_SCHEDULED_SITE_KEY, NON_TAX_STATUS])
 
                 where_clause = " AND ".join(where_conditions)
 
@@ -132,6 +272,7 @@ def create_data_router(context: WebAppContext) -> APIRouter:
 
                 columns = [desc[0] for desc in cursor.description]
                 new_data = []
+                table_columns_cache = {}
 
                 for row in cursor.fetchall():
                     data_row = dict(zip(columns, row))
@@ -140,6 +281,31 @@ def create_data_router(context: WebAppContext) -> APIRouter:
                         data_row["tags"] = json.loads(data_row["tags"])
                     if data_row["metadata"]:
                         data_row["metadata"] = json.loads(data_row["metadata"])
+
+                    item_details = _extract_details_from_metadata(data_row.get("metadata"))
+                    lookup_details = _lookup_item_details(
+                        conn,
+                        data_row["site_key"],
+                        data_row["data_id"],
+                        context,
+                        table_columns_cache,
+                    )
+
+                    for key, value in lookup_details.items():
+                        if value and not item_details.get(key):
+                            item_details[key] = value
+
+                    data_row.update(
+                        {
+                            "external_link": item_details.get("external_link", ""),
+                            "data_tax_category": item_details.get("data_tax_category", ""),
+                            "data_decision_type": item_details.get("data_decision_type", ""),
+                            "data_conclusion": item_details.get("data_conclusion", ""),
+                            "data_tax_status": item_details.get("data_tax_status", ""),
+                            "data_document_number": item_details.get("data_document_number", ""),
+                            "data_document_date": item_details.get("data_document_date", ""),
+                        }
+                    )
 
                     data_row["site_name"] = context.site_info.get(
                         data_row["site_key"],
